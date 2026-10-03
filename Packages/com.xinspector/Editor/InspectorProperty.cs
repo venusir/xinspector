@@ -99,6 +99,11 @@ namespace XInspector.Editor
         public DrawerChain Chain { get; internal set; }
 
         /// <summary>
+        /// 该节点的值入口。分组节点与根节点不对应真实成员，故为 <c>null</c>。
+        /// </summary>
+        public PropertyValueEntry ValueEntry { get; internal set; }
+
+        /// <summary>
         /// 当前是否可见。等价于 <c>State.IsVisible</c>，为绘制器提供便利。
         /// </summary>
         public bool IsVisible => State.IsVisible;
