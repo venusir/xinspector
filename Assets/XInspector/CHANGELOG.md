@@ -7,7 +7,21 @@
 
 ## [Unreleased]
 
-### Added — L1a（三）：状态与标签
+### Added — L1a：布局与外观
+
+- **`[GUIColor]`**、**`[Indent]`**、**`[LabelWidth]`**、**`[HideLabel]`**、**`[PropertySpace]`**、
+  **`[SuffixLabel]`**：六件「包住内侧」的修饰。都画完自己再调用下一个绘制器，
+  因此可与分组、信息框、值绘制器任意嵌套，互不知晓对方存在。
+- 三条实现纪律值得记住：**改全局状态的必须 `try/finally` 还原**（`GUI.color`、
+  `EditorGUIUtility.labelWidth`、`EditorGUI.indentLevel`——漏还原会污染别的 Inspector，
+  现象出现在别处、极难联想）；**`[HideLabel]` 只换传下去的标签参数**，不碰状态、不建对象；
+  **`[SuffixLabel]` 在复合类型上回退为画在字段下方**——数组与嵌套结构进水平布局会被挤成半宽。
+- 顺序不是审美而是功能：颜色必须在替换型值绘制器之外（否则染不到它），
+  标签宽度必须在撤标签之前（否则作用在一个已经没有标签的字段上）。测试逐条钉住。
+- 与 Odin 的一处刻意差异：`[SuffixLabel]` 不允许重复标注（Odin 允许）——
+  多个后缀在右侧争同一块宽度没有明确语义，与其发明规则不如让它编译不过。
+
+### Added — L1a：状态与标签
 
 - **`[ReadOnly]`**：恒只读。走**处理器**而非绘制器——只读是状态不是像素，
   状态只有一份真相（`PropertyState.IsReadOnly`，绘制路径末端已按它上禁用罩）。

@@ -41,5 +41,37 @@ namespace XInspector.Sandbox
         public float mana = 10f;
 
         #endregion
+
+        #region 布局与外观
+
+        /// <summary>给整块染一层暖色。（用在类上会染整页——同一个绘制器落在根节点上而已。）</summary>
+        [GUIColor(1f, 0.85f, 0.6f)]
+        public int tinted = 1;
+
+        /// <summary>缩进一级。</summary>
+        [Indent]
+        public int indented = 2;
+
+        /// <summary>前置 12 像素的间距。</summary>
+        [PropertySpace(12f)]
+        public int spaced = 3;
+
+        /// <summary>标签占 200 像素宽。</summary>
+        [LabelWidth(200f)]
+        public string wideLabel = "宽标签的值";
+
+        /// <summary>撤掉标签，值占满整行。</summary>
+        [HideLabel]
+        public string noLabel = "撤掉标签后值会占满整行";
+
+        /// <summary>值控件右侧画后缀。</summary>
+        [SuffixLabel("秒")]
+        public float duration = 1.5f;
+
+        /// <summary>后缀叠在控件上。</summary>
+        [SuffixLabel("×100%", true)]
+        public float ratio = 0.75f;
+
+        #endregion
     }
 }

@@ -103,10 +103,10 @@
 | `[DelayedProperty]` | ❌ 缺 | L1a |
 | `[DetailedInfoBox]` | ❌ 缺 | L1a |
 | `[EnableGUI]` | ❌ 缺 | L1a |
-| `[GUIColor]` | ❌ 缺 | L1a |
-| `[HideLabel]` | ❌ 缺 | L1a |
+| **`[GUIColor]`** | **✅ 已实现** | — |
+| **`[HideLabel]`** | **✅ 已实现** | — |
 | `[PropertyOrder]` | ❌ 缺 | L4 |
-| `[PropertySpace]` | ❌ 缺 | L1a |
+| **`[PropertySpace]`** | **✅ 已实现** | — |
 | **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ❌ 缺 | L1a（另见 Validation） |
 | `[RequiredIn]` | ❌ 缺 | L1a（另见 Validation） |
@@ -173,11 +173,11 @@
 | `[DisableContextMenu]` | ❌ 缺 | L1a |
 | `[DrawWithUnity]` | ❌ 缺 | L1a |
 | `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
-| `[Indent]` | ❌ 缺 | L1a |
+| **`[Indent]`** | **✅ 已实现** | — |
 | `[InfoBox]` | ❌ 缺 | L1a |
 | `[InlineProperty]` | ❌ 缺 | L4 |
 | **`[LabelText]`** | **✅ 已实现** | — |
-| `[LabelWidth]` | ❌ 缺 | L1a |
+| **`[LabelWidth]`** | **✅ 已实现** | — |
 | `[OnCollectionChanged]` | ❌ 缺 | L6 |
 | `[OnInspectorDispose]` | ❌ 缺 | L5 |
 | `[OnInspectorGUI]` | ❌ 缺 | L5 |
@@ -187,7 +187,7 @@
 | `[TypeSelectorSettings]` | ❌ 缺 | L7 |
 | `[TypeRegistryItem]` | ❌ 缺 | L7 |
 | **`[PropertyTooltip]`** | **✅ 已实现** | — |
-| `[SuffixLabel]` | ❌ 缺 | L1a |
+| **`[SuffixLabel]`** | **✅ 已实现** | — |
 
 **小计：已实现 0 / 缺 19**
 
