@@ -66,6 +66,10 @@ namespace XInspector.Editor.AutoEditor
         /// <remarks>
         /// 多选时只要**任一**目标用到了 XInspector 就接管：否则同一批选中里
         /// 有的对象能看到特性效果、有的看不到，行为会显得随机。
+        /// <para>
+        /// 判据本身在 <see cref="XInspectorUsageDetection"/>（核心 Editor 程序集）里，
+        /// 挪出去是为了能被无头测试——测试程序集引用不了本程序集（宏门控）。
+        /// </para>
         /// </remarks>
         private bool ShouldTakeOver()
         {
@@ -78,7 +82,7 @@ namespace XInspector.Editor.AutoEditor
             for (var i = 0; i < inspected.Length; i++)
             {
                 var target = inspected[i];
-                if (target != null && AutoEditorDetection.ShouldTakeOver(target.GetType()))
+                if (target != null && XInspectorUsageDetection.IsUsedBy(target.GetType()))
                 {
                     return true;
                 }

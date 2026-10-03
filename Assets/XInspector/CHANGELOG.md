@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### Fixed — 自动接管的判据漏掉了处理器专有特性
+
+- **只用处理器专有特性的类型不会被自动接管，特性于是静默失效。** 判据原本只查
+  「有没有对应绘制器」，而条件族（`[ShowIf]` 等）**只有处理器、没有绘制器**——
+  这类类型走的是原生 Inspector，特性一次都不会生效，且没有任何提示。
+  - 判据现在同时查两张表：新增 `AttributeProcessor.HandledAttributeType`（与绘制器侧
+    完全对称）与 `AttributeProcessorRegistry.HasProcessorForAttribute`。
+  - 判据类从宏门控的自动接管程序集移进核心 Editor 程序集（`XInspectorUsageDetection`）：
+    测试程序集引用不了宏门控程序集，逻辑留在那里这条缺陷就永远测不到。
+  - 先写红的测试钉住它（改前必红）：只挂 `[ShowIf]` 的类型必须被判为「用到了本插件」。
+
 ### Verified — Unity 原生装饰器照常工作
 
 - Unity 原生装饰器与内置绘制器（`[Header]` `[Space]` `[Range]` `[TextArea]` `[Multiline]` `[Tooltip]`）

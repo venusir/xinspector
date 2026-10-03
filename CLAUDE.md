@@ -126,7 +126,8 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 即便如此，它仍是**按项目生效、可逆**的：使用方项目没有这个宏，行为与没装本插件一致。
 
 自动编辑器用 `DrawDefaultInspector()` 回退：`OnEnable` 里判断目标类型是否真的用到了本插件
-（判据是「有没有对应绘制器」，见 `DrawerTypeRegistry.HasDrawerForAttribute`），
+（判据是「有没有能处理其特性的**绘制器或处理器**」——只看绘制器会漏掉条件族这类处理器专有特性，
+症状是「类型不被接管、特性静默失效」，见 `XInspectorUsageDetection.IsUsedBy`），
 没有就走 Unity 原生绘制。因此**即使开了宏，没用到本插件的类型外观也不变**。
 
 ## 编码规范

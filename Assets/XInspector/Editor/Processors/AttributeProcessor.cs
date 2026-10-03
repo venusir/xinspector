@@ -81,6 +81,21 @@ namespace XInspector.Editor
         }
 
         #endregion
+
+        #region Internal
+
+        /// <summary>
+        /// 本处理器所处理的特性类型；非特性驱动的处理器返回 <c>null</c>。
+        /// <para>
+        /// 与 <see cref="XInspectorDrawer.HandledAttributeType"/> 完全对称，用途也一样：
+        /// 回答「哪些特性有处理器」——自动接管的判据要用它，否则**处理器专有的特性**
+        /// （条件族就是：只有处理器、没有绘制器）会被当成「没用到本插件」，
+        /// 症状是类型不被接管、特性静默失效。
+        /// </para>
+        /// </summary>
+        internal virtual Type HandledAttributeType => null;
+
+        #endregion
     }
 
     /// <summary>
@@ -208,6 +223,15 @@ namespace XInspector.Editor
             IList<Attribute> attributes)
         {
         }
+
+        #endregion
+
+        #region Internal
+
+        /// <summary>
+        /// 本处理器处理的特性类型。
+        /// </summary>
+        internal sealed override Type HandledAttributeType => typeof(TAttribute);
 
         #endregion
     }

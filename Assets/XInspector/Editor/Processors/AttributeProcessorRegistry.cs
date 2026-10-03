@@ -50,6 +50,37 @@ namespace XInspector.Editor
             _processors = null;
         }
 
+        /// <summary>
+        /// 判断是否存在能处理指定特性类型的处理器。
+        /// </summary>
+        /// <param name="attributeType">特性类型。</param>
+        /// <returns>存在处理它的处理器返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 与 <see cref="DrawerTypeRegistry.HasDrawerForAttribute"/> 对称，用途也是同一个：
+        /// 自动接管要回答「这个类型用到了本插件吗」。**两张表必须都查**——
+        /// 条件族只有处理器、没有绘制器，只查绘制器会让「只用了条件族的类型」不被接管，
+        /// 特性于是静默失效。
+        /// </remarks>
+        internal static bool HasProcessorForAttribute(Type attributeType)
+        {
+            if (attributeType == null)
+            {
+                return false;
+            }
+
+            var processors = Processors;
+            for (var i = 0; i < processors.Length; i++)
+            {
+                var handled = processors[i].HandledAttributeType;
+                if (handled != null && handled.IsAssignableFrom(attributeType))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         #endregion
 
         #region Private Helpers
