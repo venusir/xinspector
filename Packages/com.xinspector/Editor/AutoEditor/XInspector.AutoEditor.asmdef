@@ -1,0 +1,21 @@
+{
+    "name": "XInspector.AutoEditor",
+    "rootNamespace": "XInspector.Editor.AutoEditor",
+    "references": [
+        "XInspector.Runtime",
+        "XInspector.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "XINSPECTOR_AUTO_EDITOR"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

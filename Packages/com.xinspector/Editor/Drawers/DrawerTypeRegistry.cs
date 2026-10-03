@@ -88,6 +88,36 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 判断是否存在能处理指定特性类型的绘制器。
+        /// </summary>
+        /// <param name="attributeType">特性类型。</param>
+        /// <returns>存在处理它的绘制器返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 供自动接管程序集判断「这个类型用到了本插件吗」。用「有没有对应绘制器」
+        /// 而不是「特性的命名空间是不是 XInspector」：后者会把使用方自己写的自定义特性
+        /// 与绘制器一并漏掉，而前者恰好就是「画得出来吗」这个真正要问的问题。
+        /// </remarks>
+        internal static bool HasDrawerForAttribute(Type attributeType)
+        {
+            if (attributeType == null)
+            {
+                return false;
+            }
+
+            var registered = Registered;
+            for (var i = 0; i < registered.Length; i++)
+            {
+                var handled = registered[i].HandledAttributeType;
+                if (handled != null && handled.IsAssignableFrom(attributeType))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// 清空缓存，强制下次使用时重新扫描。
         /// </summary>
         /// <remarks>
