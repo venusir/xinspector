@@ -87,7 +87,11 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
    `GroupID == node.Path`**。节点落在其首个成员出现的位置，故夹在分组字段之间的未分组字段
    留在原地。同层分组之间按 `Order` 重排，但**只重排分组彼此之间的先后，不动未分组成员的位置**。
 6. **每个属性一份独立的特性实例**。成员特性靠反射天然如此（每次调用返回新实例）；
-   类级特性若将来要分发到多个成员，必须显式克隆，否则一个实例被几十个成员共享、改一处串一片。
+   类级特性分发到成员时**必须显式克隆**（`CloneForPath`），否则一个实例被几十个成员共享、
+   改一处串一片——类级分组分发就是这么做的。
+7. **处理器在分组装配之前跑**。处理器可以往成员的特性列表里注入分组特性（类级 `[BoxGroup]`
+   分发就是这么做的），而分组装配必须看到它们。顺序反过来，类级分组会**静默地不生效**。
+   同理，处理器也必须在**挂链之前**跑——注入的特性会改变链条的构成。
 
 ### 包结构
 
@@ -219,6 +223,17 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
   那会连 MonoBehaviour 的 `m_Script` 一起跳掉，破坏与原生 Inspector 的一致性
 - **同一个文件里同时 `using System` 与 `using UnityEngine` 时，裸写 `Object` 是 CS0104 二义**
   （`System.Object` vs `UnityEngine.Object`）。用 `using Object = UnityEngine.Object;` 消歧
+- **`PropertyState.IsReadOnly` 是算出来的，不是存下来的**（与 `IsVisible` 同构）。
+  处理器装 `ReadOnlyResolver`，绘制路径每帧求值。写 `State.IsReadOnly = true` 编译不过，
+  要用 `SetReadOnly(true)`。同理 `VisibilityResolver` / `ReadOnlyResolver` **都有非 null 的
+  哨兵默认值**（恒可见 / 恒可编辑），因此「为 null」不表示「未安装」——
+  想判断装没装要看行为，别判 null
+- **条件求值器读的是**树所属的 `SerializedObject`。通过**另一个** `SerializedObject` 改值后，
+  必须对树那个调 `Update()` 才看得到——真实绘制路径每帧开头本来就会 Update，
+  但测试里不补这一下就会得到「条件不跟随」的假失败
+- **`m_Script` 这类 Unity 注入成员没有对应的 `MemberInfo`**，因此不参与处理器的
+  「父级注入」钩子（守卫在 `PropertyTreeBuilder.RunProcessors` 里）。让它们触发的话，
+  处理器拿到 null 极易 NRE，且「对每个成员各触发一次」这条契约会多算一条
 
 ## 文档在哪
 
@@ -250,8 +265,17 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 ## 明确不在本轮范围
 
 自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
-数组/列表展开、`[ShowIf]` / `[FoldoutGroup]` / `[Button]`、`[SerializeReference]` 类型切换、
-折叠状态的跨会话持久化、UI Toolkit、特性处理器层。
+数组/列表展开、`[FoldoutGroup]` / `[Button]`、`[SerializeReference]` 类型切换、
+折叠状态的跨会话持久化、UI Toolkit。
+
+**特性处理器层已做**（`Editor/Processors/`），条件族做了 `[ShowIf]` `[HideIf]` `[EnableIf]`
+`[DisableIf]` 与四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`
+`[DisableInPlayMode]`），外加类级分组分发。
+
+**条件族仍不做**：`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接
+`PrefabKind` 之类的枚举参数，签名未核对到，**猜一个形状写下去比不做更糟**）、
+`[ShowIfGroup]` / `[HideIfGroup]`、条件为方法或普通属性（需反射值后端）、
+以及条件写在别的对象上的 `"@other.field"` 语法。
 
 **编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段）。
 **仍不做**：多 target 检视、字段拖拽重排、窗口内 Undo、`[ShowInInspector]` 那类非序列化成员。

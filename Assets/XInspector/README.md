@@ -115,10 +115,13 @@ public class PlayerProfileEditor : XInspectorEditor
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。
-- **没有特性处理器层。** 因此「把类级分组特性分发到各个成员」不生效——
-  在类型上写 `[BoxGroup]` 会把**整个 Inspector** 框起来，而不是让所有成员归属该分组。
-  类级 `[Title]` 不受影响（那是它该有的行为）。
-  这一层会在 `[ShowIf]` 那类「按条件改属性状态」的特性到来时一并补上。
+- **条件族只做了三分之一。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]` 与四个
+  模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`）。
+  **没有** `[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接 `PrefabKind`
+  之类的枚举参数）、也没有 `[ShowIfGroup]` / `[HideIfGroup]`。
+- **条件只能指向序列化成员。** `[ShowIf("x")]` 的 `x` 必须是 public 字段或
+  `[SerializeField]` 私有字段；普通属性、方法、以及写在别的对象上的 `"@other.field"` 语法
+  都不支持。条件名不存在时**保持可见并记一条告警**，不会抛异常。
 
 ## 依赖
 

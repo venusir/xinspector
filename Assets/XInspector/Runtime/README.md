@@ -63,16 +63,49 @@ public int health;
 | 位置 | 分组节点落在**其首个成员出现的位置**。夹在分组字段之间的未分组字段因此留在原地，而不是被挤到 Inspector 末尾 |
 | `Order` | 同层分组之间按它升序重排，**但只重排分组彼此之间的先后，不动未分组成员的相对位置** |
 | 同组多次声明 | 呈现设定（`Order`、`Label`）取**先声明者**的值，**不累加**。累加会让「给分组多加一个字段」意外改变该分组的排序位置 |
-| 用在**类**上 | ⚠️ 目前会把**整个 Inspector** 框起来，而**不是**让所有成员归属该分组。原因见下 |
+| 用在**类**上 | 该类的所有成员归入这个分组。**类级分组恒在最外层**——成员自己声明的分组会嵌在它里面，而不是与之并列 |
+| 多个类级分组 | **只取声明顺序的第一个**，其余忽略。一个类型上挂多个顶层分组没有明确语义（并列还是嵌套？），与其发明一条规则，不如取第一个 |
 
-#### 已知不足：类级 `[BoxGroup]`
+#### 类级分组的语义
 
-把分组特性标在类型上、期望「该类所有成员都进这个分组」是常见的直觉，
-但本版做不到——分组特性是按成员收集的，类上的那一个只会落在根节点上。
+```csharp
+[BoxGroup("外层")]
+public class Player : MonoBehaviour
+{
+    public int plain;                    // 落进「外层」
 
-要它生效需要一层「特性处理器」：读类上的分组特性，克隆后分发到各成员。
-该层尚未实现（它会和 `[ShowIf]` 那类「按条件改属性状态」的特性一起到来）。
-在那之前，请把 `[BoxGroup]` 写在每个成员上。
+    [BoxGroup("内层")]
+    public int nested;                   // 落进「外层/内层」，即嵌在外层里面
+}
+```
+
+「外层」框住两个字段，而 `nested` 外面还多一层「内层」的框。成员的路径是被**改写**过的
+（`内层` → `外层/内层`），所以类级分组永远不会和成员自己的分组并列。
+
+### 条件特性
+
+```csharp
+public bool isAlive = true;
+
+[ShowIf(nameof(isAlive))]     public int health;      // 条件为真才显示
+[HideIf(nameof(isAlive))]     public int deathReason; // 条件为真则隐藏
+[EnableIf(nameof(isAlive))]   public int regen;       // 条件为真才可编辑
+[DisableIf(nameof(isAlive))]  public int respawnDelay;// 条件为真则只读
+
+[HideInPlayMode]      public int debugOnly;   // 判据是 Application.isPlaying
+[DisableInEditorMode] public int runtimeOnly;
+```
+
+| 行为 | 说明 |
+|---|---|
+| 条件对象 | **必须是序列化成员**（public 字段或 `[SerializeField]` 私有字段），且为 `bool`。名字可以是 `a/b` 这样的嵌套路径 |
+| 求值时机 | **每帧重新求值**，所以被条件的字段可以随时跟着切换，不需要重建属性树 |
+| 条件名不存在 / 类型不对 | **保持可见并记一条告警**，不抛异常。一个拼错的名字不该让整个 Inspector 白屏 |
+| 隐藏 vs 禁用 | 禁用（变灰但仍可见）保留了「这个字段存在、只是现在不能改」的信息，通常比直接藏掉更有用 |
+
+**不支持的**：条件为方法或普通属性（那需要一套反射值后端）、条件写在别的对象上
+（Odin 的 `"@other.field"` 语法）、`[ShowIn]` / `[HideIn]` 那类接 `PrefabKind` 的枚举参数、
+以及 `[ShowIfGroup]` / `[HideIfGroup]`。
 
 ## 自定义分组特性
 

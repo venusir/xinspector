@@ -21,6 +21,23 @@
 - `PropertyTree.Create` 的 `internal` 重载，接受成员过滤器。**默认行为一字未改**——
   Inspector 路径刻意保留 `m_Script` 槽位以与原生渲染一致。
 
+### Added — 特性处理器层与条件族
+
+- **`AttributeProcessor` / `AttributeProcessor<TAttribute>`**：构建期改写特性列表或属性状态的阶段，
+  两个钩子——「自身带该特性」与「父级带该特性」。**不参与绘制。**
+- **条件特性**：`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`（接序列化成员名），
+  以及 `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`。
+  条件**每帧求值**，因此可随时跟随；条件名无效时保持可见并告警，不抛异常。
+- **类级分组分发**：`[BoxGroup]`（及任何分组特性）标在类型上时，所有成员归入该分组，
+  且**类级恒在最外层**——成员自己的分组会嵌在它里面。这修掉了此前
+  「类级 `[BoxGroup]` 会框住整个 Inspector」那条已知限制。
+
+### Changed
+
+- **`PropertyState.IsReadOnly` 从存下来的 bool 改成算出来的**（与 `IsVisible` 同构）：
+  新增 `ReadOnlyResolver` 与 `SetReadOnly(bool)`，**原 setter 移除**。
+  `[EnableIf]` 需要每帧求值的只读状态，一个 bool 存不下条件。
+
 ## [0.1.0-preview.1] - 2026-10-03
 
 首个预览版。本轮只交付**开发模板与核心管线骨架**，以及一条端到端可跑通的垂直切片；

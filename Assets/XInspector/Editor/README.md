@@ -90,6 +90,51 @@ public class PlayerProfileEditor : XInspectorEditor { }
 
 > 本开发工程刻意把这个宏开着，好让门禁覆盖得到那个程序集——见 CLAUDE.md。
 
+## 写一个特性处理器
+
+绘制器决定「这个属性怎么画」；**处理器**决定「画之前发生什么」——它改的是特性列表或
+`PropertyState`，不产出任何像素。凡是不需要画东西就成立的判断，都该放在这里。
+
+```csharp
+internal sealed class MyProcessor : AttributeProcessor<MyAttribute>
+{
+    protected override void ProcessSelf(
+        InspectorProperty property, MyAttribute attribute, IList<Attribute> attributes)
+    {
+        // 装一个每帧求值的可见性解析器——不碰 GUI，因此可以无头测试
+        property.State.VisibilityResolver = () => /* … */ true;
+    }
+}
+```
+
+放进任意编辑器程序集即可，**不需要注册**（与绘制器同样扫全部程序集）。
+
+### 两个钩子
+
+| 钩子 | 触发者 | 典型用途 |
+|---|---|---|
+| `ProcessSelf` | 属性**自身**带该特性 | `[ShowIf]` 装可见性解析器 |
+| `ProcessChildMember` | **父属性**带该特性 | 类级 `[BoxGroup]` 分发到各成员 |
+
+两个都继承 `AttributeProcessor<TAttribute>` 就都有；若需要**一次看到全部实例**
+（例如「多个分组只取第一个」），则继承非泛型的 `AttributeProcessor` 并覆写
+`ProcessChildMemberAttributes`——泛型基类会逐个实例回调，那正是两种基类都留着的理由。
+
+### 三条纪律
+
+1. **不得绘制。** 一旦它能画东西，绘制器链的顺序语义就被绕过了——「谁包住谁」将不再只由
+   `DrawerPriority` 决定。
+2. **无状态共享单例。** 与绘制器一样，每种类型全工程只实例化一个，不得持有可变字段；
+   跨调用要留的东西放进 `PropertyState`。
+3. **注入特性必须克隆。** 把父级那个实例直接塞给子成员，会让几十个成员共享它，
+   后续任何一处改写都串到所有人身上。用 `CloneForPath`。
+
+### 构建期的顺序是契约
+
+处理器在**分组装配之前**、**挂链之前**跑。前者是因为类级分组特性是处理器注入的，
+装配必须看到它；后者是因为注入的特性会改变链条的构成。顺序反过来，症状是
+**静默地不生效**——所以这条写在 `PropertyTreeBuilder` 的注释里，别改。
+
 ## 在窗口里复用 `PropertyTree`
 
 管线本身与 Inspector 无关：给它一个 `SerializedObject`，它就能画。窗口基类
