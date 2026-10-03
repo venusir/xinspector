@@ -52,9 +52,22 @@ namespace XInspector.Editor
                 InspectorPropertyKind.Root,
                 new PropertyAttributes(CollectTypeAttributes(targetType)));
 
-            AttachChain(root, ChildrenTerminal);
-
             var members = CollectMembers(serializedObject, targetType, memberFilter);
+
+            // ---- 顺序是契约，动之前先读完这段 ----
+            //
+            // 处理器必须在**分组装配之前**跑：类级分组特性是处理器注入到成员上的，
+            // 而分组装配必须看到它——顺序反过来，类级 [BoxGroup] 会静默地不生效。
+            //
+            // 处理器也必须在**挂链之前**跑：注入的特性会改变链条的构成
+            // （例如类级 [Title] 被分发到成员身上，那个成员就该多一格标题绘制器）。
+            RunProcessors(root, members);
+
+            AttachChain(root, ChildrenTerminal);
+            for (var i = 0; i < members.Count; i++)
+            {
+                AttachChain(members[i], MemberTerminal);
+            }
 
             ApplyGrouping(root, members);
 
@@ -137,10 +150,81 @@ namespace XInspector.Editor
                 new PropertyAttributes(CollectMemberAttributes(field)))
             {
                 ValueEntry = new SerializedPropertyValueEntry(stableProperty, valueType),
+                Member = field,
             };
 
-            AttachChain(node, MemberTerminal);
+            // 链条**不在这里挂**：处理器还没跑，特性尚未最终确定。
             return node;
+        }
+
+        #endregion
+
+        #region 特性处理器
+
+        /// <summary>
+        /// 跑一遍所有特性处理器，让它们改写节点的特性列表或状态。
+        /// </summary>
+        /// <param name="root">根节点，类级特性都挂在它上面。</param>
+        /// <param name="members">尚未挂到父节点上的成员列表。</param>
+        /// <remarks>
+        /// <para>
+        /// 处理器按 <see cref="AttributeProcessor.ProcessorPriority"/> 升序跑（同优先级按类型名），
+        /// 顺序由注册表保证确定——一个处理器注入的特性可能被后一个读到。
+        /// </para>
+        /// <para>
+        /// <b>每个成员先跑「自身」再跑「父级注入」。</b> 这个顺序是契约：注入的特性不该影响
+        /// 「这个成员自己有什么」的判断；而反过来，后跑的注入能被已经跑过的处理器看到，
+        /// 那正是类级分组分发所需要的。
+        /// </para>
+        /// </remarks>
+        private static void RunProcessors(InspectorProperty root, List<InspectorProperty> members)
+        {
+            var processors = AttributeProcessorRegistry.Processors;
+            if (processors.Length == 0)
+            {
+                return;
+            }
+
+            for (var i = 0; i < processors.Length; i++)
+            {
+                if (processors[i].CanProcessSelfAttributes(root))
+                {
+                    processors[i].ProcessSelfAttributes(root, root.Attributes.Raw);
+                }
+            }
+
+            for (var m = 0; m < members.Count; m++)
+            {
+                var member = members[m];
+
+                for (var i = 0; i < processors.Length; i++)
+                {
+                    if (processors[i].CanProcessSelfAttributes(member))
+                    {
+                        processors[i].ProcessSelfAttributes(member, member.Attributes.Raw);
+                    }
+                }
+
+                // 没有反射信息的成员不参与「父级注入」钩子。
+                //
+                // 这类成员是 Unity 注入的序列化属性（典型的是 m_Script）——它们**在
+                // SerializedObject 里存在，却没有对应的托管字段**。让它们触发钩子有两个后果：
+                // 处理器拿到 null 的 MemberInfo 后极容易 NRE（想读成员特性就会踩），
+                // 以及「对每个成员各触发一次」这条契约会多算一条。守卫放在这里而不是
+                // 各处理器里：这是唯一知道「哪些成员是真的成员」的地方。
+                if (member.Member == null)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < processors.Length; i++)
+                {
+                    if (processors[i].CanProcessChildMemberAttributes(root, member.Member))
+                    {
+                        processors[i].ProcessChildMemberAttributes(root, member.Member, member.Attributes.Raw);
+                    }
+                }
+            }
         }
 
         #endregion

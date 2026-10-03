@@ -86,7 +86,7 @@ namespace XInspector.Tests.Editor
             var paths = AttachAndGetPaths();
 
             Assert.That(paths, Does.Contain("health"));
-            Assert.That(paths, Does.Contain("name"));
+            Assert.That(paths, Does.Contain("displayName"));
         }
 
         /// <summary>
@@ -164,11 +164,11 @@ namespace XInspector.Tests.Editor
         [Test]
         public void Window_ResetToDefaultsCoversGroupedMembers()
         {
-            SetString("name", "改过了");
+            SetString("displayName", "改过了");
 
             _window.ResetToDefaults();
 
-            Assert.That(_window.name, Is.EqualTo(WindowFixture.DefaultName));
+            Assert.That(_window.displayName, Is.EqualTo(WindowFixture.DefaultName));
         }
 
         #endregion
@@ -259,7 +259,7 @@ namespace XInspector.Tests.Editor
 
         /// <summary>同组的字段。</summary>
         [BoxGroup("基础")]
-        public string name = DefaultName;
+        public string displayName = DefaultName;
 
         /// <summary>
         /// 把受保护的树暴露给测试。

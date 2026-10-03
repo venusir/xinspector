@@ -26,9 +26,12 @@ namespace XInspector.Editor
         // 每次 new 一个闭包是白白的分配。这两个委托无捕获，可安全共享。
         private static readonly Func<bool> AlwaysVisible = () => true;
         private static readonly Func<bool> AlwaysHidden = () => false;
+        private static readonly Func<bool> AlwaysReadOnly = () => true;
+        private static readonly Func<bool> AlwaysEditable = () => false;
 
         private readonly Dictionary<Type, object> _bag = new Dictionary<Type, object>();
         private Func<bool> _visibilityResolver = AlwaysVisible;
+        private Func<bool> _readOnlyResolver = AlwaysEditable;
 
         #endregion
 
@@ -66,9 +69,39 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 是否只读。只读表示仍然绘制但不可编辑。
+        /// 当前是否只读。只读表示仍然绘制但不可编辑。每次读取都重新求值
+        /// <see cref="ReadOnlyResolver"/>。
         /// </summary>
-        public bool IsReadOnly { get; set; }
+        /// <remarks>
+        /// 与 <see cref="IsVisible"/> 同构，理由也一样：<c>[EnableIf]</c>/<c>[DisableIf]</c>
+        /// 这类条件依赖其它字段的当前值，缓存会让它在该变的时候不变。
+        /// </remarks>
+        public bool IsReadOnly => _readOnlyResolver();
+
+        /// <summary>
+        /// 只读状态求值器。置 <c>null</c> 等价于「恒可编辑」。
+        /// </summary>
+        /// <remarks>
+        /// 处理器装一个 <see cref="Func{TResult}"/> 进来（如 <c>[EnableIf]</c> 解析出的条件），
+        /// 绘制路径每帧调用它。这样「能不能改」这个判断完全不碰 GUI，可以无头单测。
+        /// </remarks>
+        public Func<bool> ReadOnlyResolver
+        {
+            get => _readOnlyResolver;
+            set => _readOnlyResolver = value ?? AlwaysEditable;
+        }
+
+        /// <summary>
+        /// 强制设为只读或可编辑，等价于装一个恒定求值器。
+        /// </summary>
+        /// <param name="readOnly">是否只读。</param>
+        /// <remarks>
+        /// 定值场景用这个，需要按条件变化的用 <see cref="ReadOnlyResolver"/>。
+        /// </remarks>
+        public void SetReadOnly(bool readOnly)
+        {
+            _readOnlyResolver = readOnly ? AlwaysReadOnly : AlwaysEditable;
+        }
 
         /// <summary>
         /// 标签覆盖。为 <c>null</c> 时使用属性自身的名字。
@@ -115,7 +148,7 @@ namespace XInspector.Editor
         public void Reset()
         {
             _visibilityResolver = AlwaysVisible;
-            IsReadOnly = false;
+            _readOnlyResolver = AlwaysEditable;
             LabelOverride = null;
             _bag.Clear();
         }

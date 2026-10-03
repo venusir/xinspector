@@ -1,0 +1,121 @@
+using System;
+using UnityEditor;
+using UnityEngine;
+
+namespace XInspector.Editor
+{
+    /// <summary>
+    /// 把「另一个成员的当前值」变成一条可每帧求值的条件。
+    /// <para>
+    /// 条件的解析（找成员、校类型）在**构建期**做一次，求值（读值）在**绘制期**每帧做。
+    /// 这个分工是刻意的：解析要报错、要提示，属于构建期的一次性工作；求值必须便宜到每帧无感。
+    /// </para>
+    /// <para>
+    /// 求值器是 <see cref="Func{TResult}"/> 而非直接设一个 bool——
+    /// **这让「要不要显示」完全不碰 GUI，可以无头测试**，正是本仓测试策略依赖的那条分界。
+    /// </para>
+    /// </summary>
+    internal static class ConditionResolver
+    {
+        #region Public API
+
+        /// <summary>
+        /// 为属性装一个基于条件的可见性求值器。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="conditionName">条件成员名。</param>
+        /// <param name="invert">是否取反（<c>[HideIf]</c> 用反，<c>[ShowIf]</c> 用正）。</param>
+        public static void InstallVisibility(InspectorProperty property, string conditionName, bool invert)
+        {
+            var condition = Resolve(property, conditionName);
+            if (condition == null)
+            {
+                return;
+            }
+
+            property.State.VisibilityResolver = invert ? (Func<bool>)(() => !condition()) : condition;
+        }
+
+        /// <summary>
+        /// 为属性装一个基于条件的只读求值器。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="conditionName">条件成员名。</param>
+        /// <param name="invert">
+        /// 是否对条件取反。求值器的语义是「返回 true 表示**只读**」，因此：
+        /// <c>[DisableIf]</c>（条件为真则只读）用 <c>false</c>；
+        /// <c>[EnableIf]</c>（条件为真则**可编辑**，即条件为假才只读）用 <c>true</c>。
+        /// </param>
+        public static void InstallReadOnly(InspectorProperty property, string conditionName, bool invert)
+        {
+            var condition = Resolve(property, conditionName);
+            if (condition == null)
+            {
+                return;
+            }
+
+            property.State.ReadOnlyResolver = invert ? (Func<bool>)(() => !condition()) : condition;
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>
+        /// 解析条件成员，返回一个每帧求值的委托。
+        /// </summary>
+        /// <param name="property">目标属性，用来拿到它所属的序列化对象。</param>
+        /// <param name="conditionName">条件成员名。</param>
+        /// <returns>求值器；解析失败时返回 <c>null</c> 并记一条告警。</returns>
+        /// <remarks>
+        /// <b>解析失败不抛异常，只告警并放弃。</b> 一个拼错的条件名不该让整个 Inspector 白屏——
+        /// 那是使用方看到本插件的第一眼。放弃的后果是「条件不生效、字段照常显示」，
+        /// 配合告警足以定位；而抛异常会让后果升级成「什么都看不见」。
+        /// </remarks>
+        private static Func<bool> Resolve(InspectorProperty property, string conditionName)
+        {
+            var serializedProperty = property.ValueEntry?.SerializedProperty;
+            var serializedObject = serializedProperty?.serializedObject;
+
+            if (serializedObject == null)
+            {
+                Warn(property, conditionName, "该属性没有序列化后端");
+                return null;
+            }
+
+            var condition = serializedObject.FindProperty(conditionName);
+            if (condition == null)
+            {
+                Warn(property, conditionName, "找不到该成员");
+                return null;
+            }
+
+            if (condition.propertyType != SerializedPropertyType.Boolean)
+            {
+                Warn(property, conditionName, $"该成员不是 bool（实为 {condition.propertyType}）");
+                return null;
+            }
+
+            // 每帧只读一个 bool，不分配、不查找——SerializedProperty 是活句柄，
+            // 跨 Update() 依然有效，所以解析一次就够。
+            return () => condition.boolValue;
+        }
+
+        /// <summary>
+        /// 记一条条件解析失败的告警。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="conditionName">条件名。</param>
+        /// <param name="reason">失败原因。</param>
+        private static void Warn(InspectorProperty property, string conditionName, string reason)
+        {
+            Debug.LogWarning(
+                $"[XInspector] 属性「{property.Path}」上的条件「{conditionName}」无法求值：{reason}。" +
+                "条件已忽略，该属性按无条件处理。" +
+                "注意条件必须是**序列化**成员（public 字段或 [SerializeField] 私有字段），" +
+                "普通属性与方法不受支持。");
+        }
+
+        #endregion
+    }
+}

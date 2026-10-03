@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -102,6 +103,17 @@ namespace XInspector.Editor
         /// 该节点的值入口。分组节点与根节点不对应真实成员，故为 <c>null</c>。
         /// </summary>
         public PropertyValueEntry ValueEntry { get; internal set; }
+
+        /// <summary>
+        /// 该成员对应的反射信息；非成员节点为 <c>null</c>。
+        /// </summary>
+        /// <remarks>
+        /// 构建期存下来供特性处理器读取**成员自身**的特性——处理器拿到的是一个节点，
+        /// 而它要判断的可能是「这个成员上有没有某个特性」，那件事只有 <see cref="MemberInfo"/> 知道。
+        /// 用 <see cref="MemberInfo"/> 而非 <see cref="FieldInfo"/>：眼下成员都是字段，
+        /// 但普通属性进来时不该再改一次签名。
+        /// </remarks>
+        internal MemberInfo Member { get; set; }
 
         /// <summary>
         /// 当前是否可见。等价于 <c>State.IsVisible</c>，为绘制器提供便利。

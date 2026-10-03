@@ -145,24 +145,11 @@ namespace XInspector.Editor
             }
 
             var found = new List<RegisteredDrawer>();
-            var reported = new List<string>();
 
-            // TypeCache 由 Unity 维护，比手写反射扫描快得多，且域重载后自动失效。
-            foreach (var type in TypeCache.GetTypesDerivedFrom<XInspectorDrawer>())
+            // 扫描与「哪些类型可用」的判断交给 EditorTypeScanner——与特性处理器注册表共用同一份，
+            // 免得两份各自演化后分叉。
+            foreach (var type in EditorTypeScanner.CollectInstantiable<XInspectorDrawer>("绘制器"))
             {
-                if (type.IsAbstract || type.IsGenericTypeDefinition)
-                {
-                    continue;
-                }
-
-                // 绘制器是全工程共享的单例，故必须能无参实例化。
-                // 跳过而不是抛异常：一个坏掉的第三方绘制器不该让整个 Inspector 瘫掉。
-                if (type.GetConstructor(Type.EmptyTypes) == null)
-                {
-                    reported.Add(type.FullName);
-                    continue;
-                }
-
                 var drawer = (XInspectorDrawer)Activator.CreateInstance(type);
                 var priorityAttribute = type.GetCustomAttribute<DrawerPriorityAttribute>();
 
@@ -171,13 +158,6 @@ namespace XInspector.Editor
                 var priority = priorityAttribute != null ? priorityAttribute.Priority : drawer.Priority;
 
                 found.Add(new RegisteredDrawer(drawer, priority, drawer.HandledAttributeType));
-            }
-
-            if (reported.Count > 0)
-            {
-                Debug.LogWarning(
-                    "[XInspector] 以下绘制器没有公开无参构造函数，已跳过。绘制器是全工程共享的单例，" +
-                    "必须能无参实例化：\n  " + string.Join("\n  ", reported));
             }
 
             found.Sort(CompareByPriorityThenName);
