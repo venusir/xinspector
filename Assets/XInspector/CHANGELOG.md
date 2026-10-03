@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### Verified — Unity 原生装饰器照常工作
+
+- Unity 原生装饰器与内置绘制器（`[Header]` `[Space]` `[Range]` `[TextArea]` `[Multiline]` `[Tooltip]`）
+  **照常工作**：它们作为**字段自身的特性**流经属性树，不产生额外节点（不存在「幽灵字段」），
+  带装饰器的字段链条照旧把值交给 `PropertyField`——本包既不重复画、也不吞掉它们。
+  - 这条推断原先没实测过，而 OdinGap 里标 ➖ 的 4 项全建立在它上面，故在补 L1a 之前先验掉。
+  - 结构侧由 `NativeDecoratorTests`（4 例）钉住；**渲染侧不做自动化断言**——按本仓策略不测 IMGUI，
+    改由沙盒的 `NativeDecoratorDemo`（Demo 4）与无特性基线（Demo 1）目视对照。
+
 ### Added
 
 - **`XInspectorEditorWindow`**：绘制**自身序列化字段**的编辑器窗口基类。继承、声明字段、
