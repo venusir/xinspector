@@ -5,6 +5,22 @@
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+
+- **`XInspectorEditorWindow`**：绘制**自身序列化字段**的编辑器窗口基类。继承、声明字段、
+  写个 `[MenuItem]` 即可，窗口的 `OnGUI` 不必自己写。字段值随窗口布局持久化，
+  域重载与编辑器重启后仍在。
+  - 窗口内的编辑**不进 Undo**——窗口字段不属于场景也不属于资产，强登 Undo 会让用户
+    按 Ctrl+Z 时撤销到窗口里的一个数字。补偿手段是 `ResetToDefaults()`（工具栏上有按钮）。
+  - 用 `WindowMemberFilter` 排除 `EditorWindow` 自带的 7 个 `[SerializeField]` 内部字段
+    （`m_MinSize`、`m_Pos`、`m_ViewDataDictionary` 等），以及脚本槽位 `m_Script`。
+- `PropertyTreeHost` / `PropertyTreeReset` / `WindowMemberFilter`（均为 `internal`）：
+  在非 Inspector 上下文托管属性树的机制，窗口基类与将来的入门窗口预览面板共用。
+- `PropertyTree.Create` 的 `internal` 重载，接受成员过滤器。**默认行为一字未改**——
+  Inspector 路径刻意保留 `m_Script` 槽位以与原生渲染一致。
+
 ## [0.1.0-preview.1] - 2026-10-03
 
 首个预览版。本轮只交付**开发模板与核心管线骨架**，以及一条端到端可跑通的垂直切片；

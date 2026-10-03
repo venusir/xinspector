@@ -102,6 +102,7 @@ Editor/                      Venusir.Xinspector.Editor
   PropertyState.cs           每属性的可变状态
   Values/                    值后端
   Drawers/                   绘制器：基础类、链、注册表、BuiltIn/、Terminals/
+  Windows/                   XInspectorEditorWindow（公开）+ 托管机制（internal）
 Editor/AutoEditor/           Venusir.Xinspector.AutoEditor（宏门控，见下）
 Tests/Runtime/               PlayMode
 Tests/Editor/                EditMode
@@ -210,6 +211,14 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
   scripts associated with it"），故测试程序集里必须有真实文件
 - **`Assembly.GetReferencedAssemblies()` 返回的是编译器实际发出的引用**，未用到的会被裁掉。
   它只适合断言「不存在某依赖」（用了就必然发出），不适合断言「存在某依赖」（会误报）
+- **`EditorWindow` 自带 7 个 `[SerializeField]` 内部字段**（`m_MinSize`、`m_MaxSize`、
+  `m_TitleContent`、`m_Pos`、`m_SerializedDataModeController`、`m_ViewDataDictionary`、
+  `m_OverlayCanvas`），`new SerializedObject(window)` 会把它们全翻出来，后三个还会各自
+  展开成一整棵子树。窗口路径必须传成员过滤器（`WindowMemberFilter`：只收声明在
+  `XInspectorEditorWindow` 及其派生类型上的字段）。**Inspector 路径不能加这个过滤**——
+  那会连 MonoBehaviour 的 `m_Script` 一起跳掉，破坏与原生 Inspector 的一致性
+- **同一个文件里同时 `using System` 与 `using UnityEngine` 时，裸写 `Object` 是 CS0104 二义**
+  （`System.Object` vs `UnityEngine.Object`）。用 `using Object = UnityEngine.Object;` 消歧
 
 ## 文档在哪
 
@@ -240,9 +249,12 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 
 ## 明确不在本轮范围
 
-自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、编辑器窗口、
+自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
 数组/列表展开、`[ShowIf]` / `[FoldoutGroup]` / `[Button]`、`[SerializeReference]` 类型切换、
 折叠状态的跨会话持久化、UI Toolkit、特性处理器层。
+
+**编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段）。
+**仍不做**：多 target 检视、字段拖拽重排、窗口内 Undo、`[ShowInInspector]` 那类非序列化成员。
 
 **其中「特性处理器层」是刻意推迟的：** 它原本的用途是把类级特性合成到别的节点上，
 但构建期已把类型特性直接放在根节点，这件事不再需要；剩下的潜在用户（`[ShowIf]` 改状态、

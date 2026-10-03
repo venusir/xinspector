@@ -107,7 +107,9 @@ public class PlayerProfileEditor : XInspectorEditor
   （public 字段 + `[SerializeField]`），画不了任意属性。`[ShowInInspector]` 那类反射成员
   需要一套独立的值后端，尚未实现。
 - **没有样式系统。** 一律用 `EditorStyles` 与 `GUI.skin.box` 的默认外观，没有 Odin 那样的配色与图标。
-- **没有编辑器窗口。** 只有 Inspector。
+- **编辑器窗口只做了「画自身序列化字段」这一种形态。** 有基类 `XInspectorEditorWindow`
+  （继承后声明字段即可，见 `Editor/README.md`），但**没有** Odin 那种检视任意对象的浮空
+  Inspector、字段拖拽重排、窗口内 Undo（窗口里的编辑不可撤销，用「重置」补偿）。
 - **没有数组 / 列表展开**，没有 `[ShowIf]` / `[FoldoutGroup]` / `[Button]` / `[OnValueChanged]`。
 - **没有 `[SerializeReference]` 类型切换。**
 - 折叠 / 展开状态**不跨会话持久化**。

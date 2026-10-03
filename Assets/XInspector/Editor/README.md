@@ -90,6 +90,98 @@ public class PlayerProfileEditor : XInspectorEditor { }
 
 > 本开发工程刻意把这个宏开着，好让门禁覆盖得到那个程序集——见 CLAUDE.md。
 
+## 在窗口里复用 `PropertyTree`
+
+管线本身与 Inspector 无关：给它一个 `SerializedObject`，它就能画。窗口基类
+`XInspectorEditorWindow` 就是这件事的成品，你不必自己接线：
+
+```csharp
+internal sealed class MyWindow : XInspectorEditorWindow
+{
+    [Title("设置")] [BoxGroup("基础")] public int health = 100;
+
+    [MenuItem("Tools/我的窗口")]
+    private static void Open() => GetWindow<MyWindow>("我的窗口");
+}
+```
+
+但如果你要在**自己的容器**里嵌一块属性树（窗口里的一个面板、一个自定义 Editor 的某一段），
+下面几条契约得自己守。它们就是 `PropertyTreeHost` 在替你做的事。
+
+### 1. 三个调用必须配对
+
+```csharp
+var so = tree.SerializedObject;
+so.Update();                                  // 把磁盘上的值拉进内存副本
+tree.Draw();                                  // 绘制
+so.ApplyModifiedPropertiesWithoutUndo();      // 把内存副本写回
+```
+
+这是 `XInspectorEditor.OnInspectorGUI` 的同一套配对，**只有最后一步不同**：窗口用不带 Undo 的版本。
+带 Undo 的版本会往**全局** Undo 栈写记录，而窗口字段既不属于场景也不属于资产——
+用户按 Ctrl+Z 想撤销场景操作，撤销到的却是窗口里的一个数字。**在 Inspector 里注册 Undo 是特性，
+在窗口里是污染。**
+
+代价是窗口内的编辑不可撤销，用「重置」补偿（`PropertyTreeHost.ResetToDefaults`）。
+
+### 2. `labelWidth` / `wideMode` 要自己设，而且要还原
+
+Inspector 里这两项由宿主设好，窗口里不会自动来。不设的话标签会挤成一列、或者跑到字段上方。
+
+```csharp
+var savedLabel = EditorGUIUtility.labelWidth;
+var savedWide = EditorGUIUtility.wideMode;
+try
+{
+    EditorGUIUtility.labelWidth = Mathf.Clamp(width * 0.38f, 90f, 220f);
+    EditorGUIUtility.wideMode = width >= 320f;
+    // …绘制…
+}
+finally
+{
+    EditorGUIUtility.labelWidth = savedLabel;   // 必须还原
+    EditorGUIUtility.wideMode = savedWide;
+}
+```
+
+**还原是硬要求**：这两个是全局状态，同一帧里还有别的窗口与 Inspector 要用它们。
+
+### 3. 临时对象用 `HideFlags.HideAndDontSave`
+
+为预览之类目的造的一次性 `ScriptableObject`，标志要设成 `HideFlags.HideAndDontSave`：
+不进 Hierarchy、不进 Inspector、不被保存，且**不被 `Resources.UnloadUnusedAssets` 回收**
+（它含 `DontUnloadUnusedAsset`）——最后一条是必需的，否则对象可能在你脚下消失。
+释放时在编辑模式下用 `DestroyImmediate`，`Destroy` 会报「may not be called from edit mode」。
+
+### 4. `SerializedObject` 也要释放
+
+`SerializedObject` 实现了 `IDisposable`，它持有原生句柄。自己 `new` 出来的要自己 `Dispose`，
+并且**绝不能把它存进可序列化字段**——域重载之后它会指向已失效的东西。
+
+### 5. 成员过滤：画窗口自身时要传
+
+`EditorWindow` 是 `ScriptableObject`，自带 7 个带 `[SerializeField]` 的内部字段
+（`m_MinSize`、`m_MaxSize`、`m_TitleContent`、`m_Pos`、`m_SerializedDataModeController`、
+`m_ViewDataDictionary`、`m_OverlayCanvas`）。不管它们，你的窗口就是「一堆 Unity 内部状态
++ 自己那几个字段」，其中后三个还会各自展开成一整棵子树。
+
+用 `WindowMemberFilter.For(typeof(你的窗口基类))` 产出的过滤器——规则是**字段的声明类型必须
+可赋给那个基类**，Unity 的内部字段声明在 `EditorWindow`/`ScriptableObject` 上，一句挡掉；
+脚本槽位 `m_Script` 同样被排除。
+
+### 6. 建树失败要变成可见的错误
+
+一个写坏的目标（例如 `[BoxGroup("")]` 会在构建期抛 `ArgumentException`）不该让你的窗口白屏。
+`PropertyTreeHost` 把异常转成可读的 `Error` 并画成 `HelpBox`——**显式可见，不是静默吞掉**。
+
+但**绘制期的异常不该被捕获**：那类要修在绘制器里，吞掉只会让「画错了」变成「什么都没画」。
+
+### 别自己重写这些
+
+`PropertyTreeHost` 已经把上面六条都实现了，且是 `internal` 的——它就在
+`Editor/Windows/PropertyTreeHost.cs`，直接读比照着重写快。窗口基类与（将来的）入门窗口
+预览面板共用它。
+
 ## 值的读写
 
 `PropertyValueEntry` 是树与序列化之间的那条缝，当前唯一实现是

@@ -133,12 +133,15 @@ Unity 的 `PropertyField`，验证需求真实存在再往下走。
 
 ## 九、编辑器窗口与 UI Toolkit
 
-**该不该做：都不在本包的近期范围内。**
+**编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段），
+当年「`PropertyTree` 将来要复用到窗口里应该不难」的判断成立——机制抽成了
+`PropertyTreeHost`，窗口基类与之后的入门窗口预览面板共用它。那份契约现在写在
+`Assets/XInspector/Editor/README.md` 的「在窗口里复用 `PropertyTree`」一节。
 
-- **编辑器窗口**（Odin 的 `OdinEditorWindow`）：那是另一个产品形态。本包目前只做 Inspector，
-  而 `PropertyTree` 本身与 Inspector 无关，将来要复用到窗口里应该不难——但没必要现在为它设计。
-- **UI Toolkit**：整套管线是 IMGUI 的（`EditorGUILayout`、`DrawerChain` 的即时模式语义）。
-  改成 UI Toolkit 是重写而不是移植。除非 Unity 弃用 IMGUI，否则不做。
+**仍未做**：检视任意对象的浮空 Inspector、字段拖拽重排、窗口内 Undo、窗口布局的自定义持久化。
+
+**UI Toolkit：不做。** 整套管线是 IMGUI 的（`EditorGUILayout`、`DrawerChain` 的即时模式语义）。
+改成 UI Toolkit 是重写而不是移植。除非 Unity 弃用 IMGUI。
 
 ---
 

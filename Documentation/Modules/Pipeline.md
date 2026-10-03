@@ -26,8 +26,10 @@ Runtime（特性）与 Editor（树、链、绘制器）。
 | 8 | 宏门控的自动编辑器程序集 |
 | 9 | 示例、工具、工程规则 |
 
-**未做**：特性处理器层、数组展开、`[ShowIf]` 及同类、样式系统、编辑器窗口、
-UI Toolkit、序列化后端。判断与边界见 [Roadmap.md](../Roadmap.md)。
+**未做**：特性处理器层、数组展开、`[ShowIf]` 及同类、样式系统、UI Toolkit、序列化后端。
+判断与边界见 [Roadmap.md](../Roadmap.md)。
+
+（**编辑器窗口**原在此列，第四轮做了基类形态——见下面第三轮的记录与「已否决的形状」第 12 条。）
 
 **第二轮**：结构对齐 XFramework——程序集命名改为「公司.产品[.Editor]」式、
 补 `Tests.Native` 离线测试通道、补模块 README 与维护向文档。
@@ -162,6 +164,35 @@ Manager 眼里只是普通资源（实测：XFramework 的 manifest 与 lock 里
 **可逆**：移动时连 `.meta` 一起挪则 GUID 不变，asmdef 名与 C# 命名空间也不受影响，
 搬回 `Packages/` 是纯路径操作。`package.json` 保留标识字段正是为此——
 搬回去时还需恢复 `Samples~/` 的波浪号并补回 `samples` 数组。
+
+### 12. 窗口只做「画自身字段」，且窗口内编辑不进 Undo（第四轮）
+
+第四轮做了 `XInspectorEditorWindow`——`PropertyTree` 第一次用在 Inspector 之外。
+两处刻意的收窄：
+
+**（a）只做「画窗口自身的序列化字段」，不做「检视任意对象的浮空 Inspector」。**
+
+后者（带 target 槽位与对象选择器）是 Odin 的另一半用法。不做的理由是它要引入一整套
+Inspector 才有的语义：多对象、预制体编辑、对象切换时的树重建、target 为 null 时的空态。
+那是**另一个产品形态**，与「让使用方用本管线布置自己的窗口」不是一件事。
+先把边界清楚的那一半做实，比两边都做一半好。
+
+**（b）窗口内的编辑不进 Undo，用「重置」补偿。**
+
+窗口字段既不属于场景也不属于资产，Unity 的 Undo 体系里没有它的位置。强行登记
+（`ApplyModifiedProperties`）会往**全局** Undo 栈写记录，于是用户按 Ctrl+Z 想撤销场景操作、
+撤销到的却是窗口里的一个数字。**在 Inspector 里注册 Undo 是特性，在窗口里是污染。**
+
+这条偏离是 `PropertyTreeHost` 与 `XInspectorEditor.OnInspectorGUI` 唯一的实质差别，
+代价是窗口内编辑不可撤销，由 `ResetToDefaults()` 补偿——它的做法是取一个同类型的
+一次性实例（字段还停在 C# 初始值）按路径把值复制回来。
+
+**（c）成员过滤必须是窗口专用的，不能变成全局默认。**
+
+`EditorWindow` 自带 7 个带 `[SerializeField]` 的内部字段，不过滤就会混进窗口的树里。
+但这条规则**不能**下推到 `PropertyTree.Create(SerializedObject)` 的默认路径：那会连
+MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**它来对齐原生渲染。
+所以过滤是 `internal` 重载上的一个可选参数，默认行为一字未改（有回归守卫钉住）。
 
 ---
 
