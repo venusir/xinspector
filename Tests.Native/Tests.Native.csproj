@@ -42,12 +42,12 @@
 
   <ItemGroup>
     <!-- Runtime 全部源码，含 AssemblyInfo.cs（其中的 InternalsVisibleTo 指向不存在的程序集也无妨）。 -->
-    <Compile Include="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Runtime\**\*.cs"
+    <Compile Include="$(MSBuildThisFileDirectory)..\Assets\XInspector\Runtime\**\*.cs"
              Link="Runtime\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Runtime 测试：用通配 + 排除，新增 fixture 会自动纳入，不必回来改这里。 -->
-    <Compile Include="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Tests\Runtime\**\*.cs"
-             Exclude="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Tests\Runtime\AssemblyReferenceTests.cs"
+    <Compile Include="$(MSBuildThisFileDirectory)..\Assets\XInspector\Tests\Runtime\**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)..\Assets\XInspector\Tests\Runtime\AssemblyReferenceTests.cs"
              Link="Tests\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 

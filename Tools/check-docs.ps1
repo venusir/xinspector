@@ -79,7 +79,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-if (-not (Test-Path (Join-Path $repoRoot "Packages\com.xinspector"))) {
+if (-not (Test-Path (Join-Path $repoRoot "Assets\XInspector"))) {
     Write-Error "找不到仓库根（本脚本应位于 <仓库>/Tools/ 下）：$repoRoot"
 }
 
@@ -102,7 +102,7 @@ foreach ($d in $declared) { [void]$declaredSet.Add($d) }
 # Editor/AutoEditor 是 defineConstraints 门控的程序集（宏 XINSPECTOR_AUTO_EDITOR）：
 # 宏未定义时该程序集**根本不参与编译**，csproj 也不存在，因此那里的源文件「不在 csproj 里」
 # 是正常状态而非缺陷。必须排除，否则门禁会长期误报，而长期误报的门禁等于没有门禁。
-$onDisk = Get-ChildItem (Join-Path $repoRoot "Packages\com.xinspector\Runtime"), (Join-Path $repoRoot "Packages\com.xinspector\Editor") `
+$onDisk = Get-ChildItem (Join-Path $repoRoot "Assets\XInspector\Runtime"), (Join-Path $repoRoot "Assets\XInspector\Editor") `
     -Recurse -Filter *.cs -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '(?i)[\\/]AutoEditor[\\/]' } |
     ForEach-Object { ($_.FullName.Substring($repoRoot.Length + 1) -replace '\\', '/') }
@@ -117,23 +117,23 @@ if ($missing.Count -gt 0) {
 
 # ---------- 再查「包内资源有没有漏 .meta」 ----------
 #
-# 本包以 UPM 形式供第三方引入，缺 .meta 会让对方导入时生成**不同的 GUID**——若该文件被
-# prefab/scene 引用就是断链。检查几乎零成本，故与文档告警一并报告、一并在 -Enforce 下判失败。
+# 本包供第三方以「拷贝文件夹」方式引入，缺 .meta 会让对方首次导入时生成**不同的 GUID**
+# ——若该文件被 prefab/scene 引用就是断链。检查几乎零成本，故与文档告警一并报告、
+# 一并在 -Enforce 下判失败。
 #
-# Unity 自身不给「点开头的文件/目录」与「~ 结尾」的条目生成 meta（如 Samples/Example/.sample.json），
-# 这两类一律跳过，否则会永远误报。
+# Unity 自身不给「点开头的文件/目录」生成 meta（如 Samples/Example/.sample.json），
+# 这类一律跳过，否则会永远误报。
 #
-# 但**只判名字不够**：`-Recurse` 会钻进 `Samples~` / `Documentation~` 内部，
-# 而那两个目录里的文件同样没有 meta（Unity 整个忽略 `~` 结尾的目录）。
-# 于是必须连同「路径中含 `~` 结尾的目录段」一起跳过，否则示例与文档下的每一个文件
-# 都会被报成缺 meta。XFramework 的包没有 `~` 目录，故它没踩到这条。
+# 注：包内曾有过 `Samples~` / `Documentation~` 两个 `~` 结尾的目录（UPM 的「Unity 别扫我」
+# 约定），当时跳过规则还要处理「路径中含 `~` 结尾目录段」的情况。包搬到 Assets/ 之后
+# 波浪号已去掉——`~` 会让 Unity 整个忽略该目录，示例代码就不参与编译了——那条规则
+# 随之成为永不触发的死代码，已删。若日后又出现 `~` 目录，记得把它加回来。
 
-$pkgRoot = Join-Path $repoRoot "Packages\com.xinspector"
+$pkgRoot = Join-Path $repoRoot "Assets\XInspector"
 $metaMissing = @()
 foreach ($item in (Get-ChildItem $pkgRoot -Recurse -Force -ErrorAction SilentlyContinue)) {
     $name = $item.Name
-    if ($name -like '*.meta' -or $name.StartsWith('.') -or $name.EndsWith('~')) { continue }
-    if ($item.FullName -match '[\\/][^\\/]*~[\\/]') { continue }
+    if ($name -like '*.meta' -or $name.StartsWith('.')) { continue }
     if (-not (Test-Path ("$($item.FullName).meta"))) {
         $metaMissing += ($item.FullName.Substring($repoRoot.Length + 1) -replace '\\', '/')
     }
@@ -168,7 +168,7 @@ foreach ($p in $Project) {
 
         # 只留包自身：剔除 Library/PackageCache 下的第三方包告警
         $rel = $null
-        if ($path -match '(?i)[\\/]Packages[\\/]com\.xinspector[\\/](.+)$') { $rel = ($Matches[1] -replace '\\', '/') }
+        if ($path -match '(?i)[\\/]Assets[\\/]XInspector[\\/](.+)$') { $rel = ($Matches[1] -replace '\\', '/') }
         if (-not $rel) { continue }
 
         # 文案只用于显示，不参与解析：它随编译器 UI 语言变化，而行号与代码是稳定的。

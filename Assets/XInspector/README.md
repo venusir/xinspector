@@ -26,19 +26,19 @@ XInspector 换成**一条绘制器链**：所有匹配的绘制器依次叠加�
 
 ## 快速开始
 
-### 1. 安装
+### 1. 装进你的工程
 
-Package Manager → `+` → Add package from git URL：
+把 `XInspector/` 这个目录**整个拷进你工程的 `Assets/` 下**即可。没有 Package Manager
+流程，也没有前置依赖——本包 Runtime 侧零第三方依赖。
 
-```
-https://github.com/venusir/xinspector.git?path=/Packages/com.xinspector
-```
-
-或在 `Packages/manifest.json` 的 `dependencies` 里加：
-
-```json
-"com.venusir.xinspector": "https://github.com/venusir/xinspector.git?path=/Packages/com.xinspector"
-```
+> **为什么不是 UPM 包。** 本包放在 `Assets/` 下，因此 **Package Manager 不认识它**，
+> 也不能经 git URL 安装。这是刻意的取舍（换来代码在 `Assets/` 下一眼可见），
+> 代价是**升级要覆盖整个目录**——你若改过包内文件，覆盖会丢掉那些改动。
+>
+> 想改成可安装的：把整个目录移进 `Packages/`（连 `.meta` 一起挪，GUID 不变，不会有断链），
+> 包内已备好 `package.json` 的标识字段。届时还需要把 `Samples/` 改回 `Samples~/` 并在
+> `package.json` 里补回 `samples` 数组——本目录已迁出 UPM，那些描述布局的字段就不再成立，
+> 故已移除，只留标识（名称、版本、描述、Unity 下限）。
 
 ### 2. 给类型加特性
 

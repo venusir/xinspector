@@ -4,7 +4,7 @@
 
 > **状态：** `0.1.0-preview.1` — 只有骨架与一条垂直切片。API 尚未稳定。
 
-## 这个包解决什么
+## 这套管线解决什么
 
 Unity 默认的 `PropertyDrawer` 模型是「首个匹配者胜出」：一个属性最多被一个绘制器画完，
 那个绘制器必须独自处理标签、字段、修饰与分组的一切。XInspector 换成一条**绘制器链**——
@@ -14,11 +14,12 @@ Unity 默认的 `PropertyDrawer` 模型是「首个匹配者胜出」：一个�
 
 ## 从这里开始
 
-完整的安装步骤、快速开始、核心概念表与已知限制，见包的 [README](../README.md)。
+完整的安装步骤、快速开始、核心概念表与已知限制，见 [README](../README.md)。
 
 要点速览：
 
-- 安装：`https://github.com/venusir/xinspector.git?path=/Packages/com.xinspector`
+- 装：把 `XInspector/` 整个拷进你工程的 `Assets/` 下。**不是 UPM 包**——Package Manager
+  不认识它，也不能经 git URL 安装；代价是升级要覆盖整个目录
 - 接管方式：**不自动接管**。为类型写 `[CustomEditor]` + 继承 `XInspectorEditor`，三行。
   想自动接管就定义脚本宏 `XINSPECTOR_AUTO_EDITOR`（可逆，按项目生效）。
 - Runtime 侧**零第三方依赖**。
