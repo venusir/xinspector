@@ -224,6 +224,19 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 **一条未决**：多对象编辑下各目标条件值不同时，`condition.boolValue` 取的是第一个目标的
 值。Odin 倾向「任一满足即显示」。本包尚未定这个语义——现状是跟第一个目标。
 
+### 14. 复刻含 `UnityEngine` 类型的 Odin 签名（否决）
+
+`[DisplayAsString]` 的 8 个 `TextAlignment` 重载、`[GUIColor].Color`、`[ProgressBar].ValueLabelAlignment`
+都带 `UnityEngine` 类型。**Runtime 零 Unity 依赖是编译期强制的**（`Tests.Native` 用纯 .NET
+编译整份 Runtime），这些形态只有两条路：不做，或自建替代枚举。
+
+自建之后**签名就不再与 Odin 兼容**——从 Odin 迁过来的人照样编译不过，只是把「编译不过」
+换成了「编译得过但类型不是那个」。等于白做一层，还把「我们与 Odin 同名同形」这句承诺弄脏。
+故：不做，写进 README 的「已知限制」。
+
+（注意与「推迟」的区别：`$` 表达式、`SdfIconType` 是**推迟**——它们迟早能做，
+只是要连着整个表达式语言/图标系统一起做；这一条是**否决**。）
+
 ---
 
 ## 三、未决项
@@ -238,10 +251,97 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 | 折叠状态的持久化落点 | `EditorPrefs`（跨项目共享）、`SessionState`（不跨会话）、序列化进场景（污染资产）三者各有问题。等 `[FoldoutGroup]` 来了再定 |
 | `[OnValueChanged]` 的触发时机 | 判断「值变了」要每帧比对旧值，旧值该放 `PropertyState`；但触发时机（绘制前后？`Update` 前后？）未定 |
 | 数组展开的边界 | 全自己做就要自己处理增删/拖拽/多选/Undo。倾向先只做「只读展示 + 元素级特性」 |
+| `$` 表达式与 getter 字符串 | `GUIColor(string)`、`MinValue`/`MaxValue(string)`、`ProgressBar` 的三个 getter 形都属此类。**做半个（只认单个成员名）比不做更糟**，要做就连同 Odin 的整套表达式语言一起做。签名已在「L1a 签名核对」一节抄好 |
+| `SdfIconType` 与图标重载 | ~1536 个成员的 Sirenix 自有枚举，是独立大件：要么生成全部并自绘图标，要么裁一个子集并接受与 Odin 不兼容。`[LabelText]` `[InfoBox]` `[SuffixLabel]` 的图标重载都卡在这 |
+| `[DisplayAsString]` 的 `fontSize` / `enableRichText` 重载 | 签名已确认且不依赖 Unity 类型，本轮只做了 `()` 与 `(bool overflow)`。补它是纯加法，缺的只是一个使用它的理由 |
 
 ---
 
-## 四、审计记忆
+## 四、L1a 签名核对（2026-10-03）
+
+补 L1a 之前把 21 个特性的 **Odin 官方签名**逐条抄了下来。本节两个用途：实现时照它写、
+不再凭记忆；以及**明确记下我们有意不实现哪些形态**——不实现也是结论，不写下来就会被下一个人重新猜一遍。
+
+### 怎么核的（下次照做）
+
+- 官网 API 文档页是**服务端渲染**的，直接取即可（给出 `[AttributeUsage]`、类声明、
+  全部构造重载、字段与属性）：
+
+  ```powershell
+  Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.<小写类名>
+  ```
+
+  **`WebFetch` 会被截断成只剩导航**——本次踩过，别再用它抓这个站；
+  Bash 工具在本机没有网络出口，用 PowerShell。
+- 官网「单特性页」`https://odininspector.com/attributes/<kebab>-attribute` 只有用法示例，
+  用来交叉验证具名参数。注意 URL 名不总是类名小写：`[ProgressBar]` 是 `progress-bar-attribute`。
+- **文档站只有 3.3.1.2 一个版本**，本表据此抄录。Odin 4.x 是否改过签名**未确认**；
+  将来要对齐 4.x 得另找来源重核。
+
+### 三条共性（决定了我们的 `AttributeUsage` 写成什么样）
+
+1. 21 个全在 `Sirenix.OdinInspector` 命名空间，且全带 `[Conditional("UNITY_EDITOR")]`。
+2. **20/21 声明 `AttributeTargets.All`**（`[EnumToggleButtons]` 干脆没写 `[AttributeUsage]`）。
+   Odin 一律放开，语义只写在文档里。**我们刻意收窄**：默认 `Field | Property`，
+   `[InfoBox]` `[DetailedInfoBox]` `[GUIColor]` `[Indent]` 另收 `Class`。
+   放宽到方法、枚举、参数上只会得到「编译得过但什么都不发生」——那正是本包最想避免的一类现象，
+   收窄的代价（Odin 能编译的写法我们编译不过）是**响的**，比静默强。
+3. **除 `[DisplayAsString]` 外，构造签名全是纯 BCL + Sirenix 自有类型**（`string`/`bool`/`int`/`float`/`double`
+   + `InfoMessageType` + `SdfIconType`）。这条对我们格外关键：Runtime 零 Unity 依赖是**编译期强制**的。
+
+### 逐条：官方签名 → 本轮实现
+
+| 特性 | 官方构造重载 | 本轮实现 | 不实现的部分与理由 |
+|---|---|---|---|
+| `[ReadOnly]` | `()` | 全部 | — |
+| `[GUIColor]` | `(float r, float g, float b, float a = 1F)`、`(string getColor)` | 前者 | 字符串形属 `$` 表达式族。具名字段 `Color`（`UnityEngine.Color`）永久不做 |
+| `[LabelText]` | `(string)`、`(string, bool nicifyText)`、`(string, bool, SdfIconType)`、`(string, SdfIconType)`、`(SdfIconType)` | 前两个 | 三个图标形需要 `SdfIconType` |
+| `[LabelWidth]` | `(float width)` | 全部 | — |
+| `[HideLabel]` | `()` | 全部 | — |
+| `[PropertySpace]` | `()`（默认 8 像素）、`(float before)`、`(float before, float after)` | 全部 | 另提供同名字段 `SpaceBefore`/`SpaceAfter` |
+| `[Indent]` | `(int indentLevel = 1)` | 全部 | 官方 `AllowMultiple = true`：多个 `[Indent]` 各加一层——链按特性实例配对，天然如此 |
+| `[PropertyTooltip]` | `(string tooltip)` | 全部 | — |
+| `[InfoBox]` | `(string, InfoMessageType = Info, string visibleIfMemberName = null)`、`(string, SdfIconType, string = null)`、`(string, string visibleIfMemberName)` | 第一、三个 | 图标形不做；`visibleIf` 走既有 `ConditionResolver`（只认序列化 bool 成员） |
+| `[DetailedInfoBox]` | `(string message, string details, InfoMessageType = Info, string visibleIf = null)` | 全部 | — |
+| `[DisplayAsString]` | 14 个重载（`bool overflow`/`int fontSize`/`bool enableRichText`/`TextAlignment` 的排列组合） | `()` 与 `(bool overflow)` | 8 个带 `TextAlignment` 的**永久做不了**；`fontSize`/`enableRichText` 的重载推迟 |
+| `[SuffixLabel]` | `(string label, bool overlay = false)`、`(SdfIconType)`、`(string, SdfIconType, bool overlay = false)` | 第一个 | 两个图标形不做 |
+| `[ToggleLeft]` | `()` | 全部 | — |
+| `[ProgressBar]` | `(double min, double max, float r = 0.15F, float g = 0.47F, float b = 0.74F)`、`(double, string maxGetter, …)`、`(string minGetter, double, …)`、`(string, string, …)` | 第一个 | 三个 getter 形属 `$` 表达式族。具名 `Color`/`ValueLabelAlignment` 带 Unity 类型，永久不做；`Height`/`Segmented`/`DrawValueLabel` 提供 |
+| `[EnumToggleButtons]` | `()` | 全部 | — |
+| `[Required]` | `()`、`(InfoMessageType)`、`(string errorMessage)`、`(string, InfoMessageType)` | 全部 | — |
+| `[MinValue]` | `(double minValue)`、`(string expression)` | 第一个 | 表达式形不做 |
+| `[MaxValue]` | `(double maxValue)`、`(string expression)` | 第一个 | 同上 |
+| `[AssetsOnly]` | `()` | 全部 | — |
+| `[SceneObjectsOnly]` | `()` | 全部 | — |
+| `[ShowDrawerChain]` | `()` | 全部 | — |
+
+### 两个 Sirenix 自有类型
+
+- **`InfoMessageType`**（`None`/`Info`/`Warning`/`Error`）我们自建。官方原文说它刻意对应
+  `UnityEditor.MessageType`，只因后者在 UnityEditor 程序集里才另造了一个——这对我们尤其相关，
+  Runtime 同样拿不到 `MessageType`。**声明顺序与数值未从官网确认**（文档站按字母序排），
+  本包按 `None = 0`、`Info`、`Warning`、`Error` 排。
+- **`SdfIconType`**（约 1536 个成员，Bootstrap Icons 全集）**本轮不做**——它是一个独立大件。
+  凡签名里出现它的重载一律不实现。
+
+### 三条语义（官方只确认了一部分）
+
+| 问题 | 官方怎么说 | 我们的决定 |
+|---|---|---|
+| `[MinValue]`/`[MaxValue]` 是钳制还是只提示 | **官方确认是钳制**：指南页原文「caps value of the field to a minimum value」，API 页并注明「脚本改的值不会被钳」 | 照做。但**钳制时机**（拖动中/提交时）官方未说明，我们取「每次绘制后」并把这条写进 README |
+| `[Required]` 的「空」怎么判 | **未确认**。只知校验器是 `RequiredValidator<T> where T : class`（即只覆盖引用类型） | `null`、空串、空集合算「空」，**空白串按非空**。这是我们定的，不冒充 Odin 契约 |
+| `[EnumToggleButtons]` 对 `[Flags]` | 官方只确认「两种枚举都支持」；「多选」是第三方说法 | 普通枚举单选工具栏，`[Flags]` 逐位多选 |
+
+### 本轮不实现的形态（都记在此，别处不再重复）
+
+- **`$` 表达式 / getter 字符串**（`GUIColor(string)`、`MinValue`/`MaxValue(string)`、`ProgressBar` 的三个 getter 形）
+  ——推迟，见「未决项」。
+- **`SdfIconType` 相关重载**——推迟，见「未决项」。
+- **含 `UnityEngine` 类型的形态**——**永久否决**，见「已否决的形状」第 14 条。
+
+---
+
+## 五、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 
