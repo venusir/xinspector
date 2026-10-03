@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests.Native：脱离 Unity 编辑器的纯 .NET 测试工程。
+
+    为什么本包做得到而 XFramework 做不到：**XInspector 的 Runtime 侧完全不依赖 Unity**。
+    Runtime/ 下全部源文件只用 System、System.Text 与 XInspector.Internal，因此本工程
+    不需要任何 UnityEngine 桩。这顺带把 CLAUDE.md 里「Runtime 侧零第三方依赖」那条契约
+    从「靠反射断言」升级为**编译期强制**——哪天有人往 Runtime 里写了 using UnityEngine;，
+    这里 dotnet build 立刻失败，不必等到跑 Unity 测试。
+
+    链接源码而非复制：XFramework 的同类工程在注释里写着「测试副本需与 Tests/ 保持同步」，
+    那是要靠人记住的隐患。本工程用 <Compile Include=... Link=...> 直接指向包内文件，
+    单一真相，不存在不同步。
+
+    覆盖范围：Runtime 的全部逻辑 + 三个纯逻辑 fixture。
+    **排除 AssemblyReferenceTests.cs** —— 它断言的是 Unity 程序集的存在性，原生宿主下无意义。
+    Editor 侧（属性树、绘制器链、分组装配、标题绘制）全部依赖 SerializedObject/ScriptableObject，
+    跑不了，不在覆盖范围内。
+
+    net9.0 理由：本机装的是 dotnet SDK 9.0.310。
+    注意：本工程构建失败不影响 Unity 侧编译（两个独立程序集）。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>XInspector</RootNamespace>
+    <AssemblyName>Venusir.Xinspector.Tests.Native</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- 不用 SDK 默认的递归通配，改为下方显式 Include/Exclude -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Runtime 全部源码，含 AssemblyInfo.cs（其中的 InternalsVisibleTo 指向不存在的程序集也无妨）。 -->
+    <Compile Include="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Runtime\**\*.cs"
+             Link="Runtime\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Runtime 测试：用通配 + 排除，新增 fixture 会自动纳入，不必回来改这里。 -->
+    <Compile Include="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Tests\Runtime\**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)..\Packages\com.xinspector\Tests\Runtime\AssemblyReferenceTests.cs"
+             Link="Tests\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

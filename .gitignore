@@ -12,6 +12,11 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Tests.Native 的构建产物。上面那些 /[Oo]bj/、/[Bb]uild/ 写法**以根为锚**，
+# 匹配不到子目录——不补这几条，dotnet 的产物会被提交进去。
+/Tests.Native/[Oo]bj/
+/Tests.Native/[Bb]in/
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta
