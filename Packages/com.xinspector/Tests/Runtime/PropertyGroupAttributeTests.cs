@@ -20,7 +20,7 @@ namespace XInspector.Tests
         /// 构造时即规范化 <see cref="PropertyGroupAttribute.GroupID"/>。
         /// </summary>
         [Test]
-        public void 构造时规范化GroupID()
+        public void Constructor_NormalizesGroupID()
         {
             var attribute = new BoxGroupAttribute(" Outer / Inner ");
 
@@ -31,7 +31,7 @@ namespace XInspector.Tests
         /// <see cref="PropertyGroupAttribute.GroupName"/> 恒为 GroupID 的末段。
         /// </summary>
         [Test]
-        public void GroupName为GroupID的末段()
+        public void GroupName_IsLastSegmentOfGroupID()
         {
             Assert.That(new BoxGroupAttribute("Outer").GroupName, Is.EqualTo("Outer"));
             Assert.That(new BoxGroupAttribute("Outer/Inner").GroupName, Is.EqualTo("Inner"));
@@ -46,7 +46,7 @@ namespace XInspector.Tests
         [TestCase("")]
         [TestCase("   ")]
         [TestCase("/")]
-        public void 无效GroupID在构造时报错(string groupID)
+        public void Constructor_InvalidGroupID_Throws(string groupID)
         {
             Assert.Throws<ArgumentException>(() => new BoxGroupAttribute(groupID));
         }
@@ -55,7 +55,7 @@ namespace XInspector.Tests
         /// <see cref="PropertyGroupAttribute.Order"/> 默认 0，可显式指定。
         /// </summary>
         [Test]
-        public void Order默认为零且可指定()
+        public void Order_DefaultsToZeroAndIsSettable()
         {
             Assert.That(new BoxGroupAttribute("A").Order, Is.EqualTo(0f));
             Assert.That(new BoxGroupAttribute("A", 5f).Order, Is.EqualTo(5f));
@@ -72,7 +72,7 @@ namespace XInspector.Tests
         /// </para>
         /// </summary>
         [Test]
-        public void Combine_Order取先声明的非零值()
+        public void Combine_OrderTakesFirstNonZero()
         {
             var first = new BoxGroupAttribute("A");
             first.Combine(new BoxGroupAttribute("A", 5f));
@@ -89,7 +89,7 @@ namespace XInspector.Tests
         /// 归并后 Order 不累加——单独钉住这一条，因为「累加」是很容易写错的方向。
         /// </summary>
         [Test]
-        public void Combine_Order不累加()
+        public void Combine_OrderDoesNotAccumulate()
         {
             var attribute = new BoxGroupAttribute("A", 2f);
             attribute.Combine(new BoxGroupAttribute("A", 3f));
@@ -101,7 +101,7 @@ namespace XInspector.Tests
         /// <see cref="BoxGroupAttribute.Label"/> 取先出现的非空值。
         /// </summary>
         [Test]
-        public void Combine_Label取先声明的非空值()
+        public void Combine_LabelTakesFirstNonEmpty()
         {
             var attribute = new BoxGroupAttribute("A");
             attribute.Combine(new BoxGroupAttribute("A") { Label = "先行标签" });
@@ -116,7 +116,7 @@ namespace XInspector.Tests
         /// 归并 null 属于编程错误，必须报错而不是静默忽略。
         /// </summary>
         [Test]
-        public void Combine_null抛异常()
+        public void Combine_Null_Throws()
         {
             var attribute = new BoxGroupAttribute("A");
 
@@ -131,7 +131,7 @@ namespace XInspector.Tests
         /// 复制后 GroupID 变为目标路径，且不是同一个实例。
         /// </summary>
         [Test]
-        public void CloneForPath_改写路径且为新实例()
+        public void CloneForPath_RewritesPathIntoNewInstance()
         {
             var original = new BoxGroupAttribute("Outer/Inner");
             var clone = original.CloneForPath("Outer");
@@ -149,7 +149,7 @@ namespace XInspector.Tests
         /// </para>
         /// </summary>
         [Test]
-        public void CloneForPath_保留子类字段()
+        public void CloneForPath_PreservesSubclassFields()
         {
             var original = new BoxGroupAttribute("Outer/Inner")
             {
@@ -171,7 +171,7 @@ namespace XInspector.Tests
         /// <see cref="PropertyGroupAttribute.GroupName"/> 由 GroupID 推导，故复制后自动跟随新路径。
         /// </summary>
         [Test]
-        public void CloneForPath_GroupName跟随新路径()
+        public void CloneForPath_GroupNameFollowsNewPath()
         {
             var clone = new BoxGroupAttribute("Outer/Inner").CloneForPath("Outer");
 

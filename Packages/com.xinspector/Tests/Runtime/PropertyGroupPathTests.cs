@@ -25,7 +25,7 @@ namespace XInspector.Tests
         [TestCase("Outer", "Outer")]
         [TestCase("Outer/Inner", "Outer/Inner")]
         [TestCase("A/B/C", "A/B/C")]
-        public void Normalize_常规路径保持不变(string input, string expected)
+        public void Normalize_KeepsOrdinaryPathUnchanged(string input, string expected)
         {
             Assert.That(PropertyGroupPath.Normalize(input), Is.EqualTo(expected));
         }
@@ -39,7 +39,7 @@ namespace XInspector.Tests
         [TestCase("Outer ", "Outer")]
         [TestCase(" Outer / Inner ", "Outer/Inner")]
         [TestCase("\tOuter\t/\tInner\t", "Outer/Inner")]
-        public void Normalize_去除每段首尾空白(string input, string expected)
+        public void Normalize_TrimsEachSegment(string input, string expected)
         {
             Assert.That(PropertyGroupPath.Normalize(input), Is.EqualTo(expected));
         }
@@ -53,7 +53,7 @@ namespace XInspector.Tests
         [TestCase("Outer/", "Outer")]
         [TestCase("/Outer", "Outer")]
         [TestCase("//Outer//Inner//", "Outer/Inner")]
-        public void Normalize_丢弃空段(string input, string expected)
+        public void Normalize_DropsEmptySegments(string input, string expected)
         {
             Assert.That(PropertyGroupPath.Normalize(input), Is.EqualTo(expected));
         }
@@ -68,7 +68,7 @@ namespace XInspector.Tests
         [TestCase("/")]
         [TestCase("//")]
         [TestCase(" / / ")]
-        public void Normalize_无效路径抛ArgumentException(string input)
+        public void Normalize_InvalidPath_Throws(string input)
         {
             Assert.Throws<ArgumentException>(() => PropertyGroupPath.Normalize(input));
         }
@@ -84,7 +84,7 @@ namespace XInspector.Tests
         [TestCase("Outer")]
         [TestCase(" Outer / Inner ")]
         [TestCase("Outer//Inner/")]
-        public void Normalize_幂等(string input)
+        public void Normalize_IsIdempotent(string input)
         {
             var once = PropertyGroupPath.Normalize(input);
 
@@ -103,7 +103,7 @@ namespace XInspector.Tests
         [TestCase("Outer", "Outer")]
         [TestCase("Outer/Inner", "Inner")]
         [TestCase("A/B/C", "C")]
-        public void GetLeafName_取末段(string path, string expected)
+        public void GetLeafName_ReturnsLastSegment(string path, string expected)
         {
             Assert.That(PropertyGroupPath.GetLeafName(path), Is.EqualTo(expected));
         }
@@ -120,7 +120,7 @@ namespace XInspector.Tests
         [TestCase("Outer", null)]
         [TestCase("Outer/Inner", "Outer")]
         [TestCase("A/B/C", "A/B")]
-        public void GetParentPath_取父路径(string path, string expected)
+        public void GetParentPath_ReturnsParent(string path, string expected)
         {
             Assert.That(PropertyGroupPath.GetParentPath(path), Is.EqualTo(expected));
         }
@@ -134,7 +134,7 @@ namespace XInspector.Tests
         /// </para>
         /// </summary>
         [Test]
-        public void GetParentPath_逐级上溯必然终止()
+        public void GetParentPath_WalkingUpAlwaysTerminates()
         {
             var path = "A/B/C/D";
             var steps = 0;

@@ -16,7 +16,7 @@ namespace XInspector.Tests
         /// 标题被原样保留，副标题默认为空。
         /// </summary>
         [Test]
-        public void 构造_保留标题且副标题默认为空()
+        public void Constructor_KeepsTitleAndLeavesSubtitleNull()
         {
             var attribute = new TitleAttribute("玩家档案");
 
@@ -36,7 +36,7 @@ namespace XInspector.Tests
         [TestCase("")]
         [TestCase("   ")]
         [TestCase("\t")]
-        public void 构造_空白标题抛异常(string title)
+        public void Constructor_BlankTitle_Throws(string title)
         {
             Assert.Throws<ArgumentException>(() => new TitleAttribute(title));
         }
@@ -54,7 +54,7 @@ namespace XInspector.Tests
         /// </para>
         /// </summary>
         [Test]
-        public void 用法约束_可用于类与成员且不可重复()
+        public void Usage_ValidOnClassAndMembersAndNotRepeatable()
         {
             var usage = typeof(TitleAttribute).GetCustomAttribute<AttributeUsageAttribute>();
 
