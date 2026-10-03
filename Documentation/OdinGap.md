@@ -1,23 +1,36 @@
 # 与 Odin 的缺口
 
-**对照口径：** Odin 官网 [attributes 页](https://odininspector.com/attributes)（约 110 个特性）
-与 [editor-windows 页](https://odininspector.com/editor-windows)，
+**对照口径：** Odin 官网 [attributes 页](https://odininspector.com/attributes)
+（12 个分类、**109 个不重复特性**）与
+[editor-windows 页](https://odininspector.com/editor-windows)，
 抓取日期 **2026-10-03**。Odin 会变，这份对照至少每半年该重核一次。
 
-**本项目的家底：** 公开特性 **2 个**（`[Title]`、`[BoxGroup]`）+ 窗口基类 1 个
-（`XInspectorEditorWindow`，只画自身序列化字段）。
+> 页面上的分类条目数是 110+，但**多处重复计数**（`[Required]` 同时在 Essentials 与
+> Validation 下，`[TableList]` 同时在 Type Specifics 与 Collections 下）。
+> 下面所有数字都用**去重后**的 109。
+
+**本项目的家底：**
+
+- 公开特性 **11 个**：`[Title]`、`[BoxGroup]`、
+  `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
+  `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`
+- 自定义分组的公开基类 `PropertyGroupAttribute`
+- 窗口基类 1 个（`XInspectorEditorWindow`，只画自身序列化字段）
 
 ---
 
-## 为什么不按 Odin 的分类罗列
+## 一张表不够：为什么要分两层来看
 
-照搬它的 12 个分类会得到「缺 108 个特性」这种**没有信息量**的结论——真正决定成本的是
-**每个缺口需要什么基础设施**。按那个分层之后，结论完全变了：
+**只按 Odin 的 12 个分类罗列，会得到「缺 94 个特性」这种没有信息量的结论**——
+它把「加一个类」和「加一层基础设施」混为一谈。真正决定成本的是**每个缺口需要什么前提**，
+所以先按那个分层：
 
-**最大的那一层（L1a，约 21 个特性）零新基础设施**，全是 `AttributeDrawer<T>` +
+**最大的那一层（L1a，约 40 个特性）零新基础设施**，全是 `AttributeDrawer<T>` +
 `CallNextDrawer`，`PropertyState` 与 `PropertyValueEntry` 已经够用。换句话说，
-**Od​in 一半以上的「特性」在本项目里是「加个类」而不是「加个层」**——
+**Od​in 近一半的「特性」在本项目里是「加个类」而不是「加个层」**——
 这反过来验证了绘制器链那套架构的取舍。
+
+分层用于**排序**，逐条表用于**查漏**。两张都在，各回答各的。
 
 ---
 
@@ -34,6 +47,255 @@
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
 | **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 集合自绘 |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
+
+---
+
+## 逐条对照
+
+**两张视图回答两个不同的问题。** 上面的分层回答「要多少成本」，这张表回答「具体是哪些」。
+前者用于排序，后者用于查漏——只看这张表会得出「缺 94 个」这种没有信息量的结论，
+只看分层则可能漏掉某个具体特性。
+
+**表的组织：** 按 Odin 自己的分类，但**每个特性只登记一次**（记在它首次出现的分类下），
+否则 Odin 的重复计数会让总账对不上。Odin 也把它归入其它类时在「另见」列注明。
+
+状态三种：**✅ 已实现**、**❌ 缺**、**➖ 不需要**（Unity 自己的，由 `PropertyField` 绘制）。
+⚠️ 标 ➖ 的那 4 项**建立在一根没验证过的柱子上**，见文末「未验证的假设」。
+
+### Type Specifics（24）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[AssetList]` | ❌ 缺 | L1b |
+| `[AssetSelector]` | ❌ 缺 | L1b |
+| `[ChildGameObjectsOnly]` | ❌ 缺 | L1a（另见 Validation） |
+| `[ColorPalette]` | ❌ 缺 | L1b |
+| `[DisplayAsString]` | ❌ 缺 | L1a |
+| `[EnumPaging]` | ❌ 缺 | L1a（另见 Buttons） |
+| `[EnumToggleButtons]` | ❌ 缺 | L1a（另见 Buttons） |
+| `[FilePath]` | ❌ 缺 | L1b（另见 Validation） |
+| `[FolderPath]` | ❌ 缺 | L1b（另见 Validation） |
+| `[HideInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+| `[HideInTables]` | ❌ 缺 | 依赖 `[TableList]` |
+| `[HideMonoScript]` | ❌ 缺 | L1a |
+| `[HideNetworkBehaviourFields]` | ❌ 缺 | L1a |
+| `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
+| `[InlineEditor]` | ❌ 缺 | L1b |
+| `[MultiLineProperty]` | ❌ 缺 | L1a |
+| `[PreviewField]` | ❌ 缺 | L1b |
+| `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
+| `[TypeDrawerSettings]` | ❌ 缺 | L1b |
+| `[SceneObjectsOnly]` | ❌ 缺 | L1a（另见 Validation） |
+| `[TableList]` | ❌ 缺 | L6（另见 Collections） |
+| `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
+| `[Toggle]` | ❌ 缺 | L1a |
+| `[ToggleLeft]` | ❌ 缺 | L1a |
+
+**小计：已实现 0 / 缺 24**
+
+### Essentials（19）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[AssetsOnly]` | ❌ 缺 | L1a（另见 Validation） |
+| `[CustomValueDrawer]` | ❌ 缺 | L1a |
+| `[DelayedProperty]` | ❌ 缺 | L1a |
+| `[DetailedInfoBox]` | ❌ 缺 | L1a |
+| `[EnableGUI]` | ❌ 缺 | L1a |
+| `[GUIColor]` | ❌ 缺 | L1a |
+| `[HideLabel]` | ❌ 缺 | L1a |
+| `[PropertyOrder]` | ❌ 缺 | L4 |
+| `[PropertySpace]` | ❌ 缺 | L1a |
+| `[ReadOnly]` | ❌ 缺 | L1a |
+| `[Required]` | ❌ 缺 | L1a（另见 Validation） |
+| `[RequiredIn]` | ❌ 缺 | L1a（另见 Validation） |
+| `[Searchable]` | ❌ 缺 | L1b |
+| `[ShowInInspector]` | ❌ 缺 | L3 |
+| **`[Title]`** | **✅ 已实现** | — |
+| `[TypeFilter]` | ❌ 缺 | L1b |
+| `[TypeInfoBox]` | ❌ 缺 | L1a |
+| `[ValidateInput]` | ❌ 缺 | L1a（另见 Validation） |
+| `[ValueDropdown]` | ❌ 缺 | L1b（另见 Collections） |
+
+**小计：已实现 1 / 缺 18**
+
+### Validation（15）
+
+> Odin 在这一类下列 15 项，其中 8 项已在别处登记。这里是**本类独有**的 7 项。
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[DisallowModificationsIn]` | ❌ 缺 | L1a |
+| `[MaxValue]` | ❌ 缺 | L1a（另见 Numbers） |
+| `[MinMaxSlider]` | ❌ 缺 | L1b（另见 Numbers） |
+| `[MinValue]` | ❌ 缺 | L1a（另见 Numbers） |
+| `[PropertyRange]` | ❌ 缺 | L1a（另见 Numbers） |
+| `[Range]` | ➖ 不需要 ⚠️ | Unity 自己的（另见 Unity） |
+| `[RequiredListLength]` | ❌ 缺 | L6 |
+
+**小计：已实现 0 / 缺 6 / 不需要 1**
+
+### Groups（12）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| **`[BoxGroup]`** | **✅ 已实现** | 含类级分发 |
+| `[Button]` | ❌ 缺 | L5（另见 Buttons） |
+| `[ButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
+| `[FoldoutGroup]` | ❌ 缺 | L1b |
+| `[HideIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
+| `[HorizontalGroup]` | ❌ 缺 | L1b |
+| `[ResponsiveButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
+| `[ShowIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
+| `[TabGroup]` | ❌ 缺 | L1b |
+| `[TitleGroup]` | ❌ 缺 | L1b |
+| `[ToggleGroup]` | ❌ 缺 | L1b |
+| `[VerticalGroup]` | ❌ 缺 | L1b |
+
+**小计：已实现 1 / 缺 11**
+
+### Buttons（6）
+
+> 本类 6 项中 5 项已在别处登记，独有 1 项。
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[InlineButton]` | ❌ 缺 | L5 |
+
+**小计：已实现 0 / 缺 1**
+
+### Misc（19）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[CustomContextMenu]` | ❌ 缺 | L5 |
+| `[DisableContextMenu]` | ❌ 缺 | L1a |
+| `[DrawWithUnity]` | ❌ 缺 | L1a |
+| `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
+| `[Indent]` | ❌ 缺 | L1a |
+| `[InfoBox]` | ❌ 缺 | L1a |
+| `[InlineProperty]` | ❌ 缺 | L4 |
+| `[LabelText]` | ❌ 缺 | L1a |
+| `[LabelWidth]` | ❌ 缺 | L1a |
+| `[OnCollectionChanged]` | ❌ 缺 | L6 |
+| `[OnInspectorDispose]` | ❌ 缺 | L5 |
+| `[OnInspectorGUI]` | ❌ 缺 | L5 |
+| `[OnInspectorInit]` | ❌ 缺 | L5 |
+| `[OnStateUpdate]` | ❌ 缺 | L5 |
+| `[OnValueChanged]` | ❌ 缺 | L5 |
+| `[TypeSelectorSettings]` | ❌ 缺 | L7 |
+| `[TypeRegistryItem]` | ❌ 缺 | L7 |
+| `[PropertyTooltip]` | ❌ 缺 | L1a |
+| `[SuffixLabel]` | ❌ 缺 | L1a |
+
+**小计：已实现 0 / 缺 19**
+
+### Collections（6）
+
+> 本类 6 项中 3 项已在别处登记，独有 3 项。
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[DictionaryDrawerSettings]` | ❌ 缺 | L6 |
+| `[ListDrawerSettings]` | ❌ 缺 | L6 |
+| `[TableColumnWidth]` | ❌ 缺 | L6 |
+
+**小计：已实现 0 / 缺 3**
+
+### Conditionals（16）
+
+> 本类 16 项中 2 项（`[ShowIfGroup]` `[HideIfGroup]`）已在 Groups 下登记，独有 14 项。
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| **`[DisableIf]`** | **✅ 已实现** | — |
+| `[DisableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| **`[DisableInEditorMode]`** | **✅ 已实现** | — |
+| `[DisableInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+| **`[DisableInPlayMode]`** | **✅ 已实现** | — |
+| **`[EnableIf]`** | **✅ 已实现** | — |
+| `[EnableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| **`[HideIf]`** | **✅ 已实现** | — |
+| `[HideIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| **`[HideInEditorMode]`** | **✅ 已实现** | — |
+| **`[HideInPlayMode]`** | **✅ 已实现** | — |
+| **`[ShowIf]`** | **✅ 已实现** | — |
+| `[ShowIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| `[ShowInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+
+**小计：已实现 8 / 缺 6**
+
+### Numbers（7）
+
+> 本类 7 项中 4 项已在 Validation 下登记，独有 3 项。
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[ProgressBar]` | ❌ 缺 | L1a |
+| `[Unit]` | ❌ 缺 | L1a |
+| `[Wrap]` | ❌ 缺 | L1a |
+
+**小计：已实现 0 / 缺 3**
+
+### Unity（4）⚠️
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[Multiline]` | ➖ 不需要 ⚠️ | Unity 自己的 |
+| `[Space]` | ➖ 不需要 ⚠️ | Unity 自己的 |
+| `[TextArea]` | ➖ 不需要 ⚠️ | Unity 自己的 |
+
+> `[Range]` 已登记在 Validation 下。这 3 项（连同 `[Range]`）标 ➖ 的理由是
+> 「Unity 原生装饰器由 `PropertyField` 绘制」——**这条推断从未实测**，见文末。
+
+**小计：已实现 0 / 缺 0 / 不需要 3**
+
+### Debug（2）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[ShowDrawerChain]` | ❌ 缺 | L1a |
+| `[ShowPropertyResolver]` | ❌ 缺 | L1a |
+
+**小计：已实现 0 / 缺 2**
+
+### Meta（1）
+
+| 特性 | 状态 | 层 |
+|---|---|---|
+| `[SuppressInvalidAttributeError]` | ❌ 缺 | L1a |
+
+**小计：已实现 0 / 缺 1**
+
+### 总账
+
+```
+108 个不重复特性 = 10 已实现 + 94 缺 + 4 不需要（Unity 自己的）
+```
+
+已实现的 10 个：`[Title]`、`[BoxGroup]`、`[ShowIf]`、`[HideIf]`、`[EnableIf]`、`[DisableIf]`、
+`[HideInEditorMode]`、`[HideInPlayMode]`、`[DisableInEditorMode]`、`[DisableInPlayMode]`。
+
+（另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
+
+**「缺 94 个」不等于「94 份工作量」**：其中约 40 个落在 L1a，每个十几行、零新基础设施。
+真正需要新层的只有 L3 / L4 / L5 / L6 / L7 那几块，而它们各自的特性数远少于 L1a。
+
+### 窗口的 1:1
+
+| Odin 的能力 | 状态 | 依赖 |
+|---|---|---|
+| `OdinEditorWindow`：画**字段** | ✅ 已实现（`XInspectorEditorWindow`） | — |
+| 画**属性与方法** | ❌ 缺 | L3 反射后端 |
+| `GetTarget()`：渲染**任意**对象（不必可序列化、不必是 `UnityEngine.Object`） | ❌ 缺 | L3 |
+| `Initialize()` / `WindowPadding` | ❌ 缺 | 无（轻量） |
+| `[OnInspectorGUI]` / `DrawEditors`：混入自定义 IMGUI | ❌ 缺 | L5 |
+| `OdinMenuEditorWindow` + `OdinMenuTree`（`AddAllAssetsAtPath`、图标、多选、菜单样式） | ❌ 缺 | **独立大件** |
+
+**一处刻意的差异，不是缺口：** Odin **不让你覆写 `OnGUI`**（要求覆写 `DrawEditors`
+或用 `[OnInspectorGUI]`），而本包的基类允许覆写 `OnGUI`。
+理由是我们的窗口没有 Odin 那套内部绘制循环，多一层间接没有意义。
+把它混进上面的 ❌ 里会误导——它不是「还没做」，是「不打算那么做」。
 
 ---
 
@@ -190,13 +452,18 @@ L3 是低杠杆但**卡着后面三层**；L7 是另一条产品线。
 
 ## 未验证的假设
 
-这份对照里有**一条推断从未实测**，它会影响 L0 的判断：
+这份对照里有**一条推断从未实测**，而**逐条表里标 ➖ 的那 4 项完全建立在它上面**：
 
-> Unity 的原生装饰器（`[Header]`、`[Space]`）由 `PropertyField` 绘制，因此照常工作。
+> Unity 的原生装饰器（`[Header]`、`[Space]`、`[TextArea]`、`[Multiline]`、`[Range]`）
+> 由 `PropertyField` 绘制，因此照常工作。
+
+也就是说：逐条表把 4 个特性标成「不需要做」，不是因为它被验证过，而是因为**推断**它们已经能用。
+推断若错，那 4 个标记要一起改成 ❌，L0 也要从「无需工作」改判为一条缺陷。
 
 沙盒的 `DemoComponent` 里没放这几个特性，所以从未验证过。**要验它**：往沙盒组件的字段上加
 `[Header("段")]`、`[Space(20)]`、`[Range(0, 10)]`，看是否照常绘制。
 若装饰器**不**出现，说明它们没有流经我们的属性树（`NextVisible` 的遍历方式或
-`CreateMember` 的字段解析把它们滤掉了），L0 就要从「无需工作」改判为一条缺陷。
+`CreateMember` 的字段解析把它们滤掉了）。
 
-写在这里而不是默认它成立：**一条没验证过的推断，和一个错误结论的破坏力是一样的。**
+写在这里而不是默认它成立：**一条没验证过的推断，和一个错误结论的破坏力是一样的**——
+而它一旦被当成事实写进表里，后面的人就不会再去看它了。
