@@ -50,8 +50,13 @@
 ### 为什么不在 Packages/
 
 Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来源。搬出来意味着
-**Package Manager 不认识本包、不能经 git URL 安装、无法发布到 registry**，分发方式是
-**拷贝文件夹**——因此升级要覆盖整个目录，使用方改过包内文件就会丢。
+**本包在开发工程里不再是内嵌包**，分发方式改为**拷贝文件夹**——升级要覆盖整个目录，
+使用方改过包内文件就会丢。
+
+**别把影响说过头：`?path=` 与包放在哪无关。** 它只要求「路径相对仓库根」且该子目录含
+`package.json`，所以 `?path=/Assets/XInspector` 是可用的 git 依赖——`Packages/` 那条约束
+管的是使用方工程里的**内嵌包**。搬家的真实代价与「哪些其实没丢」见
+[Documentation/Modules/Pipeline.md](Documentation/Modules/Pipeline.md) 第 11 条。
 
 换来的是代码在 `Assets/` 下一眼可见，与姊妹工程 XFramework 布局一致。
 

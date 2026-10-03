@@ -142,7 +142,42 @@ Unity 的 `PropertyField`，验证需求真实存在再往下走。
 
 ---
 
-## 十、已评估但未采纳
+## 十、git 分发（已评估，暂不做）
+
+**该不该做：暂不做。** 但它**技术上现在就能用**，所以把查证结论记下来，
+免得下一轮重新研究一遍。
+
+### 查证到的事实（2026-10-03）
+
+| 事实 | 出处 |
+|---|---|
+| 官方列了**四种并列**的分发方式（压缩包 / tarball / git URL / scoped registry），**没有任何排序或推荐** | [Sharing your package](https://docs.unity3d.com/6000.0/Documentation/Manual/cus-share.html) |
+| `?path=` 只要求「路径相对仓库根」且该子目录含 `package.json`——**与包放在哪无关** | [Git URLs](https://docs.unity3d.com/6000.0/Documentation/Manual/upm-git.html) |
+| **`?path=` 必须写在 `#revision` 之前**，反了会失败 | 同上 |
+| git 依赖**只能**写在工程的 `manifest.json`，**不能**写进包的 `package.json`（对本包无影响：零依赖） | 同上 |
+| 必须给**完整** commit hash，不支持短 SHA | 同上 |
+| 示例目录须叫 `Samples~`——「波浪号告诉 Unity 忽略该目录的内容」，且这类目录不生成 `.meta` | [Samples](https://docs.unity3d.com/6000.0/Documentation/Manual/cus-samples.html) |
+
+**「专门的发布分支」不在官方文档里**，是社区惯例：`git subtree split --prefix=<包目录> -b upm`，
+使用方装 `repo.git#upm`。Mirror 等包这么做。**但 `git subtree split` 不能重命名文件**，
+而发布分支恰恰需要把 `Samples/` 转成 `Samples~/`——真要做得写脚本（复制 → 改波浪号 →
+补回 `package.json` 的 `samples` 数组 → 提交 → 打 tag），不是一条 subtree 命令的事。
+
+### 两条路线
+
+| 路线 | 使用方怎么装 | 代价 |
+|---|---|---|
+| **`?path=` 直连**（零维护） | `https://github.com/venusir/xinspector.git?path=/Assets/XInspector#v0.1.0` | 示例会被一并导入，并在对方工程里编译（`Samples/` 无波浪号） |
+| **`upm` 发布分支** | `https://github.com/venusir/xinspector.git#v0.1.0` | 多一个发布脚本，每次发版跑一次（可 CI 化）；示例变成按需 Import，最干净 |
+
+**触发条件：** 出现本仓库之外的使用者，且「拷贝文件夹升级会丢改动」真的开始造成麻烦时。
+两条路线不冲突——先上 `?path=` 是零成本的，日后加发布分支是**纯新增**，不改包内任何东西。
+
+**前置：** 本仓库的 remote 目前是空的，还没推送过。
+
+---
+
+## 十一、已评估但未采纳
 
 见 [Modules/Pipeline.md](Modules/Pipeline.md) 的「已否决的形状」一节——
 那里记的是**已经做过、但换过形状**的决定（无状态绘制器、末端显式追加、

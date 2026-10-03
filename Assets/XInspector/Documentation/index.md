@@ -18,8 +18,8 @@ Unity 默认的 `PropertyDrawer` 模型是「首个匹配者胜出」：一个�
 
 要点速览：
 
-- 装：把 `XInspector/` 整个拷进你工程的 `Assets/` 下。**不是 UPM 包**——Package Manager
-  不认识它，也不能经 git URL 安装；代价是升级要覆盖整个目录
+- 装：把 `XInspector/` 整个拷进你工程的 `Assets/` 下。**不是 UPM 包**，因此升级要覆盖
+  整个目录——改过包内文件就会丢。详见 [README 的安装说明](../README.md)
 - 接管方式：**不自动接管**。为类型写 `[CustomEditor]` + 继承 `XInspectorEditor`，三行。
   想自动接管就定义脚本宏 `XINSPECTOR_AUTO_EDITOR`（可逆，按项目生效）。
 - Runtime 侧**零第三方依赖**。

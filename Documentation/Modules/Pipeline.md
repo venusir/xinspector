@@ -127,17 +127,31 @@ XFramework 用的是 `optionalUnityReferences: ["TestAssemblies"]`。本包改�
 
 ### 11. 包放 `Assets/` 而不是 `Packages/`（第三轮改为此，代价明确）
 
-第一轮把包放在 `Packages/com.xinspector/`，那是 UPM 唯一认的位置——`Assets/` 里带
-`package.json` 的目录在 Package Manager 眼里只是普通资源（实测：XFramework 的 manifest
-与 lock 里匹配其包名 0 处）。第三轮搬到 `Assets/XInspector/`，**主动放弃了**：
+第一轮把包放在 `Packages/com.xinspector/`——`Assets/` 里带 `package.json` 的目录在 Package
+Manager 眼里只是普通资源（实测：XFramework 的 manifest 与 lock 里匹配其包名 0 处）。
+第三轮搬到 `Assets/XInspector/`。
 
-| 放弃 | 后果 |
+**真实的代价只有三条：**
+
+| 实际影响 | 后果 |
 |---|---|
-| Package Manager 显示为 In Project 包 | 使用方看不到版本、描述、示例入口 |
-| git URL 安装 `?path=/Packages/com.xinspector` | 只能靠拷贝文件夹分发 |
-| 发布到 registry / OpenUPM | 无法作为依赖被解析 |
-| `package.json` 的 `dependencies` 被解析 | 将来若要引第三方包，得让使用方自己装 |
-| `packages-lock.json` 记录版本与来源 | 使用方无从知道装的是哪个版本 |
+| **开发工程里本包不再是内嵌包** | 它不再出现在**本工程**的 Package Manager 里。与使用方无关 |
+| **示例目录没有波浪号** | **唯一影响使用方的损失**：`Samples/` 缺 `~`，经 git 分发时示例会被一并导入，并在对方工程里编译 |
+| `package.json` 的 `dependencies` 被解析 | 丢了，但本包零依赖，无实际影响 |
+
+> **更正（2026-10-03）。** 本条最初把代价写成「Package Manager 不认识本包、**不能经 git URL
+> 安装**、无法发布到 registry」，并列表格逐项声称丢失。**那几行是错的**，起因是把
+> 「使用方工程里的内嵌包」与「git 依赖的 `?path=`」混为一谈：
+> `?path=` 的参数只是**相对仓库根的路径**，官方要求仅两条——路径相对仓库根、该子目录含
+> `package.json`（[Git URLs](https://docs.unity3d.com/6000.0/Documentation/Manual/upm-git.html)）。
+> `Packages/` 那条约束管的是**使用方的工程布局**，与包在源仓库里放哪无关。
+>
+> 反例就在隔壁：XFramework 的 manifest 用
+> `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` 装 UniTask，
+> 而那个路径连顶层 `Assets/` 都不在，在 `src/` 下——它工作正常。所以
+> `?path=/Assets/XInspector` 可用，git URL 安装**没有丢**；使用方在 Package Manager 里
+> 同样看得到版本（git 依赖也会显示）。registry / OpenUPM 发布也不是被这个搬家挡住的，
+> 只是本包没做。
 
 **换来的**：代码在 `Assets/` 下与 `Assets/Sandbox/` 平级，Project 窗口一眼可见；
 与 XFramework 的布局心智一致。
