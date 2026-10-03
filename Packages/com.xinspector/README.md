@@ -111,6 +111,10 @@ public class PlayerProfileEditor : XInspectorEditor
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。
+- **没有特性处理器层。** 因此「把类级分组特性分发到各个成员」不生效——
+  在类型上写 `[BoxGroup]` 会把**整个 Inspector** 框起来，而不是让所有成员归属该分组。
+  类级 `[Title]` 不受影响（那是它该有的行为）。
+  这一层会在 `[ShowIf]` 那类「按条件改属性状态」的特性到来时一并补上。
 
 ## 依赖
 

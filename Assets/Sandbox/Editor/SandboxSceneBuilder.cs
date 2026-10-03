@@ -34,20 +34,37 @@ namespace XInspector.Sandbox.EditorTools
         }
 
         /// <summary>
-        /// 创建场景：默认摄像机与平行光，外加一个挂着演示组件的对象。
+        /// 创建场景：默认摄像机与平行光，外加三个演示对象。
         /// </summary>
         /// <remarks>
         /// 供 <c>-executeMethod</c> 调用，故必须是 public static 且无参。
+        /// 三个对象各代表一条集成路径，逐一选中即可对照。
         /// </remarks>
         public static void CreateSandboxScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
-            var demo = new GameObject("Demo");
-            demo.AddComponent<DemoComponent>();
+            AddDemo<DemoComponent>("Demo 1 - Value Pipeline Baseline");
+            AddDemo<AttributeDemo>("Demo 2 - Explicit Editor");
+            AddDemo<AutoTakeoverDemo>("Demo 3 - Auto Takeover");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>
+        /// 建一个挂着指定组件的对象。
+        /// </summary>
+        /// <typeparam name="T">要挂的组件类型。</typeparam>
+        /// <param name="name">对象名，同时充当该对象演示什么的提示。</param>
+        private static void AddDemo<T>(string name) where T : Component
+        {
+            var go = new GameObject(name);
+            go.AddComponent<T>();
         }
 
         #endregion

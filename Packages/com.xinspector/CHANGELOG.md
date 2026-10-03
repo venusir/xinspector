@@ -19,12 +19,21 @@
   - `PropertyGroupAttribute`，分组特性的公共基类
 - `XInspector.Editor` 程序集，及核心管线：
   - `PropertyTree` / `PropertyTreeBuilder` / `InspectorProperty` / `PropertyState`
-  - 值入口 `IPropertyValueEntry` / `PropertyValueEntry<T>`（`SerializedObject` 后端）
+  - 值入口 `PropertyValueEntry` / `SerializedPropertyValueEntry`（`SerializedObject` 后端）
   - 绘制器链 `DrawerChain` / `XInspectorDrawer` / `AttributeDrawer<T>` / `DrawerPriority`
   - 绘制器发现 `DrawerTypeRegistry`（扫描全部已加载的编辑器程序集，支持使用方无注册扩展）
-  - 特性处理器 `AttributeProcessor` / `AttributeProcessorRegistry`
+  - 分组装配：点分路径、祖先节点自动合成、分组节点落在首个成员处
   - `XInspectorEditor`，Unity 集成入口
-- `XInspector.AutoEditor` 程序集：由 `XINSPECTOR_AUTO_EDITOR` 宏门控的自动接管编辑器，
-  默认休眠。未定义该宏时该程序集根本不参与编译。
+- `XInspector.AutoEditor` 程序集：由 `XINSPECTOR_AUTO_EDITOR` 宏门控的自动接管编辑器。
+  使用方项目未定义该宏时，该程序集根本不参与编译，行为与没装本插件一致。
 - `XInspector.Tests.Runtime` 与 `XInspector.Tests.Editor` 测试程序集。
 - `Samples~/Overview` 示例。
+
+### Not included
+
+本预览版**不含**特性处理器层（`AttributeProcessor`）。它原本的用途是把类级特性合成到
+其它节点上，但构建期已把类型特性直接放在根节点，这件事不再需要；剩下的潜在用户
+（`[ShowIf]` 改属性状态、类级 `[BoxGroup]` 分发到成员）都尚未实现。
+等 `[ShowIf]` 到来时会一并补上——那是纯新增，不改动任何既有签名。
+
+其余不在范围内的项见包 README 的「已知限制」。
