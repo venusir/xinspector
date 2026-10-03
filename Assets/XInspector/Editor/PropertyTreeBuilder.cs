@@ -37,8 +37,11 @@ namespace XInspector.Editor
         /// 构建属性树。
         /// </summary>
         /// <param name="serializedObject">目标序列化对象，其 <c>targetObject</c> 须非空。</param>
+        /// <param name="memberFilter">
+        /// 成员过滤器；返回 <c>false</c> 的成员不建节点。传 <c>null</c> 等价于全收。
+        /// </param>
         /// <returns>构建好的树。</returns>
-        public static PropertyTree Build(SerializedObject serializedObject)
+        public static PropertyTree Build(SerializedObject serializedObject, Func<FieldInfo, bool> memberFilter)
         {
             var targetType = serializedObject.targetObject.GetType();
 
@@ -51,7 +54,7 @@ namespace XInspector.Editor
 
             AttachChain(root, ChildrenTerminal);
 
-            var members = CollectMembers(serializedObject, targetType);
+            var members = CollectMembers(serializedObject, targetType, memberFilter);
 
             ApplyGrouping(root, members);
 
@@ -67,8 +70,12 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="serializedObject">目标序列化对象。</param>
         /// <param name="targetType">目标对象的运行时类型。</param>
+        /// <param name="memberFilter">成员过滤器；<c>null</c> 表示全收。</param>
         /// <returns>成员节点列表，尚未挂到任何父节点上。</returns>
-        private static List<InspectorProperty> CollectMembers(SerializedObject serializedObject, Type targetType)
+        private static List<InspectorProperty> CollectMembers(
+            SerializedObject serializedObject,
+            Type targetType,
+            Func<FieldInfo, bool> memberFilter)
         {
             var members = new List<InspectorProperty>();
             var iterator = serializedObject.GetIterator();
@@ -79,7 +86,17 @@ namespace XInspector.Editor
             {
                 do
                 {
-                    members.Add(CreateMember(serializedObject, targetType, iterator));
+                    // 字段信息只解析一次，过滤与建节点共用——顺带避免了两处查找结果不一致。
+                    var field = FindField(targetType, iterator.propertyPath);
+
+                    // 被拒的成员**不建节点**，而不是建了再删：少一次分配，
+                    // 也不会让链装配看到本不该存在的节点。
+                    if (memberFilter != null && !memberFilter(field))
+                    {
+                        continue;
+                    }
+
+                    members.Add(CreateMember(serializedObject, iterator, field));
                 }
                 while (iterator.NextVisible(false));
             }
@@ -91,8 +108,8 @@ namespace XInspector.Editor
         /// 为一个可见的序列化属性建立成员节点。
         /// </summary>
         /// <param name="serializedObject">底层序列化对象，用于重新取得稳定的属性实例。</param>
-        /// <param name="targetType">目标对象的运行时类型。</param>
         /// <param name="serializedProperty">遍历器当前指向的序列化属性，**仅用于读取名字与路径**。</param>
+        /// <param name="field">该成员对应的字段；Unity 注入的成员（如 <c>m_Script</c>）为 <c>null</c>。</param>
         /// <returns>建好的成员节点，尚未挂到父节点上。</returns>
         /// <remarks>
         /// <b>不能把遍历器交出去。</b> <see cref="SerializedObject.GetIterator"/> 返回的是
@@ -104,12 +121,11 @@ namespace XInspector.Editor
         /// </remarks>
         private static InspectorProperty CreateMember(
             SerializedObject serializedObject,
-            Type targetType,
-            SerializedProperty serializedProperty)
+            SerializedProperty serializedProperty,
+            FieldInfo field)
         {
             var path = serializedProperty.propertyPath;
             var name = serializedProperty.name;
-            var field = FindField(targetType, path);
             var valueType = field != null ? field.FieldType : typeof(object);
             var stableProperty = serializedObject.FindProperty(path);
 
