@@ -204,6 +204,15 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 子节点的底层列表，供构建期的分组装配做位置调整。
+        /// </summary>
+        /// <remarks>
+        /// 只对构建期开放。对外仍是只读的 <see cref="Children"/>——
+        /// 树的形状在构建结束后不应再变，否则每帧绘制的内容会不稳定。
+        /// </remarks>
+        internal List<InspectorProperty> RawChildren => _children;
+
+        /// <summary>
         /// 按名字查找直接子节点。
         /// </summary>
         /// <param name="name">子节点名。</param>

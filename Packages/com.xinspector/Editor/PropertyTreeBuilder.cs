@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
+using XInspector.Internal;
 
 namespace XInspector.Editor
 {
@@ -14,7 +15,10 @@ namespace XInspector.Editor
     /// 以便读到它身上的特性。
     /// </para>
     /// <para>
-    /// 遍历顺序即 Unity 的序列化顺序，因此渲染出来的字段次序与原生 Inspector 一致。
+    /// 构建分两步：**先按序列化顺序平铺出全部成员，再把它们搬进分组节点**。
+    /// 分两步而非边走边插，是因为一个成员属于哪个分组要看它身上的特性，
+    /// 而分组的祖先节点可能由后面的成员才首次声明——先有全集再装配，
+    /// 就不必处理「边建边补祖先」的顺序依赖。
     /// </para>
     /// </summary>
     internal static class PropertyTreeBuilder
@@ -22,7 +26,7 @@ namespace XInspector.Editor
         #region Private Fields
 
         // 末端绘制器无状态，可以安全共享；建一次即可，不必每个节点新建。
-        private static readonly RootChildrenDrawer RootTerminal = new RootChildrenDrawer();
+        private static readonly ChildrenDrawer ChildrenTerminal = new ChildrenDrawer();
         private static readonly UnityFallbackDrawer MemberTerminal = new UnityFallbackDrawer();
 
         #endregion
@@ -45,36 +49,51 @@ namespace XInspector.Editor
                 InspectorPropertyKind.Root,
                 new PropertyAttributes(CollectTypeAttributes(targetType)));
 
-            AttachChain(root, RootTerminal);
+            AttachChain(root, ChildrenTerminal);
 
-            var iterator = serializedObject.GetIterator();
+            var members = CollectMembers(serializedObject, targetType);
 
-            // 与 Editor.DrawDefaultInspector 的遍历方式保持一致：首帧进入子级，
-            // 之后只在同层推进。这样字段集合与顺序都与原生 Inspector 逐一对齐——
-            // 本提交的验收标准正是「渲染结果与原生 Inspector 一致」。
-            if (iterator.NextVisible(true))
-            {
-                do
-                {
-                    AddMember(root, serializedObject, targetType, iterator);
-                }
-                while (iterator.NextVisible(false));
-            }
+            ApplyGrouping(root, members);
 
             return new PropertyTree(serializedObject, root);
         }
 
         #endregion
 
-        #region Private Helpers
+        #region 成员收集
 
         /// <summary>
-        /// 为一个可见的序列化属性建立成员节点并接上链条。
+        /// 按 Unity 的序列化顺序平铺出全部成员节点。
         /// </summary>
-        /// <param name="root">根节点。</param>
+        /// <param name="serializedObject">目标序列化对象。</param>
+        /// <param name="targetType">目标对象的运行时类型。</param>
+        /// <returns>成员节点列表，尚未挂到任何父节点上。</returns>
+        private static List<InspectorProperty> CollectMembers(SerializedObject serializedObject, Type targetType)
+        {
+            var members = new List<InspectorProperty>();
+            var iterator = serializedObject.GetIterator();
+
+            // 与 Editor.DrawDefaultInspector 的遍历方式保持一致：首帧进入子级，
+            // 之后只在同层推进。这样字段集合与顺序都与原生 Inspector 逐一对齐。
+            if (iterator.NextVisible(true))
+            {
+                do
+                {
+                    members.Add(CreateMember(serializedObject, targetType, iterator));
+                }
+                while (iterator.NextVisible(false));
+            }
+
+            return members;
+        }
+
+        /// <summary>
+        /// 为一个可见的序列化属性建立成员节点。
+        /// </summary>
         /// <param name="serializedObject">底层序列化对象，用于重新取得稳定的属性实例。</param>
         /// <param name="targetType">目标对象的运行时类型。</param>
         /// <param name="serializedProperty">遍历器当前指向的序列化属性，**仅用于读取名字与路径**。</param>
+        /// <returns>建好的成员节点，尚未挂到父节点上。</returns>
         /// <remarks>
         /// <b>不能把遍历器交出去。</b> <see cref="SerializedObject.GetIterator"/> 返回的是
         /// **同一个实例**，<c>NextVisible</c> 只是就地改写它。若把它存进节点，
@@ -83,8 +102,7 @@ namespace XInspector.Editor
         /// 故这里只用它读名字与路径，随后用 <see cref="SerializedObject.FindProperty"/>
         /// 取一份**独立的**实例交给值入口。
         /// </remarks>
-        private static void AddMember(
-            InspectorProperty root,
+        private static InspectorProperty CreateMember(
             SerializedObject serializedObject,
             Type targetType,
             SerializedProperty serializedProperty)
@@ -105,9 +123,232 @@ namespace XInspector.Editor
                 ValueEntry = new SerializedPropertyValueEntry(stableProperty, valueType),
             };
 
-            root.AddChild(node);
             AttachChain(node, MemberTerminal);
+            return node;
         }
+
+        #endregion
+
+        #region 分组装配
+
+        /// <summary>
+        /// 把成员搬进各自的分组节点，未声明分组的成员留在根下。
+        /// </summary>
+        /// <param name="root">根节点。</param>
+        /// <param name="members">按序列化顺序排列的成员节点。</param>
+        /// <remarks>
+        /// 分组节点**落在其首个成员出现的位置**：某个分组第一次被提及时就地插入父节点的
+        /// 子列表。于是夹在分组字段之间的未分组字段会留在原地，而不是被挤到 Inspector 末尾
+        /// ——后者一眼就能看出不对，却是「先摆所有分组、再摆散字段」那种朴素实现的必然结果。
+        /// </remarks>
+        private static void ApplyGrouping(InspectorProperty root, List<InspectorProperty> members)
+        {
+            var groups = new Dictionary<string, InspectorProperty>(StringComparer.Ordinal);
+
+            for (var i = 0; i < members.Count; i++)
+            {
+                var member = members[i];
+                var groupAttribute = FindDeepestGroupAttribute(member);
+
+                if (groupAttribute == null)
+                {
+                    root.AddChild(member);
+                    continue;
+                }
+
+                var groupNode = EnsureGroupChain(root, groups, groupAttribute.GroupID, groupAttribute);
+                groupNode.AddChild(member);
+            }
+
+            SortGroupNodesAtLevel(root);
+        }
+
+        /// <summary>
+        /// 取成员身上最深的那个分组特性。
+        /// </summary>
+        /// <param name="member">成员节点。</param>
+        /// <returns>最深的 <see cref="PropertyGroupAttribute"/>；没有则返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// 取最深而非第一个：<c>[BoxGroup("A")] [BoxGroup("A/B")]</c> 同时出现时，
+        /// 成员应落在 <c>A/B</c> 里——<c>A/B</c> 本身已经蕴含了 <c>A</c>，
+        /// 再让它当 A 的直接子节点就自相矛盾了。
+        /// </remarks>
+        private static PropertyGroupAttribute FindDeepestGroupAttribute(InspectorProperty member)
+        {
+            PropertyGroupAttribute deepest = null;
+            var deepestDepth = -1;
+            var attributes = member.Attributes;
+
+            for (var i = 0; i < attributes.Count; i++)
+            {
+                if (!(attributes[i] is PropertyGroupAttribute group))
+                {
+                    continue;
+                }
+
+                var depth = DepthOf(group.GroupID);
+                if (depth > deepestDepth)
+                {
+                    deepest = group;
+                    deepestDepth = depth;
+                }
+            }
+
+            return deepest;
+        }
+
+        /// <summary>
+        /// 确保从根到指定路径的整条分组链都存在，返回最深的那一节。
+        /// </summary>
+        /// <param name="root">根节点。</param>
+        /// <param name="groups">已建分组节点的查找表。</param>
+        /// <param name="path">目标路径，已规范化。</param>
+        /// <param name="source">用于合成祖先节点的来源特性。</param>
+        /// <returns>路径末段对应的分组节点。</returns>
+        /// <remarks>
+        /// 祖先节点由 <see cref="PropertyGroupAttribute.CloneForPath"/> 从来源特性复制而来，
+        /// 因此 <c>ShowLabel</c> 这类子类字段会一并带到祖先上——语义是「祖先继承后代的呈现设定」，
+        /// 比凭空造一个全默认的祖先更符合直觉。
+        /// </remarks>
+        private static InspectorProperty EnsureGroupChain(
+            InspectorProperty root,
+            Dictionary<string, InspectorProperty> groups,
+            string path,
+            PropertyGroupAttribute source)
+        {
+            var parent = root;
+            string current = null;
+
+            var segments = path.Split(PropertyGroupPath.Separator);
+            for (var i = 0; i < segments.Length; i++)
+            {
+                current = current == null ? segments[i] : current + PropertyGroupPath.Separator + segments[i];
+
+                if (groups.TryGetValue(current, out var node))
+                {
+                    // 同一个分组的又一次声明：按 Combine 规则并入既有特性，而不是丢弃。
+                    // 不合并的话，「哪个字段先声明」就会悄悄决定分组的标题与排序。
+                    var existing = node.Attributes.Get<PropertyGroupAttribute>();
+                    if (existing != null)
+                    {
+                        existing.Combine(source.CloneForPath(current));
+                    }
+                }
+                else
+                {
+                    var attribute = source.CloneForPath(current);
+                    node = new InspectorProperty(
+                        attribute.GroupName,
+                        current,
+                        null,
+                        InspectorPropertyKind.Group,
+                        new PropertyAttributes(new List<Attribute> { attribute }));
+
+                    parent.AddChild(node);
+                    groups[current] = node;
+                    AttachChain(node, ChildrenTerminal);
+                }
+
+                parent = node;
+            }
+
+            return parent;
+        }
+
+        /// <summary>
+        /// 同层的分组节点之间按 <see cref="PropertyGroupAttribute.Order"/> 重排，并递归到各分组内部。
+        /// </summary>
+        /// <param name="parent">要处理的父节点。</param>
+        /// <remarks>
+        /// <b>只重排分组节点彼此之间的先后，不动未分组成员的位置。</b>
+        /// 做法是把分组占据的那些下标收集起来，把其中的分组按 Order 排好后再放回同一批下标。
+        /// 这样「分组之间谁先谁后」由 Order 决定，而「分组与散字段的相对位置」仍由声明位置决定
+        /// ——两个问题各自有单一答案，不必去调和「Order 与声明位置谁优先」这类无解的冲突。
+        /// </remarks>
+        private static void SortGroupNodesAtLevel(InspectorProperty parent)
+        {
+            var children = parent.RawChildren;
+            var slots = new List<int>();
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (children[i].Kind == InspectorPropertyKind.Group)
+                {
+                    slots.Add(i);
+                }
+            }
+
+            if (slots.Count > 1)
+            {
+                var ordered = new List<InspectorProperty>(slots.Count);
+                for (var i = 0; i < slots.Count; i++)
+                {
+                    ordered.Add(children[slots[i]]);
+                }
+
+                // 插入排序：稳定，且同层分组数极少。稳定性在这里是必需而非偏好——
+                // Order 相同的分组必须保持声明先后，否则每次编译的呈现都可能不同。
+                for (var i = 1; i < ordered.Count; i++)
+                {
+                    var current = ordered[i];
+                    var j = i - 1;
+
+                    while (j >= 0 && OrderOf(ordered[j]) > OrderOf(current))
+                    {
+                        ordered[j + 1] = ordered[j];
+                        j--;
+                    }
+
+                    ordered[j + 1] = current;
+                }
+
+                for (var i = 0; i < slots.Count; i++)
+                {
+                    children[slots[i]] = ordered[i];
+                }
+            }
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (children[i].Kind == InspectorPropertyKind.Group)
+                {
+                    SortGroupNodesAtLevel(children[i]);
+                }
+            }
+        }
+
+        /// <summary>取分组节点的排序权重。</summary>
+        /// <param name="group">分组节点。</param>
+        /// <returns>权重；节点上没有分组特性时返回 0。</returns>
+        private static float OrderOf(InspectorProperty group)
+        {
+            var attribute = group.Attributes.Get<PropertyGroupAttribute>();
+            return attribute != null ? attribute.Order : 0f;
+        }
+
+        /// <summary>数路径的层数。</summary>
+        /// <param name="path">已规范化的路径。</param>
+        /// <returns>层数，顶层为 1。</returns>
+        /// <remarks>
+        /// 按段数而非字符串长度比较深浅——<c>"A/B"</c> 比 <c>"LongName"</c> 短但更深。
+        /// </remarks>
+        private static int DepthOf(string path)
+        {
+            var depth = 1;
+            for (var i = 0; i < path.Length; i++)
+            {
+                if (path[i] == PropertyGroupPath.Separator)
+                {
+                    depth++;
+                }
+            }
+
+            return depth;
+        }
+
+        #endregion
+
+        #region 辅助
 
         /// <summary>
         /// 装配并挂上绘制器链。
@@ -156,7 +397,7 @@ namespace XInspector.Editor
         /// <remarks>
         /// 反射每次调用都返回**新实例**，故这里天然满足「每个属性一份独立特性」——
         /// 不会出现多个属性共享同一个特性实例、改一个串一片的问题。
-        /// 类级特性的分发才需要显式克隆，见特性处理器。
+        /// 类级特性的分发才需要显式克隆。
         /// </remarks>
         private static List<Attribute> CollectMemberAttributes(FieldInfo field)
         {
