@@ -1,0 +1,23 @@
+{
+  "name": "com.venusir.xinspector",
+  "displayName": "XInspector",
+  "version": "0.1.0-preview.1",
+  "unity": "6000.3",
+  "description": "XInspector 是 Unity 的特性驱动型可编程 Inspector 管线。它用一条可组合的绘制器链取代 Unity 默认的「单个 PropertyDrawer 画完一切」，让一个属性可以被多个绘制器层层包裹——[BoxGroup] 包住 [Title]、[Title] 再包住基础字段——从而以加法的方式扩展 Inspector 表现力。Runtime 侧零第三方依赖。",
+  "keywords": [
+    "inspector",
+    "editor",
+    "attribute",
+    "drawer",
+    "serialization"
+  ],
+  "category": "Editor",
+  "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Overview",
+      "description": "XInspector 的端到端示例：类级与成员级 [Title]、两段路径的嵌套 [BoxGroup]，以及经由 XInspectorEditor 的接管方式。",
+      "path": "Samples~/Overview"
+    }
+  ]
+}

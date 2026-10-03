@@ -1,0 +1,37 @@
+# 本阶段只统一行尾，不启用 Git LFS。
+# 理由：本包是纯代码插件，不含需要 LFS 的大体积二进制资源；过早引入 LFS 会让
+# 使用方的克隆流程多一道前置依赖（git lfs install），而收益为零。
+# 若日后真的引入大体积二进制资源，再单独评估并补 .gitattributes 的 filter 段。
+
+# 文本文件入库一律 LF，避免跨平台协作时整文件 diff
+* text=auto eol=lf
+
+# 二进制资源：禁止任何行尾转换与文本 diff
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.tga  binary
+*.psd  binary
+*.exr  binary
+*.fbx  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+*.bundle binary
+*.unitypackage binary
+*.zip  binary
+
+# C#：明确语言，获得正确的 diff 与语法高亮
+*.cs text diff=csharp
+
+# Unity YAML 资产：按文本处理，便于 diff 与合并
+*.unity  text
+*.prefab text
+*.asset  text
+*.mat    text
+*.anim   text
+*.controller text
+*.meta   text
+*.asmdef text
+*.json   text
