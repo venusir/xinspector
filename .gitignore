@@ -17,6 +17,9 @@
 /Tests.Native/[Oo]bj/
 /Tests.Native/[Bb]in/
 
+# 但 Tests.Native 的工程文件本身是**手写的**（不是 Unity 生成的），必须入库，
+# 故在下方 *.csproj 通配之后显式反选回来——见那一处。
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta
@@ -50,6 +53,13 @@ ExportedObj/
 .consulo/
 *.slnx
 *.csproj
+# 反选：Tests.Native 的 csproj 是手写的，不是 Unity 生成的，必须入库。
+# 位置有讲究——**gitignore 是最后匹配的规则胜出**，反选必须写在 *.csproj 之后，
+# 写在前面会被它盖掉（本文件上方就有一个注释指向这里）。
+# 另外父目录 Tests.Native/ 未被排除，否则反选也不会生效。
+# （XFramework 的同名文件当年是用 git add -f 硬塞进去的：能用，但在别的机器上
+#   git add . 会静默漏掉它。这里把意图写成规则，不靠人记得加 -f。）
+!/Tests.Native/*.csproj
 *.unityproj
 *.sln
 *.suo
