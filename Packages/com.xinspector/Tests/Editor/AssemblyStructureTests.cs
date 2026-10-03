@@ -43,7 +43,7 @@ namespace XInspector.Tests.Editor
         /// 依赖方向不得反转：Runtime 一旦引用编辑器程序集，玩家构建必然失败。
         /// </summary>
         [Test]
-        public void Runtime程序集不引用编辑器程序集()
+        public void RuntimeAssembly_DoesNotReferenceEditorAssembly()
         {
             var runtimeAssembly = FindAssembly(RuntimeAssemblyName);
             Assert.That(runtimeAssembly, Is.Not.Null, $"{RuntimeAssemblyName} 未加载。");
@@ -60,7 +60,7 @@ namespace XInspector.Tests.Editor
         /// </para>
         /// </summary>
         [Test]
-        public void 编辑器程序集已加载()
+        public void EditorAssembly_IsLoaded()
         {
             Assert.That(FindAssembly(EditorAssemblyName), Is.Not.Null,
                 $"{EditorAssemblyName} 未加载。");

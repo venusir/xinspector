@@ -34,7 +34,7 @@ namespace XInspector.Tests
         /// Runtime 程序集必须存在，且不得引用 <c>UnityEditor</c>。
         /// </summary>
         [Test]
-        public void RuntimeAssembly_不引用UnityEditor()
+        public void RuntimeAssembly_DoesNotReferenceUnityEditor()
         {
             var assembly = FindAssembly(RuntimeAssemblyName);
 
@@ -55,7 +55,7 @@ namespace XInspector.Tests
         /// </para>
         /// </summary>
         [Test]
-        public void 编辑器环境下UnityEditor程序集确实存在()
+        public void EditorEnvironment_UnityEditorAssemblyIsPresent()
         {
             Assert.That(FindAssembly("UnityEditor"), Is.Not.Null,
                 "本测试须在编辑器中运行；找不到 UnityEditor 说明上面那条守卫是恒真的，起不到作用。");
