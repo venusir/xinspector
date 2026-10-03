@@ -13,7 +13,7 @@
 ### Added
 
 - 仓库骨架：完整 Unity 工程 + 内嵌 UPM 包（`Packages/com.xinspector/`）。
-- `XInspector.Runtime` 程序集，及首个特性族：
+- `Venusir.Xinspector` 程序集，及首个特性族：
   - `[Title]`（可用在类与成员上）
   - `[BoxGroup]`，基于点分路径的分组惯例（`"Outer/Inner"` 自动合成祖先节点）
   - `PropertyGroupAttribute`，分组特性的公共基类
@@ -24,9 +24,9 @@
   - 绘制器发现 `DrawerTypeRegistry`（扫描全部已加载的编辑器程序集，支持使用方无注册扩展）
   - 分组装配：点分路径、祖先节点自动合成、分组节点落在首个成员处
   - `XInspectorEditor`，Unity 集成入口
-- `XInspector.AutoEditor` 程序集：由 `XINSPECTOR_AUTO_EDITOR` 宏门控的自动接管编辑器。
+- `Venusir.Xinspector.AutoEditor` 程序集：由 `XINSPECTOR_AUTO_EDITOR` 宏门控的自动接管编辑器。
   使用方项目未定义该宏时，该程序集根本不参与编译，行为与没装本插件一致。
-- `XInspector.Tests.Runtime` 与 `XInspector.Tests.Editor` 测试程序集。
+- `Venusir.Xinspector.Tests` 与 `Venusir.Xinspector.Editor.Tests` 测试程序集。
 - `Samples~/Overview` 示例。
 
 ### Not included

@@ -1,13 +1,10 @@
 {
-    "name": "XInspector.Tests.Editor",
-    "rootNamespace": "XInspector.Tests.Editor",
+    "name": "Venusir.Xinspector.Tests",
+    "rootNamespace": "XInspector.Tests",
     "references": [
-        "XInspector.Runtime",
-        "XInspector.Editor"
+        "Venusir.Xinspector"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,

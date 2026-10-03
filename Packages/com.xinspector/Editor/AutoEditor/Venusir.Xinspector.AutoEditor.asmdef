@@ -1,8 +1,9 @@
 {
-    "name": "XInspector.Editor",
-    "rootNamespace": "XInspector.Editor",
+    "name": "Venusir.Xinspector.AutoEditor",
+    "rootNamespace": "XInspector.Editor.AutoEditor",
     "references": [
-        "XInspector.Runtime"
+        "Venusir.Xinspector",
+        "Venusir.Xinspector.Editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -12,7 +13,9 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "XINSPECTOR_AUTO_EDITOR"
+    ],
     "versionDefines": [],
     "noEngineReferences": false
 }

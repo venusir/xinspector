@@ -72,7 +72,7 @@
 #>
 param(
     [string]$Module = "",
-    [string[]]$Project = @("XInspector.Runtime.csproj", "XInspector.Editor.csproj"),
+    [string[]]$Project = @("Venusir.Xinspector.csproj", "Venusir.Xinspector.Editor.csproj"),
     [switch]$Enforce
 )
 

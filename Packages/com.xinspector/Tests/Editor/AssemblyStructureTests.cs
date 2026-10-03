@@ -10,12 +10,12 @@ namespace XInspector.Tests.Editor
     /// 程序集结构的守卫。
     /// <para>
     /// 与 Runtime 侧的 <c>AssemblyReferenceTests</c> 互补：那边守「Runtime 不许碰 UnityEditor」，
-    /// 这边守依赖方向——<c>XInspector.Runtime</c> 不得引用 <c>XInspector.Editor</c>。
+    /// 这边守依赖方向——<c>Venusir.Xinspector</c> 不得引用 <c>Venusir.Xinspector.Editor</c>。
     /// 方向一旦反过来，使用方的玩家构建就会连带编入编辑器代码，而且**只在打包时才暴露**。
     /// </para>
     /// <para>
     /// <b>为什么这里不断言反方向（编辑器引用 Runtime）。</b> 本条最初写成断言
-    /// <c>XInspector.Editor</c> 引用 <c>XInspector.Runtime</c>，实测**误报**：
+    /// <c>Venusir.Xinspector.Editor</c> 引用 <c>Venusir.Xinspector</c>，实测**误报**：
     /// <c>Assembly.GetReferencedAssemblies()</c> 返回的是**编译器实际发出**的引用，
     /// 而 C# 编译器会裁掉未被使用的程序集引用。编辑器程序集当时只有 <c>AssemblyInfo.cs</c>，
     /// 不碰任何 Runtime 类型，引用就被裁掉了——程序集明明在 asmdef 里声明了依赖。
@@ -32,8 +32,8 @@ namespace XInspector.Tests.Editor
     {
         #region Private Fields
 
-        private const string EditorAssemblyName = "XInspector.Editor";
-        private const string RuntimeAssemblyName = "XInspector.Runtime";
+        private const string EditorAssemblyName = "Venusir.Xinspector.Editor";
+        private const string RuntimeAssemblyName = "Venusir.Xinspector";
 
         #endregion
 

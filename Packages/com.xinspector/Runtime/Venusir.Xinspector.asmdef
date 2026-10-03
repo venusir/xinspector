@@ -1,5 +1,5 @@
 {
-    "name": "XInspector.Runtime",
+    "name": "Venusir.Xinspector",
     "rootNamespace": "XInspector",
     "references": [],
     "includePlatforms": [],

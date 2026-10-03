@@ -24,7 +24,7 @@ namespace XInspector.Tests
     {
         #region Private Fields
 
-        private const string RuntimeAssemblyName = "XInspector.Runtime";
+        private const string RuntimeAssemblyName = "Venusir.Xinspector";
 
         #endregion
 
@@ -44,7 +44,7 @@ namespace XInspector.Tests
             var referenced = ReferencedAssemblyNames(assembly);
             Assert.That(referenced, Does.Not.Contain("UnityEditor"),
                 $"{RuntimeAssemblyName} 引用了 UnityEditor，这会让它在玩家构建里编译失败。" +
-                "编辑器专属代码必须放进 XInspector.Editor 程序集，或用 #if UNITY_EDITOR 包起来。");
+                "编辑器专属代码必须放进 Venusir.Xinspector.Editor 程序集，或用 #if UNITY_EDITOR 包起来。");
         }
 
         /// <summary>
@@ -68,7 +68,7 @@ namespace XInspector.Tests
         /// <summary>
         /// 按简单名在当前 <see cref="AppDomain"/> 的已加载程序集里查找。
         /// </summary>
-        /// <param name="simpleName">程序集简单名，如 <c>XInspector.Runtime</c>。</param>
+        /// <param name="simpleName">程序集简单名，如 <c>Venusir.Xinspector</c>。</param>
         /// <returns>找到的程序集；未找到返回 <c>null</c>。</returns>
         private static Assembly FindAssembly(string simpleName)
         {

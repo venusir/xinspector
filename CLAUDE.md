@@ -6,6 +6,19 @@
   以内嵌包形式供其他项目引入，模仿 Odin Inspector 的体验
 - Unity 版本：`6000.4.5f1`（开发环境）；`package.json` 最低要求 `6000.3`（与 XFramework 一致）
 - 命名空间根：`XInspector`（Runtime）/ `XInspector.Editor` / `XInspector.Editor.AutoEditor`
+- 程序集名**与命名空间不同**，规则对齐 XFramework 的「公司.产品[.Editor]」：
+
+  | 程序集 | 命名空间 |
+  |---|---|
+  | `Venusir.Xinspector` | `XInspector` |
+  | `Venusir.Xinspector.Editor` | `XInspector.Editor` |
+  | `Venusir.Xinspector.AutoEditor` | `XInspector.Editor.AutoEditor` |
+  | `Venusir.Xinspector.Tests` | `XInspector.Tests` |
+  | `Venusir.Xinspector.Editor.Tests` | `XInspector.Tests.Editor` |
+
+  改程序集名时，`InternalsVisibleTo`、asmdef 的 `references`、以及测试里按字符串查程序集的常量
+  都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
+  包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
 - 当前版本 `0.1.0-preview.1`，只有骨架与一条垂直切片，API 尚未稳定
 
@@ -56,17 +69,17 @@ Assets 目录，未注册进 `Packages/`，因此**不能**经 git URL 安装）
 ### 包结构
 
 ```
-Runtime/                     XInspector.Runtime
+Runtime/                     Venusir.Xinspector
   Attributes/                公开特性（Title、Groups/BoxGroup…）
   Internal/                  内部工具（PropertyGroupPath）
-Editor/                      XInspector.Editor
+Editor/                      Venusir.Xinspector.Editor
   PropertyTree.cs            树；绘制入口
   PropertyTreeBuilder.cs     遍历成员 → 分组装配 → 装配链条
   InspectorProperty.cs       节点（纯数据 + 一次派发）
   PropertyState.cs           每属性的可变状态
   Values/                    值后端
   Drawers/                   绘制器：基础类、链、注册表、BuiltIn/、Terminals/
-Editor/AutoEditor/           XInspector.AutoEditor（宏门控，见下）
+Editor/AutoEditor/           Venusir.Xinspector.AutoEditor（宏门控，见下）
 Tests/Runtime/               PlayMode
 Tests/Editor/                EditMode
 Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
@@ -74,12 +87,12 @@ Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
 
 ## 自动接管与 `XINSPECTOR_AUTO_EDITOR` 宏
 
-`XInspector.AutoEditor` 程序集由脚本宏 `XINSPECTOR_AUTO_EDITOR` 门控：宏未定义时它**根本不参与
+`Venusir.Xinspector.AutoEditor` 程序集由脚本宏 `XINSPECTOR_AUTO_EDITOR` 门控：宏未定义时它**根本不参与
 编译**，全局接管这件事在项目里就不存在。
 
 **本开发工程刻意把该宏开着**（`ProjectSettings.asset` 的 `scriptingDefineSymbols`）。
 理由值得记住：**门控代码若从不参与编译，就会静默腐烂**。实测踩过一次——该程序集一直没被编译，
-直到首次开宏才暴露出 `InternalsVisibleTo("XInspector.AutoEditor")` 漏写、编译不过。
+直到首次开宏才暴露出 `InternalsVisibleTo("Venusir.Xinspector.AutoEditor")` 漏写、编译不过。
 开着宏，全量测试这道门禁就覆盖得到它。
 
 即便如此，它仍是**按项目生效、可逆**的：使用方项目没有这个宏，行为与没装本插件一致。
