@@ -126,12 +126,12 @@ Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
 
 ## 测试与门禁
 
-```powershell
-pwsh -File Tools/run-tests.ps1 -Setup                      # 新机器一次，建 XInspector.TestRun 壳
-pwsh -File Tools/run-tests.ps1 -Fixture DrawerChainTests   # 日常定向
-pwsh -File Tools/run-tests.ps1                             # 门禁：全量双平台 0 失败
-pwsh -File Tools/check-docs.ps1 -Enforce                   # 门禁：文档告警 0 + 源文件全参与编译 + .meta 完整
-```
+**三条门禁**：`Tools/run-tests.ps1`（全量双平台）、
+`dotnet test Tests.Native/Tests.Native.csproj`（离线，约 20 毫秒，只覆盖 Runtime 逻辑）、
+`Tools/check-docs.ps1 -Enforce`（文档 + .meta + 源文件全参与编译）。
+
+**具体命令、参数手感与踩过的坑见 [Documentation/Workflow.md](Documentation/Workflow.md) §一**
+——那里是流程的唯一真相，本节只写规则。
 
 - **门禁是「全量 0 失败」，不写固定例数**——例数随开发增长，写进规则必然定期过期
 - **每个 fixture 必须复位它触碰的静态门面**（本仓主要是 `DrawerTypeRegistry.Reset()`）。
@@ -148,12 +148,9 @@ pwsh -File Tools/check-docs.ps1 -Enforce                   # 门禁：文档告�
 所有资源都有 `.meta`。它是独立的一条通道：csproj 未设 `DocumentationFile`，
 **默认编译根本不检查文档注释**，不开这一枪则写坏文档不会有任何反馈。
 
-**前置条件：需要 `.csproj`，而它只在 GUI 编辑器里生成。** 批处理
-（`-batchmode`）不会写出 csproj——`SyncVS.SyncSolution` 是跑了的，但文件不落盘
-（实测：反射调用成功、日志有 `SyncVS.PostprocessSyncProject`，仓库根仍无任何 csproj）。
-因此**新克隆的仓库、以及纯批处理环境里，这条门禁跑不起来**：脚本会因「有 N 个源文件
-未参与编译」判失败。这不是脚本坏了，恰恰是它**拒绝给出假的绿色**——没有 csproj 时
-「0 条告警」毫无意义。处置：在 Unity 里打开一次工程，csproj 即生成，之后门禁可跑。
+**前置条件：需要 `.csproj`，而它只在 GUI 编辑器里生成**——纯批处理环境下这条门禁跑不起来，
+脚本会判失败。那不是脚本坏了，是它拒绝给假绿。细节见
+[Documentation/Workflow.md](Documentation/Workflow.md) §一。
 
 两处本包特有的处理，改动时别删：
 
@@ -189,6 +186,24 @@ pwsh -File Tools/check-docs.ps1 -Enforce                   # 门禁：文档告�
   scripts associated with it"），故测试程序集里必须有真实文件
 - **`Assembly.GetReferencedAssemblies()` 返回的是编译器实际发出的引用**，未用到的会被裁掉。
   它只适合断言「不存在某依赖」（用了就必然发出），不适合断言「存在某依赖」（会误报）
+
+## 文档在哪
+
+**一处只写一份真相**，按收件人分层：
+
+| 文档 | 收件人 | 写什么 |
+|---|---|---|
+| `Packages/com.xinspector/README.md` | 引入包的第三方 | 包级入口：设计哲学、快速开始、已知限制 |
+| `Packages/com.xinspector/Runtime\|Editor/README.md` | 引入包的第三方 | 行为契约与扩展指南 |
+| 本文件 | 维护者（每次会话都读） | 规则与约束：「不得」「一律」「必须」 |
+| `Documentation/Workflow.md` | 维护者 | 流程与命令：怎么跑、什么顺序、踩过什么坑 |
+| `Documentation/Modules/Pipeline.md` | 维护者 + 下一轮审计者 | 沿革、**已否决形状及理由**、未决项 |
+| `Documentation/Roadmap.md` | 维护者（选型时） | 还没做的候选：该不该做、边界画在哪 |
+| `Documentation/ModuleAudit.md` | 维护者 | 审计手册：判据清单、报告格式、结论落点 |
+| `Packages/com.xinspector/Documentation~/` | 随包发布 | 包内文档（经 Package Manager 分发） |
+
+**包内不指向包外：** 包内 README 不引用仓库根 `Documentation/` 下的维护向文档
+——第三方装了包却打不开它。
 
 ## Git
 
