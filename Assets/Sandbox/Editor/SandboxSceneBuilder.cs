@@ -34,11 +34,11 @@ namespace XInspector.Sandbox.EditorTools
         }
 
         /// <summary>
-        /// 创建场景：默认摄像机与平行光，外加四个演示对象。
+        /// 创建场景：默认摄像机与平行光，外加五个演示对象。
         /// </summary>
         /// <remarks>
         /// 供 <c>-executeMethod</c> 调用，故必须是 public static 且无参。
-        /// 四个对象各代表一条集成路径，逐一选中即可对照。
+        /// 五个对象各代表一条集成路径，逐一选中即可对照。
         /// <para>
         /// Demo 1 与 Demo 4 是一组对照：前者**刻意不带任何 XInspector 特性**，
         /// 后者只带 Unity 原生装饰器，两者外观都应与原生 Inspector 一致
@@ -53,6 +53,7 @@ namespace XInspector.Sandbox.EditorTools
             AddDemo<AttributeDemo>("Demo 2 - Explicit Editor");
             AddDemo<AutoTakeoverDemo>("Demo 3 - Auto Takeover");
             AddDemo<NativeDecoratorDemo>("Demo 4 - Native Decorators (L0)");
+            AddDemo<AttributeShowcase>("Demo 5 - L1a Showcase");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);

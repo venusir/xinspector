@@ -107,7 +107,7 @@
 | `[HideLabel]` | ❌ 缺 | L1a |
 | `[PropertyOrder]` | ❌ 缺 | L4 |
 | `[PropertySpace]` | ❌ 缺 | L1a |
-| `[ReadOnly]` | ❌ 缺 | L1a |
+| **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ❌ 缺 | L1a（另见 Validation） |
 | `[RequiredIn]` | ❌ 缺 | L1a（另见 Validation） |
 | `[Searchable]` | ❌ 缺 | L1b |
@@ -176,7 +176,7 @@
 | `[Indent]` | ❌ 缺 | L1a |
 | `[InfoBox]` | ❌ 缺 | L1a |
 | `[InlineProperty]` | ❌ 缺 | L4 |
-| `[LabelText]` | ❌ 缺 | L1a |
+| **`[LabelText]`** | **✅ 已实现** | — |
 | `[LabelWidth]` | ❌ 缺 | L1a |
 | `[OnCollectionChanged]` | ❌ 缺 | L6 |
 | `[OnInspectorDispose]` | ❌ 缺 | L5 |
@@ -186,7 +186,7 @@
 | `[OnValueChanged]` | ❌ 缺 | L5 |
 | `[TypeSelectorSettings]` | ❌ 缺 | L7 |
 | `[TypeRegistryItem]` | ❌ 缺 | L7 |
-| `[PropertyTooltip]` | ❌ 缺 | L1a |
+| **`[PropertyTooltip]`** | **✅ 已实现** | — |
 | `[SuffixLabel]` | ❌ 缺 | L1a |
 
 **小计：已实现 0 / 缺 19**
