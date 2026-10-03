@@ -1,7 +1,7 @@
 # Pipeline（管线）
 
 维护向记录。收件人是维护者与下一轮审计者——**使用方要看的在
-`Packages/com.xinspector/Runtime|Editor/README.md`**，规则约束在 [CLAUDE.md](../../CLAUDE.md)。
+`Assets/XInspector/Runtime|Editor/README.md`**，规则约束在 [CLAUDE.md](../../CLAUDE.md)。
 
 本包只有一个「模块」：那条把属性树与绘制器链串起来的管线。它同时横跨
 Runtime（特性）与 Editor（树、链、绘制器）。
@@ -16,7 +16,7 @@ Runtime（特性）与 Editor（树、链、绘制器）。
 
 | 提交 | 内容 |
 |---|---|
-| 1 | Unity 工程与包骨架（`Packages/com.xinspector/`，Unity 6000.4.5f1） |
+| 1 | Unity 工程与包骨架（当时在 `Packages/com.xinspector/`，Unity 6000.4.5f1） |
 | 2 | 四个程序集 + 两条结构性守卫测试 |
 | 3 | 特性层：`[Title]`、`PropertyGroupAttribute`、`[BoxGroup]`、路径解析 |
 | 4 | 绘制器链：`DrawerChain`、`DrawerTypeRegistry`、`DrawerPriority`、`InspectorProperty` |
@@ -29,8 +29,20 @@ Runtime（特性）与 Editor（树、链、绘制器）。
 **未做**：特性处理器层、数组展开、`[ShowIf]` 及同类、样式系统、编辑器窗口、
 UI Toolkit、序列化后端。判断与边界见 [Roadmap.md](../Roadmap.md)。
 
-第二轮（当前）：结构对齐 XFramework——程序集命名、`Tests.Native` 离线通道、
-模块 README、维护向文档。
+**第二轮**：结构对齐 XFramework——程序集命名改为「公司.产品[.Editor]」式、
+补 `Tests.Native` 离线测试通道、补模块 README 与维护向文档。
+
+**第三轮（当前）：包从 `Packages/com.xinspector/` 搬到 `Assets/XInspector/`。**
+放弃 UPM 的可安装性，换回与 XFramework 一致的布局。理由与代价见下面第 11 条。
+
+第三轮的连带改动，都是**不去 grep 就会漏掉**的那类：
+
+- 包内 `Samples~/` → `Samples/`、`Documentation~/` → `Documentation/`。`~` 的语义是
+  「Unity 别扫我」，离开 UPM 后它只剩坏处——示例代码不参与编译、用户也看不到。
+- `Tools/check-docs.ps1` 四处与 `Tests.Native.csproj` 三处硬编码路径。
+  **其中一处最危险**：脚本里那个「从编译告警中筛出本包」的正则。不改的话它永远匹配不到，
+  门禁会报「0 条告警」——**假绿**，比报错更坏。
+- `package.json` 去掉 `samples` 数组：它描述的是 UPM 布局，搬出来后那个路径已不成立。
 
 ---
 
@@ -101,9 +113,9 @@ XFramework 用的是 `optionalUnityReferences: ["TestAssemblies"]`。本包改�
 
 ### 9. 示例带场景（否决）
 
-`Samples~/Overview/` 只给组件 + 编辑器 + README，**不含 `.unity`**。
-场景里对脚本的引用是 GUID，跨包导入时最容易断链——用户导入示例看到一堆 Missing
-是最糟糕的第一印象。组件加文档在任何项目里都能用。
+示例只给组件 + 编辑器 + README，**不含 `.unity`**。场景里对脚本的引用是 GUID，
+拷贝分发时最容易断链——用户拿到示例看到一堆 Missing 是最糟糕的第一印象。
+组件加文档在任何项目里都能用。（当时目录名是 `Samples~/Overview/`，第三轮去掉了波浪号。）
 
 ### 10. asmdef 名带 `.Runtime` 后缀（否决，第二轮改回）
 
@@ -112,6 +124,30 @@ XFramework 用的是 `optionalUnityReferences: ["TestAssemblies"]`。本包改�
 大于这点便利，第二轮统一为 `Venusir.Xinspector` / `Venusir.Xinspector.Editor`。
 
 改的时候是免费的（包未发布）；**发布后对自带 asmdef 的使用方就是破坏性变更**。
+
+### 11. 包放 `Assets/` 而不是 `Packages/`（第三轮改为此，代价明确）
+
+第一轮把包放在 `Packages/com.xinspector/`，那是 UPM 唯一认的位置——`Assets/` 里带
+`package.json` 的目录在 Package Manager 眼里只是普通资源（实测：XFramework 的 manifest
+与 lock 里匹配其包名 0 处）。第三轮搬到 `Assets/XInspector/`，**主动放弃了**：
+
+| 放弃 | 后果 |
+|---|---|
+| Package Manager 显示为 In Project 包 | 使用方看不到版本、描述、示例入口 |
+| git URL 安装 `?path=/Packages/com.xinspector` | 只能靠拷贝文件夹分发 |
+| 发布到 registry / OpenUPM | 无法作为依赖被解析 |
+| `package.json` 的 `dependencies` 被解析 | 将来若要引第三方包，得让使用方自己装 |
+| `packages-lock.json` 记录版本与来源 | 使用方无从知道装的是哪个版本 |
+
+**换来的**：代码在 `Assets/` 下与 `Assets/Sandbox/` 平级，Project 窗口一眼可见；
+与 XFramework 的布局心智一致。
+
+**另一项不显眼的代价：边界没了。** 原先靠「在不在 `Packages/`」就能区分包本体与工程壳，
+现在两者都在 `Assets/` 下，只能靠目录名与约定守。CLAUDE.md 里为此专门写了一节。
+
+**可逆**：移动时连 `.meta` 一起挪则 GUID 不变，asmdef 名与 C# 命名空间也不受影响，
+搬回 `Packages/` 是纯路径操作。`package.json` 保留标识字段正是为此——
+搬回去时还需恢复 `Samples~/` 的波浪号并补回 `samples` 数组。
 
 ---
 

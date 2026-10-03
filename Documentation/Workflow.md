@@ -69,8 +69,10 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
 
 - `Editor/AutoEditor/` 被排除出「是否参与编译」检查——它是宏门控的，宏关掉时
   那里的源文件本来就不该被编译。
-- 「缺 `.meta`」检查连**路径中含 `~` 结尾目录段**的条目一起跳过。只判名字不够：
-  `-Recurse` 会钻进 `Samples~` / `Documentation~` 内部，而那里的文件同样没有 meta。
+- 「缺 `.meta`」检查跳过**点开头**的条目——Unity 不给它们生成 meta。
+  包在 `Packages/` 时还有一条处理 `~` 结尾目录的规则（`-Recurse` 会钻进 `Samples~/`
+  内部，那里的文件同样没有 meta）。搬到 `Assets/` 后波浪号已去掉，那条成了永不触发的
+  死代码，已删。
 
 ---
 

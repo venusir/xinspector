@@ -148,7 +148,7 @@
 
 | 结论性质 | 落点 |
 |---|---|
-| 使用方要知道的边界（「这个特性有个坑」） | `Packages/com.xinspector/Runtime\|Editor/README.md` |
+| 使用方要知道的边界（「这个特性有个坑」） | `Assets/XInspector/Runtime\|Editor/README.md` |
 | 接口承诺到哪为止 | 同上 |
 | 「为什么是 A 而不是 B」的取舍 | 同上；若只有维护方关心则进 `Modules/` |
 | 已评估未采纳、已否决形状 | `Documentation/Modules/<模块>.md` |

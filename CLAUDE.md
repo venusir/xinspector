@@ -2,8 +2,9 @@
 
 ## 项目定位
 
-- 本项目是 Unity 的特性驱动型可编程 Inspector 管线（内嵌 UPM 包 `com.venusir.xinspector`），
-  以内嵌包形式供其他项目引入，模仿 Odin Inspector 的体验
+- 本项目是 Unity 的特性驱动型可编程 Inspector 管线（`Assets/XInspector/`），
+  以**拷贝文件夹**的方式供其他项目引入，模仿 Odin Inspector 的体验。
+  **它不是 UPM 包**——见「仓库布局与边界规则」
 - Unity 版本：`6000.4.5f1`（开发环境）；`package.json` 最低要求 `6000.3`（与 XFramework 一致）
 - 命名空间根：`XInspector`（Runtime）/ `XInspector.Editor` / `XInspector.Editor.AutoEditor`
 - 程序集名**与命名空间不同**，规则对齐 XFramework 的「公司.产品[.Editor]」：
@@ -24,21 +25,38 @@
 
 ## 仓库布局与边界规则
 
-包本体在 `Packages/com.xinspector/`，**会**随包发布；其余都是工程壳，**不会**发布：
+包本体在 `Assets/XInspector/`，**会**随包分发；其余都是工程壳，**不会**：
 
-| 路径 | 会不会发布 |
+| 路径 | 会不会分发 |
 |---|---|
-| `Packages/com.xinspector/` | **会** |
+| `Assets/XInspector/` | **会** |
 | `Assets/Sandbox/` | 不会。开发用演示组件与场景 |
 | `Tools/` | 不会。测试与文档门禁脚本 |
-| `ProjectSettings/`、`Packages/manifest.json` | 不会 |
+| `ProjectSettings/`、`Packages/` | 不会。开发工程的壳 |
 
 推论：**开发用代码绝不进包**；**包文件绝不 gitignore**；**包下所有 `.meta` 一律提交且绝不手改**
 （`.meta` 由 Unity 生成，不是手写的）。
 
-与 XFramework 的一处分歧：XFramework 的包在 `Assets/XFramework/`（带 `package.json` 的普通
-Assets 目录，未注册进 `Packages/`，因此**不能**经 git URL 安装）。本包走 `Packages/com.xinspector/`
-——这才是真正的内嵌 UPM 包，`?path=` 安装与 `Samples~/` 才会生效。**不要把它改成 XFramework 的布局。**
+### 边界靠约定，不靠位置
+
+包本体与工程壳**都在 `Assets/` 下平级**，因此不能再靠「在不在 `Packages/`」区分——只能靠
+目录名与这条约定：**`Assets/XInspector/` 之外的一切都是工程壳**。往包里加东西前先问一句：
+这东西是给使用方的吗？
+
+这是把包从 `Packages/com.xinspector/` 搬到 `Assets/` 的**直接代价**：原先位置上自带边界，
+现在边界得靠人守。搬家的理由与放弃的能力见
+[Documentation/Modules/Pipeline.md](Documentation/Modules/Pipeline.md) 的「已否决的形状」。
+
+### 为什么不在 Packages/
+
+Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来源。搬出来意味着
+**Package Manager 不认识本包、不能经 git URL 安装、无法发布到 registry**，分发方式是
+**拷贝文件夹**——因此升级要覆盖整个目录，使用方改过包内文件就会丢。
+
+换来的是代码在 `Assets/` 下一眼可见，与姊妹工程 XFramework 布局一致。
+
+**可逆：** 移动时连 `.meta` 一起挪则 GUID 不变，asmdef 名与 C# 命名空间也不受影响，
+搬回 `Packages/` 是纯路径操作。`package.json` 保留标识字段正是为此。
 
 ## 架构要点
 
@@ -82,7 +100,7 @@ Editor/                      Venusir.Xinspector.Editor
 Editor/AutoEditor/           Venusir.Xinspector.AutoEditor（宏门控，见下）
 Tests/Runtime/               PlayMode
 Tests/Editor/                EditMode
-Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
+Samples/Overview/            示例（随工程直接存在，挂上组件即可看）
 ```
 
 ## 自动接管与 `XINSPECTOR_AUTO_EDITOR` 宏
@@ -156,8 +174,9 @@ Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
 
 - `Editor/AutoEditor/` 在「是否参与编译」检查中被排除——它是宏门控的，宏关掉时那里的源文件
   本来就不该被编译，不排除会长期误报
-- 「缺 `.meta`」检查要连同**路径中含 `~` 结尾目录段**的条目一起跳过。只判名字不够：
-  `-Recurse` 会钻进 `Samples~` / `Documentation~` 内部，而那里的文件同样没有 meta
+- 「缺 `.meta`」检查跳过**点开头**的条目（Unity 不给它们生成 meta）。包在 `Packages/` 时
+  还有一条处理 `~` 结尾目录的规则，搬到 `Assets/` 后波浪号已去掉，那条成了永不触发的
+  死代码，已删——若日后又出现 `~` 目录，记得加回来
 
 ## 如何新增一个特性
 
@@ -193,14 +212,14 @@ Samples~/Overview/           示例（`~` 目录，经 Package Manager 导入）
 
 | 文档 | 收件人 | 写什么 |
 |---|---|---|
-| `Packages/com.xinspector/README.md` | 引入包的第三方 | 包级入口：设计哲学、快速开始、已知限制 |
-| `Packages/com.xinspector/Runtime\|Editor/README.md` | 引入包的第三方 | 行为契约与扩展指南 |
+| `Assets/XInspector/README.md` | 引入包的第三方 | 包级入口：设计哲学、快速开始、已知限制 |
+| `Assets/XInspector/Runtime\|Editor/README.md` | 引入包的第三方 | 行为契约与扩展指南 |
 | 本文件 | 维护者（每次会话都读） | 规则与约束：「不得」「一律」「必须」 |
 | `Documentation/Workflow.md` | 维护者 | 流程与命令：怎么跑、什么顺序、踩过什么坑 |
 | `Documentation/Modules/Pipeline.md` | 维护者 + 下一轮审计者 | 沿革、**已否决形状及理由**、未决项 |
 | `Documentation/Roadmap.md` | 维护者（选型时） | 还没做的候选：该不该做、边界画在哪 |
 | `Documentation/ModuleAudit.md` | 维护者 | 审计手册：判据清单、报告格式、结论落点 |
-| `Packages/com.xinspector/Documentation~/` | 随包发布 | 包内文档（经 Package Manager 分发） |
+| `Assets/XInspector/Documentation/` | 随包分发 | 包内文档（跟包一起被拷走） |
 
 **包内不指向包外：** 包内 README 不引用仓库根 `Documentation/` 下的维护向文档
 ——第三方装了包却打不开它。
