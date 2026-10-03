@@ -66,39 +66,59 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="property">目标属性，用来拿到它所属的序列化对象。</param>
         /// <param name="conditionName">条件成员名。</param>
-        /// <returns>求值器；解析失败时返回 <c>null</c> 并记一条告警。</returns>
+        /// <param name="condition">解析出的求值器；失败时为 <c>null</c>。</param>
+        /// <returns>解析成功返回 <c>true</c>。</returns>
         /// <remarks>
+        /// 公开给同程序集内的其它构建期解析者（如信息框的 <c>visibleIf</c>）复用——
+        /// 「找成员、校类型、失败告警」这段逻辑只该有一份。
+        /// <para>
         /// <b>解析失败不抛异常，只告警并放弃。</b> 一个拼错的条件名不该让整个 Inspector 白屏——
         /// 那是使用方看到本插件的第一眼。放弃的后果是「条件不生效、字段照常显示」，
         /// 配合告警足以定位；而抛异常会让后果升级成「什么都看不见」。
+        /// </para>
         /// </remarks>
-        private static Func<bool> Resolve(InspectorProperty property, string conditionName)
+        internal static bool TryResolve(InspectorProperty property, string conditionName, out Func<bool> condition)
         {
-            var serializedProperty = property.ValueEntry?.SerializedProperty;
+            condition = null;
+
+            var serializedProperty = property?.ValueEntry?.SerializedProperty;
             var serializedObject = serializedProperty?.serializedObject;
 
             if (serializedObject == null)
             {
                 Warn(property, conditionName, "该属性没有序列化后端");
-                return null;
+                return false;
             }
 
-            var condition = serializedObject.FindProperty(conditionName);
-            if (condition == null)
+            var conditionProperty = serializedObject.FindProperty(conditionName);
+            if (conditionProperty == null)
             {
                 Warn(property, conditionName, "找不到该成员");
-                return null;
+                return false;
             }
 
-            if (condition.propertyType != SerializedPropertyType.Boolean)
+            if (conditionProperty.propertyType != SerializedPropertyType.Boolean)
             {
-                Warn(property, conditionName, $"该成员不是 bool（实为 {condition.propertyType}）");
-                return null;
+                Warn(property, conditionName, $"该成员不是 bool（实为 {conditionProperty.propertyType}）");
+                return false;
             }
 
             // 每帧只读一个 bool，不分配、不查找——SerializedProperty 是活句柄，
             // 跨 Update() 依然有效，所以解析一次就够。
-            return () => condition.boolValue;
+            condition = () => conditionProperty.boolValue;
+            return true;
+        }
+
+        /// <summary>
+        /// 取条件成员的解析结果，失败时返回 <c>null</c>。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="conditionName">条件成员名。</param>
+        /// <returns>求值器；解析失败返回 <c>null</c>。</returns>
+        private static Func<bool> Resolve(InspectorProperty property, string conditionName)
+        {
+            TryResolve(property, conditionName, out var condition);
+            return condition;
         }
 
         /// <summary>
@@ -110,7 +130,7 @@ namespace XInspector.Editor
         private static void Warn(InspectorProperty property, string conditionName, string reason)
         {
             Debug.LogWarning(
-                $"[XInspector] 属性「{property.Path}」上的条件「{conditionName}」无法求值：{reason}。" +
+                $"[XInspector] 属性「{property?.Path}」上的条件「{conditionName}」无法求值：{reason}。" +
                 "条件已忽略，该属性按无条件处理。" +
                 "注意条件必须是**序列化**成员（public 字段或 [SerializeField] 私有字段），" +
                 "普通属性与方法不受支持。");

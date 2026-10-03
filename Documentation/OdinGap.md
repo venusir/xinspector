@@ -101,7 +101,7 @@
 | `[AssetsOnly]` | ❌ 缺 | L1a（另见 Validation） |
 | `[CustomValueDrawer]` | ❌ 缺 | L1a |
 | `[DelayedProperty]` | ❌ 缺 | L1a |
-| `[DetailedInfoBox]` | ❌ 缺 | L1a |
+| **`[DetailedInfoBox]`** | **✅ 已实现** | — |
 | `[EnableGUI]` | ❌ 缺 | L1a |
 | **`[GUIColor]`** | **✅ 已实现** | — |
 | **`[HideLabel]`** | **✅ 已实现** | — |
@@ -174,7 +174,7 @@
 | `[DrawWithUnity]` | ❌ 缺 | L1a |
 | `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
 | **`[Indent]`** | **✅ 已实现** | — |
-| `[InfoBox]` | ❌ 缺 | L1a |
+| **`[InfoBox]`** | **✅ 已实现** | — |
 | `[InlineProperty]` | ❌ 缺 | L4 |
 | **`[LabelText]`** | **✅ 已实现** | — |
 | **`[LabelWidth]`** | **✅ 已实现** | — |

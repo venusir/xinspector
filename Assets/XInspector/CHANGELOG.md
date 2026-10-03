@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Added — L1a：信息框
+
+- **`[InfoBox]`**：字段上方的信息框，可用在类上（则出现在整个 Inspector 最上方——
+  类级特性落在根节点，绘制器链照样包住子节点，不是特例代码）。
+  支持 `visibleIf`：条件名在**构建期**解析一次、绘制期每帧求值，与条件族同一套解析器
+  （`ConditionResolver` 的 `Resolve` 提为 `internal TryResolve` 供复用，行为一字未改，
+  既有条件族测试是这次重构的安全网）。
+- **`[DetailedInfoBox]`**：摘要一行 + 可展开的详情。展开状态按属性隔离，
+  **不跨会话持久化**（本包一贯的边界）。
+- 条件的登记按**特性实例**为键（不是特性类型）：一个成员可以挂多个信息框，各带各的条件，
+  用类型作键会让它们互相覆盖。解析失败时**不登记**，于是走「没有条件 ⇒ 显示」那条路
+  ——拼错名字的表现若是「框不见了」，会被当成特性没生效。
+- **`InfoMessageType`** 是本包自建的类型（`None`/`Info`/`Warning`/`Error`）：Runtime 零
+  Unity 依赖，拿不到 `UnityEditor.MessageType`，Odin 也是同样的理由自己造了一个。
+
 ### Added — L1a：布局与外观
 
 - **`[GUIColor]`**、**`[Indent]`**、**`[LabelWidth]`**、**`[HideLabel]`**、**`[PropertySpace]`**、

@@ -73,5 +73,24 @@ namespace XInspector.Sandbox
         public float ratio = 0.75f;
 
         #endregion
+
+        #region 信息框
+
+        /// <summary>恒显示的信息框。</summary>
+        [InfoBox("这条信息框始终显示。", InfoMessageType.Info)]
+        public int withInfoBox = 1;
+
+        /// <summary>只有勾上开关才显示的信息框——字段本身照常绘制。</summary>
+        [InfoBox("勾上开关才看得到这条警告。", InfoMessageType.Warning, nameof(showWarning))]
+        public int conditionalInfoBox = 2;
+
+        /// <summary>上一条信息框的显示条件。</summary>
+        public bool showWarning;
+
+        /// <summary>摘要一行，详情折起来。</summary>
+        [DetailedInfoBox("伤害计算公式", "基础伤害 × (1 + 力量加成) × 暴击系数", InfoMessageType.None)]
+        public float damage = 10f;
+
+        #endregion
     }
 }
