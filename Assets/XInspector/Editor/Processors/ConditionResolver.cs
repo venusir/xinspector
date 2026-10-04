@@ -1,4 +1,5 @@
 using System;
+using UnityEditor;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -68,30 +69,58 @@ namespace XInspector.Editor
         /// <param name="condition">解析出的求值器；失败时为 <c>null</c>。</param>
         /// <returns>解析成功返回 <c>true</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 公开给同程序集内的其它构建期解析者（如信息框的 <c>visibleIf</c>）复用——
         /// 「找成员、校类型、失败告警」这段逻辑只该有一份。
+        /// </para>
         /// <para>
         /// <b>解析失败不抛异常，只告警并放弃。</b> 一个拼错的条件名不该让整个 Inspector 白屏——
         /// 那是使用方看到本插件的第一眼。放弃的后果是「条件不生效、字段照常显示」，
         /// 配合告警足以定位；而抛异常会让后果升级成「什么都看不见」。
+        /// </para>
+        /// <para>
+        /// <b>三级解析，顺序固定：序列化成员 → 反射字段/属性 → 无参返回 bool 的方法。</b>
+        /// 序列化成员是本包的主路（它免费带着 Undo、预制体覆盖那一整套），反射那两级是兜底。
+        /// 顺序固定下来，失败信息才可解释——「找不到」与「找到了但形状不对」是两句不同的话，
+        /// 而「找到的是哪一级」也一样。
         /// </para>
         /// </remarks>
         internal static bool TryResolve(InspectorProperty property, string conditionName, out Func<bool> condition)
         {
             condition = null;
 
-            // 找成员/校类型这一段与 [Toggle]/[ToggleGroup] 共用——见 SerializedMemberResolver。
-            if (!SerializedMemberResolver.TryResolve(
-                    property, conditionName, SerializedMemberScope.Object, SerializedMemberKind.Boolean,
-                    out var conditionProperty, out var reason))
+            // 第一级：序列化成员。这一段与 [Toggle]/[ToggleGroup] 共用类型判定——见 SerializedMemberResolver。
+            var serializedObject = SerializedMemberResolver.FindSerializedObject(property);
+
+            if (serializedObject != null)
+            {
+                var member = serializedObject.FindProperty(conditionName);
+                if (member != null)
+                {
+                    if (member.propertyType != SerializedPropertyType.Boolean)
+                    {
+                        // 找到了却类型不符：**不再往下找**。继续找反射成员的话，
+                        // 同一个名字会报第二次警，而两条消息互相矛盾。
+                        Warn(property, conditionName,
+                            $"找到的「{conditionName}」是 {member.propertyType}，条件必须是 bool");
+                        return false;
+                    }
+
+                    // 每帧只读一个 bool，不分配、不查找——SerializedProperty 是活句柄，
+                    // 跨 Update() 依然有效，所以解析一次就够。
+                    condition = () => member.boolValue;
+                    return true;
+                }
+            }
+
+            // 第二、三级：反射成员与方法。同样在构建期解析一次，绘制期只有委托调用。
+            if (!ReflectedMemberResolver.TryResolveBooleanCondition(
+                    property?.Owner?.Targets, conditionName, out condition, out var reason))
             {
                 Warn(property, conditionName, reason);
                 return false;
             }
 
-            // 每帧只读一个 bool，不分配、不查找——SerializedProperty 是活句柄，
-            // 跨 Update() 依然有效，所以解析一次就够。
-            condition = () => conditionProperty.boolValue;
             return true;
         }
 
@@ -118,8 +147,9 @@ namespace XInspector.Editor
             Debug.LogWarning(
                 $"[XInspector] 属性「{property?.Path}」上的条件「{conditionName}」无法求值：{reason}。" +
                 "条件已忽略，该属性按无条件处理。" +
-                "注意条件必须是**序列化**成员（public 字段或 [SerializeField] 私有字段），" +
-                "普通属性与方法不受支持。");
+                "条件可以是序列化成员（public 字段或 [SerializeField] 私有字段）、" +
+                "普通字段/属性，或**无参、非泛型、返回 bool** 的方法；" +
+                "写在别的对象上的 \"@other.field\" 语法不支持。");
         }
 
         #endregion

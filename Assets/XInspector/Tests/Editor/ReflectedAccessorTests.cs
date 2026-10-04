@@ -124,6 +124,55 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 强类型布尔读取器
+
+        /// <summary>
+        /// 条件的求值走的是强类型读取器——绘制路径上每帧一次，能省一次装箱就省一次。
+        /// </summary>
+        [Test]
+        public void 布尔读取器读得到活值()
+        {
+            var fixture = new AccessorFixture();
+
+            Assert.That(
+                TryCreateBoolean(nameof(AccessorFixture.Flag), out var reader, out _),
+                Is.True);
+
+            Assert.That(reader(fixture), Is.True);
+
+            fixture.Flag = false;
+
+            Assert.That(reader(fixture), Is.False, "读的该是活值。");
+        }
+
+        /// <summary>
+        /// 非 bool 成员被拒绝，且原因说得出来。
+        /// <para>
+        /// 控制项是同夹具的 bool 成员**被接受**——否则「拒绝」可能只是因为整个入口恒失败。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void 布尔读取器拒绝非布尔成员()
+        {
+            Assert.That(TryCreateBoolean("_secret", out var reader, out var reason), Is.False);
+            Assert.That(reader, Is.Null);
+            Assert.That(reason, Does.Contain("不是 bool"));
+            Assert.That(TryCreateBoolean(nameof(AccessorFixture.Flag), out _, out _), Is.True);
+        }
+
+        /// <summary>索引器、只写属性同样被拒绝——两个入口共用同一段形状校验。</summary>
+        [Test]
+        public void 布尔读取器与装箱入口的拒绝面一致()
+        {
+            Assert.That(TryCreateBoolean("Item", out _, out var indexerReason), Is.False);
+            Assert.That(indexerReason, Does.Contain("索引器"));
+
+            Assert.That(TryCreateBoolean("WriteOnly", out _, out var writeOnlyReason), Is.False);
+            Assert.That(writeOnlyReason, Does.Contain("只写"));
+        }
+
+        #endregion
+
         #region 必须拒绝
 
         /// <summary>
@@ -206,6 +255,22 @@ namespace XInspector.Tests.Editor
             return ReflectedAccessor.TryCreate(members[0], out accessor, out reason);
         }
 
+        /// <summary>按名取夹具上的成员并试着编译成强类型布尔读取器。</summary>
+        /// <param name="name">成员名。</param>
+        /// <param name="reader">编译出的读取器。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        private static bool TryCreateBoolean(string name, out Func<object, bool> reader, out string reason)
+        {
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static |
+                                       BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            var members = typeof(AccessorFixture).GetMember(name, Flags);
+            Assert.That(members, Is.Not.Empty, $"夹具上没有名叫 {name} 的成员。");
+
+            return ReflectedAccessor.TryCreateBooleanReader(members[0], out reader, out reason);
+        }
+
         /// <summary>取结构体夹具上的成员并试着编译。</summary>
         /// <param name="name">成员名。</param>
         /// <param name="accessor">编译出的访问器。</param>
@@ -226,6 +291,9 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>静态计数——用来验证静态成员的目标无关性。</summary>
         public static int StaticCount = 5;
+
+        /// <summary>布尔字段——条件的求值走的就是这条。</summary>
+        public bool Flag = true;
 
         /// <summary>私有字段。</summary>
         private int _secret = 41;

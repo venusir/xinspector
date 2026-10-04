@@ -88,45 +88,8 @@ namespace XInspector.Editor
         {
             accessor = null;
 
-            if (member == null)
+            if (!TryBuild(member, out var body, out var instance, out var valueType, out var isStatic, out reason))
             {
-                reason = "成员为 null";
-                return false;
-            }
-
-            var instance = Expression.Parameter(typeof(object), "target");
-            Expression body;
-            Type valueType;
-            bool isStatic;
-
-            if (member is FieldInfo field)
-            {
-                valueType = field.FieldType;
-                isStatic = field.IsStatic;
-                body = Expression.Field(isStatic ? null : Convert(instance, field.DeclaringType), field);
-            }
-            else if (member is PropertyInfo property)
-            {
-                if (property.GetIndexParameters().Length > 0)
-                {
-                    reason = "它是索引器（带参数），没有「一个目标对应一个值」的语义";
-                    return false;
-                }
-
-                var getter = property.GetGetMethod(true);
-                if (getter == null)
-                {
-                    reason = "它是只写属性，读不到值";
-                    return false;
-                }
-
-                valueType = property.PropertyType;
-                isStatic = getter.IsStatic;
-                body = Expression.Property(isStatic ? null : Convert(instance, property.DeclaringType), property);
-            }
-            else
-            {
-                reason = $"它既不是字段也不是属性（{member.MemberType}）";
                 return false;
             }
 
@@ -141,7 +104,49 @@ namespace XInspector.Editor
             }
             catch (Exception exception)
             {
-                reason = $"无法为它编译取值委托：{exception.Message}";
+                reason = Describe(exception);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 编译一个**强类型**的 bool 读取器。
+        /// </summary>
+        /// <param name="member">字段或属性，必须是 <c>bool</c>。</param>
+        /// <param name="reader">编译出的读取器；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>条件的求值发生在绘制路径上、每帧一次</b>，而 <see cref="Read"/> 的返回值要装箱。
+        /// 那条路能省一次分配就省一次——这与 <c>ValueSnapshot</c> 为 <c>[OnValueChanged]</c>
+        /// 按类型取值而不走 <c>boxedValue</c> 是同一条理由。
+        /// 别的调用方（只读展示）仍走 <see cref="Read"/>：那里每帧本来就要拼一个字符串，
+        /// 再多一个箱子没有意义。
+        /// </remarks>
+        public static bool TryCreateBooleanReader(MemberInfo member, out Func<object, bool> reader, out string reason)
+        {
+            reader = null;
+
+            if (!TryBuild(member, out var body, out var instance, out var valueType, out _, out reason))
+            {
+                return false;
+            }
+
+            if (valueType != typeof(bool))
+            {
+                reason = $"它是 {valueType.Name}，不是 bool";
+                return false;
+            }
+
+            try
+            {
+                reader = Expression.Lambda<Func<object, bool>>(body, instance).Compile();
+                reason = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                reason = Describe(exception);
                 return false;
             }
         }
@@ -159,6 +164,81 @@ namespace XInspector.Editor
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// 校验成员形状并搭出访问表达式的骨架。
+        /// </summary>
+        /// <param name="member">字段或属性。</param>
+        /// <param name="body">取值表达式的本体。</param>
+        /// <param name="instance">目标形参。</param>
+        /// <param name="valueType">成员的值类型。</param>
+        /// <param name="isStatic">是否为静态成员。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>形状可用返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 两个入口（装箱版与强类型版）共用这一段，是为了让「哪些成员读得了」
+        /// 只有一个答案——分成两份的话，早晚会出现「展示读得到、条件读不到」这种怪事。
+        /// </remarks>
+        private static bool TryBuild(
+            MemberInfo member,
+            out Expression body,
+            out ParameterExpression instance,
+            out Type valueType,
+            out bool isStatic,
+            out string reason)
+        {
+            body = null;
+            instance = Expression.Parameter(typeof(object), "target");
+            valueType = null;
+            isStatic = false;
+            reason = null;
+
+            if (member == null)
+            {
+                reason = "成员为 null";
+                return false;
+            }
+
+            if (member is FieldInfo field)
+            {
+                valueType = field.FieldType;
+                isStatic = field.IsStatic;
+                body = Expression.Field(isStatic ? null : Convert(instance, field.DeclaringType), field);
+                return true;
+            }
+
+            if (member is PropertyInfo property)
+            {
+                if (property.GetIndexParameters().Length > 0)
+                {
+                    reason = "它是索引器（带参数），没有「一个目标对应一个值」的语义";
+                    return false;
+                }
+
+                var getter = property.GetGetMethod(true);
+                if (getter == null)
+                {
+                    reason = "它是只写属性，读不到值";
+                    return false;
+                }
+
+                valueType = property.PropertyType;
+                isStatic = getter.IsStatic;
+                body = Expression.Property(isStatic ? null : Convert(instance, property.DeclaringType), property);
+                return true;
+            }
+
+            reason = $"它既不是字段也不是属性（{member.MemberType}）";
+            return false;
+        }
+
+        /// <summary>把编译异常转成一句可拼进告警的中文原因。</summary>
+        /// <param name="exception">异常。</param>
+        /// <returns>原因文本。</returns>
+        private static string Describe(Exception exception)
+        {
+            return $"无法为它编译取值委托：{exception.Message}";
+        }
 
         /// <summary>
         /// 为实例成员把 <c>object</c> 形参转成成员的声明类型。
