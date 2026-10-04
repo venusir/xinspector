@@ -12,7 +12,8 @@ namespace XInspector
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>条件对象必须是序列化成员。</b> 本包的值后端是 <see cref="UnityEngine.SerializedObject"/>，
+    /// <b>条件对象必须是序列化成员。</b> 本包的值后端是 <c>SerializedObject</c>
+    /// （UnityEditor 的类型，Runtime 侧只能当名字提，不能写 cref），
     /// 因此普通属性、方法、静态成员都读不到——那需要一套反射后端，尚未实现。
     /// </para>
     /// <para>

@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+### Docs — 对照表收束与一处 XML 死链
+
+- `OdinGap.md` 状态翻新与总账重算：**108 = 48 已实现 + 47 缺 + 9 不做 + 4 不需要**。
+  新增「⛔ 不做」态——它是「核对过签名、评估后不做」，与「缺」（做得了、只是还没做）分开计，
+  理由逐条收在 `Pipeline.md` 第五节。
+- `Roadmap.md`：第三节（分组族）标记已做，并记下那两处既有缺陷的教训——
+  **说「纯加法」之前先确认既有基座没有洞**；第七节（折叠持久化）复核后结论不变，
+  补上「存哪」之外的坎：键怎么构成（分组路径跨类型会重名，带类型名又会被重命名打断）。
+- 包 README 的「已知限制」更正：此前那句「没有 `[ShowIf]` / `[FoldoutGroup]`」与下一条
+  「条件族只做了三分之一（含 `[ShowIf]`）」自相矛盾，且分组族现已落地。
+- 顺手修掉一处 **XML 文档死链**：`ConditionalAttributes.cs` 里
+  `<see cref="UnityEngine.SerializedObject"/>` 指向不存在的命名空间
+  （`SerializedObject` 是 UnityEditor 的类型，Runtime 侧无法解析）。
+- 本机跑不了文档门禁第 1 项（它要求 Unity 生成的 `.csproj`，那只在 GUI 编辑器里生成）。
+  于是搭了一个**仓库外的临时 csproj**：把 `Runtime/**` 与 `Editor/**` 一起编译、
+  引用 Unity 安装目录的模块程序集与 `UnityEditor.dll`、设 `DocumentationFile`——
+  **全包 0 告警**，上面那处死链就是它揪出来的。搭法与它验不了什么记进了
+  `Workflow.md` §一；**门禁本身仍以 GUI 生成的 csproj 为准**。
+
 ### Added — L1b：开关分组（ToggleGroup）
 
 - **`[ToggleGroup("showAdvanced", groupTitle: "高级选项")]`**：组标题前一个复选框，关掉时

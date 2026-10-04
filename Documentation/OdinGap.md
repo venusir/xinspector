@@ -9,12 +9,12 @@
 > Validation 下，`[TableList]` 同时在 Type Specifics 与 Collections 下）。
 > 下面所有数字都用**去重后**的 109。
 
-**本项目的家底：**
+**本项目的家底（2026-10-04）：**
 
-- 公开特性 **11 个**：`[Title]`、`[BoxGroup]`、
-  `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
-  `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`
-- 自定义分组的公开基类 `PropertyGroupAttribute`
+- 公开特性 **48 个**（清单见文末「总账」），分五族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制，另有调试 1 个
+- 自定义分组的公开基类 `PropertyGroupAttribute`（外加一个自建枚举 `TitleAlignments`）
+- 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
 - 窗口基类 1 个（`XInspectorEditorWindow`，只画自身序列化字段）
 
 ---
@@ -39,8 +39,8 @@
 | 层 | 缺口 | 前提 |
 |---|---|---|
 | **L0** | Unity 原生装饰器：`[Range]` `[Space]` `[TextArea]` `[Multiline]` `[Header]` `[Tooltip]` | **无需工作**——由 `PropertyField` 绘制。✅ 结构侧已实测（2026-10-03），见文末「L0 的验证记录」 |
-| **L1a** | 约 21 个十几行的特性，见下 | **零新基础设施** |
-| **L1b** | 分组族与重型值绘制器，见下 | 同层，但有实打实的工作量 |
+| **L1a** | 21 个十几行的特性 | **零新基础设施** ✅ **已清完**（2026-10-04） |
+| **L1b** | 分组族与重型值绘制器 | 同层，但有实打实的工作量。**分组族 6 个已落地**（2026-10-04）；重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]` 等）与路径选择器仍缺 |
 | **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做 |
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`） |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持 |
@@ -59,9 +59,16 @@
 **表的组织：** 按 Odin 自己的分类，但**每个特性只登记一次**（记在它首次出现的分类下），
 否则 Odin 的重复计数会让总账对不上。Odin 也把它归入其它类时在「另见」列注明。
 
-状态三种：**✅ 已实现**、**❌ 缺**、**➖ 不需要**（Unity 自己的，由 `PropertyField` 绘制）。
+状态四种：**✅ 已实现**、**❌ 缺**、**⛔ 不做**（已评估并记下理由，见「本轮不实现」一节）、
+**➖ 不需要**（Unity 自己的，由 `PropertyField` 绘制）。
 标 ➖ 的那 4 项曾建立在一条未验证的推断上，已于 **2026-10-03 做过结构侧实测**
 （见文末「L0 的验证记录」）。
+
+> **2026-10-04 更新：** L1a 与 L1b 分组族已整块落地（那一轮实现了 27 个特性：
+> L1a 剩余 21 个 + 分组族 6 个）。
+> 标 ⛔ 的 9 项是那一轮**核对签名后决定不做**的，理由逐条记在
+> [Modules/Pipeline.md](Modules/Pipeline.md) 第五节——「不做」也是结论，不写下来
+> 就会被下一轮重新猜一遍。
 
 ### Type Specifics（24）
 
@@ -69,56 +76,56 @@
 |---|---|---|
 | `[AssetList]` | ❌ 缺 | L1b |
 | `[AssetSelector]` | ❌ 缺 | L1b |
-| `[ChildGameObjectsOnly]` | ❌ 缺 | L1a（另见 Validation） |
+| `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
 | `[ColorPalette]` | ❌ 缺 | L1b |
-| `[DisplayAsString]` | ❌ 缺 | L1a |
-| `[EnumPaging]` | ❌ 缺 | L1a（另见 Buttons） |
-| `[EnumToggleButtons]` | ❌ 缺 | L1a（另见 Buttons） |
+| `[DisplayAsString]` | ✅ 已实现 | — |
+| `[EnumPaging]` | ✅ 已实现 | — |
+| `[EnumToggleButtons]` | ✅ 已实现 | — |
 | `[FilePath]` | ❌ 缺 | L1b（另见 Validation） |
 | `[FolderPath]` | ❌ 缺 | L1b（另见 Validation） |
 | `[HideInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
 | `[HideInTables]` | ❌ 缺 | 依赖 `[TableList]` |
-| `[HideMonoScript]` | ❌ 缺 | L1a |
-| `[HideNetworkBehaviourFields]` | ❌ 缺 | L1a |
+| `[HideMonoScript]` | ✅ 已实现 | — |
+| `[HideNetworkBehaviourFields]` | ⛔ 不做 | 目标类型（UNet `NetworkBehaviour`）在 Unity 6 已不存在，只能做成静默 no-op |
 | `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
 | `[InlineEditor]` | ❌ 缺 | L1b |
-| `[MultiLineProperty]` | ❌ 缺 | L1a |
+| `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ❌ 缺 | L1b |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
 | `[TypeDrawerSettings]` | ❌ 缺 | L1b |
-| `[SceneObjectsOnly]` | ❌ 缺 | L1a（另见 Validation） |
+| `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ❌ 缺 | L6（另见 Collections） |
 | `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
-| `[Toggle]` | ❌ 缺 | L1a |
-| `[ToggleLeft]` | ❌ 缺 | L1a |
+| `[Toggle]` | ✅ 已实现 | — |
+| `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 0 / 缺 24**
+**小计：已实现 9 / 缺 14 / 不做 1**
 
 ### Essentials（19）
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[AssetsOnly]` | ❌ 缺 | L1a（另见 Validation） |
-| `[CustomValueDrawer]` | ❌ 缺 | L1a |
-| `[DelayedProperty]` | ❌ 缺 | L1a |
+| `[AssetsOnly]` | ✅ 已实现 | — |
+| `[CustomValueDrawer]` | ⛔ 不做 | 唯一形态是 resolved string（方法调用）——归 L5 性质 |
+| `[DelayedProperty]` | ✅ 已实现 | — |
 | **`[DetailedInfoBox]`** | **✅ 已实现** | — |
-| `[EnableGUI]` | ❌ 缺 | L1a |
+| `[EnableGUI]` | ✅ 已实现 | — |
 | **`[GUIColor]`** | **✅ 已实现** | — |
 | **`[HideLabel]`** | **✅ 已实现** | — |
 | `[PropertyOrder]` | ❌ 缺 | L4 |
 | **`[PropertySpace]`** | **✅ 已实现** | — |
 | **`[ReadOnly]`** | **✅ 已实现** | — |
-| `[Required]` | ❌ 缺 | L1a（另见 Validation） |
-| `[RequiredIn]` | ❌ 缺 | L1a（另见 Validation） |
+| `[Required]` | ✅ 已实现 | — |
+| `[RequiredIn]` | ⛔ 不做 | 需 `PrefabKind` + 预制体探测 + 校验消息层，与 `[DisallowModificationsIn]` 成对推迟 |
 | `[Searchable]` | ❌ 缺 | L1b |
 | `[ShowInInspector]` | ❌ 缺 | L3 |
 | **`[Title]`** | **✅ 已实现** | — |
 | `[TypeFilter]` | ❌ 缺 | L1b |
-| `[TypeInfoBox]` | ❌ 缺 | L1a |
-| `[ValidateInput]` | ❌ 缺 | L1a（另见 Validation） |
+| `[TypeInfoBox]` | ✅ 已实现 | — |
+| `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ❌ 缺 | L1b（另见 Collections） |
 
-**小计：已实现 1 / 缺 18**
+**小计：已实现 11 / 缺 5 / 不做 3**
 
 ### Validation（15）
 
@@ -126,15 +133,15 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[DisallowModificationsIn]` | ❌ 缺 | L1a |
-| `[MaxValue]` | ❌ 缺 | L1a（另见 Numbers） |
+| `[DisallowModificationsIn]` | ⛔ 不做 | 同 `[RequiredIn]`：共用一块尚不存在的预制体探测基础设施 |
+| `[MaxValue]` | ✅ 已实现 | — |
 | `[MinMaxSlider]` | ❌ 缺 | L1b（另见 Numbers） |
-| `[MinValue]` | ❌ 缺 | L1a（另见 Numbers） |
-| `[PropertyRange]` | ❌ 缺 | L1a（另见 Numbers） |
+| `[MinValue]` | ✅ 已实现 | — |
+| `[PropertyRange]` | ✅ 已实现 | — |
 | `[Range]` | ➖ 不需要 | Unity 自己的（另见 Unity） |
 | `[RequiredListLength]` | ❌ 缺 | L6 |
 
-**小计：已实现 0 / 缺 6 / 不需要 1**
+**小计：已实现 3 / 缺 2 / 不做 1 / 不需要 1**
 
 ### Groups（12）
 
@@ -143,17 +150,17 @@
 | **`[BoxGroup]`** | **✅ 已实现** | 含类级分发 |
 | `[Button]` | ❌ 缺 | L5（另见 Buttons） |
 | `[ButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
-| `[FoldoutGroup]` | ❌ 缺 | L1b |
+| `[FoldoutGroup]` | ✅ 已实现 | — |
 | `[HideIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
-| `[HorizontalGroup]` | ❌ 缺 | L1b |
+| `[HorizontalGroup]` | ✅ 已实现 | — |
 | `[ResponsiveButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
 | `[ShowIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
-| `[TabGroup]` | ❌ 缺 | L1b |
-| `[TitleGroup]` | ❌ 缺 | L1b |
-| `[ToggleGroup]` | ❌ 缺 | L1b |
-| `[VerticalGroup]` | ❌ 缺 | L1b |
+| `[TabGroup]` | ✅ 已实现 | — |
+| `[TitleGroup]` | ✅ 已实现 | — |
+| `[ToggleGroup]` | ✅ 已实现 | — |
+| `[VerticalGroup]` | ✅ 已实现 | — |
 
-**小计：已实现 1 / 缺 11**
+**小计：已实现 7 / 缺 5**
 
 ### Buttons（6）
 
@@ -170,8 +177,8 @@
 | 特性 | 状态 | 层 |
 |---|---|---|
 | `[CustomContextMenu]` | ❌ 缺 | L5 |
-| `[DisableContextMenu]` | ❌ 缺 | L1a |
-| `[DrawWithUnity]` | ❌ 缺 | L1a |
+| `[DisableContextMenu]` | ⛔ 不做 | 右键菜单由 `PropertyField` 掌管、没有现成开关，需先原型验证可拦截 |
+| `[DrawWithUnity]` | ✅ 已实现 | — |
 | `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
 | **`[Indent]`** | **✅ 已实现** | — |
 | **`[InfoBox]`** | **✅ 已实现** | — |
@@ -189,7 +196,7 @@
 | **`[PropertyTooltip]`** | **✅ 已实现** | — |
 | **`[SuffixLabel]`** | **✅ 已实现** | — |
 
-**小计：已实现 0 / 缺 19**
+**小计：已实现 7 / 缺 11 / 不做 1**
 
 ### Collections（6）
 
@@ -232,11 +239,11 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[ProgressBar]` | ❌ 缺 | L1a |
-| `[Unit]` | ❌ 缺 | L1a |
-| `[Wrap]` | ❌ 缺 | L1a |
+| `[ProgressBar]` | ✅ 已实现 | — |
+| `[Unit]` | ⛔ 不做 | 需自建约 200 成员的 `Units` 枚举与换算引擎，独立大件 |
+| `[Wrap]` | ✅ 已实现 | — |
 
-**小计：已实现 0 / 缺 3**
+**小计：已实现 2 / 缺 0 / 不做 1**
 
 ### Unity（4）
 
@@ -256,32 +263,51 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[ShowDrawerChain]` | ❌ 缺 | L1a |
-| `[ShowPropertyResolver]` | ❌ 缺 | L1a |
+| `[ShowDrawerChain]` | ✅ 已实现 | — |
+| `[ShowPropertyResolver]` | ⛔ 不做 | 本包只有一个值后端，没有「property resolver」这个概念，做了是编造。等反射后端出现再说 |
 
-**小计：已实现 0 / 缺 2**
+**小计：已实现 1 / 缺 0 / 不做 1**
 
 ### Meta（1）
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[SuppressInvalidAttributeError]` | ❌ 缺 | L1a |
+| `[SuppressInvalidAttributeError]` | ⛔ 不做 | 当前没有「特性用在不该用的类型上」的告警层可抑制，声明它等于静默 no-op |
 
-**小计：已实现 0 / 缺 1**
+**小计：已实现 0 / 缺 0 / 不做 1**
 
 ### 总账
 
 ```
-108 个不重复特性 = 10 已实现 + 94 缺 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 48 已实现 + 47 缺 + 9 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 10 个：`[Title]`、`[BoxGroup]`、`[ShowIf]`、`[HideIf]`、`[EnableIf]`、`[DisableIf]`、
-`[HideInEditorMode]`、`[HideInPlayMode]`、`[DisableInEditorMode]`、`[DisableInPlayMode]`。
+已实现的 48 个：
+
+- **分组与条件**（16）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
+  `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
+  `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`
+- **状态与门控**（6）：`[ReadOnly]` `[EnableGUI]` `[Toggle]` `[HideMonoScript]`
+  `[TypeInfoBox]` `[DrawWithUnity]`
+- **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
+  `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
+- **值绘制**（9）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+  `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`
+- **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
+  `[ChildGameObjectsOnly]`
+- **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
 
-**「缺 94 个」不等于「94 份工作量」**：其中约 40 个落在 L1a，每个十几行、零新基础设施。
-真正需要新层的只有 L3 / L4 / L5 / L6 / L7 那几块，而它们各自的特性数远少于 L1a。
+**标 ⛔ 的 9 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]` `[RequiredIn]`
+`[DisallowModificationsIn]` `[HideNetworkBehaviourFields]` `[ShowPropertyResolver]`
+`[SuppressInvalidAttributeError]` `[DisableContextMenu]`）**不是「还没做」，是「核对过签名、
+评估后不做」**——逐条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节。
+它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
+
+**「缺 47 个」也不等于「47 份工作量」**：其中真正需要新层的集中在
+L3（反射后端）、L5（回调与按钮）、L6（集合自绘）、L7（Odin 的另一条产品线）——
+L1a 与 L1b 分组族这两块**零新基础设施**的已经清完。
 
 ### 窗口的 1:1
 
@@ -440,15 +466,23 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
 
 ## 推荐顺序
 
-1. **L1a**——最便宜、见效最快，且**不需要任何新机制**。一次把日常观感拉上一个台阶。
-2. **L1b 的分组族**——架构红利最大的一块：继承基类 + 写 drawer，构建期不动。
-3. **L3 反射后端**——它是 L2 剩余项、L5 全部、以及窗口一半能力的前置。
-4. **L5**——`[Button]` 是使用方最常问「为什么没有」的一个。
+1. ~~**L1a**~~——✅ 已清完（2026-10-04）。
+2. ~~**L1b 的分组族**~~——✅ 已落地（2026-10-04）。剩下的 L1b 是重型值绘制器
+   （`[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[Searchable]` `[ValueDropdown]` 等）
+   与路径选择器（`[FilePath]` `[FolderPath]`）——它们不是「加个类」，各自是独立工作量。
+3. **L3 反射后端**——它是 L2 剩余项、L5 全部、以及窗口一半能力的前置。**下一块该做它。**
+4. **L5**——`[Button]` 是使用方最常问「为什么没有」的一个；`[CustomValueDrawer]`
+   与 `[ValidateInput]` 也归在这里（它们的唯一形态是方法调用）。
 5. **L4 / L6**——按需。
 6. **L7**——要么不做，要么当成独立产品立项。
 
-**判据是「一次投入换来多少个特性」**：L1a 与 L1b 的分组族是高杠杆（架构已就位，纯加法）；
-L3 是低杠杆但**卡着后面三层**；L7 是另一条产品线。
+**判据是「一次投入换来多少个特性」**：L1a 与 L1b 的分组族是高杠杆（架构已就位，纯加法），
+已兑现；L3 是低杠杆但**卡着后面三层**；L7 是另一条产品线。
+
+**两条经验留给下一轮**：其一，**核对签名之后再动手**——那一轮 26 个特性逐条核过，
+才敢把 9 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**（分组绘制器落在成员与
+根节点上、同路径多类型被静默丢弃），它们是设计评审读源码时发现的，不修的话六个新特性
+会各自把它放大一遍。
 
 ---
 

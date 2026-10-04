@@ -124,7 +124,10 @@ public class PlayerProfileEditor : XInspectorEditor
 - **编辑器窗口只做了「画自身序列化字段」这一种形态。** 有基类 `XInspectorEditorWindow`
   （继承后声明字段即可，见 `Editor/README.md`），但**没有** Odin 那种检视任意对象的浮空
   Inspector、字段拖拽重排、窗口内 Undo（窗口里的编辑不可撤销，用「重置」补偿）。
-- **没有数组 / 列表展开**，没有 `[ShowIf]` / `[FoldoutGroup]` / `[Button]` / `[OnValueChanged]`。
+- **没有数组 / 列表展开**，没有 `[Button]` / `[OnValueChanged]` / `[InlineEditor]`
+  / `[PreviewField]` / `[FilePath]` 这类重型绘制器。条件族已做（见下一条），
+  分组族（`[BoxGroup]` `[FoldoutGroup]` `[TabGroup]` `[TitleGroup]` `[HorizontalGroup]`
+  `[VerticalGroup]` `[ToggleGroup]`）已做。
 - **没有 `[SerializeReference]` 类型切换。**
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。

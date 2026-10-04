@@ -51,18 +51,25 @@
 
 ---
 
-## 三、剩余的分组特性 —— L1b
+## 三、分组族 —— L1b　✅ 已做（2026-10-04）
 
-`[FoldoutGroup]`、`[TabGroup]`、`[HorizontalGroup]` 等。
+`[FoldoutGroup]` `[TabGroup]` `[HorizontalGroup]` `[VerticalGroup]` `[TitleGroup]` `[ToggleGroup]`
+六个全部落地。**「不需要改构建期」这条判断兑现了**——六个特性只加了 Runtime 类与 Editor 绘制器；
+`[TabGroup]` 也用点分路径 `Tabs/Tab1` 表达子分组，没有引入 Odin 的
+`ISubGroupProviderAttribute` 机制。
 
-**该不该做：`[FoldoutGroup]` 该做，其余按需。** 它们**不需要改构建期**——
-分组装配对具体分组类型一无所知，新增一个分组特性只需：
+但落地过程中发现两处**既有缺陷**必须先修，它们与分组有关、与具体类型无关：
 
-1. 继承 `PropertyGroupAttribute`（Runtime 侧），覆写 `Combine`；
-2. 写一个 `AttributeDrawer<T>`（Editor 侧）画框。
+1. **分组绘制器配到了成员与根节点上**（链装配按特性配对、不看节点种类）——
+   症状是每个成员画两层框、类级分组继续框住整页；
+2. **同路径多类型分组被静默丢弃**，且祖先节点带哪种类型取决于声明顺序。
 
-**边界。** `[FoldoutGroup]` 需要**每属性的展开状态**，那是 `PropertyState` 的用途；
-它还需要跨会话持久化吗？见第七节。
+两处都已修（先写红的测试再修）。**教训：说「纯加法」之前先确认既有基座没有洞**——
+六个新特性会各自把同一个洞放大一遍。
+
+**剩下的 L1b 不是分组**：重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]`
+`[Searchable]` `[ValueDropdown]`）与路径选择器（`[FilePath]` `[FolderPath]`）——
+它们各自是独立工作量，没有「加个类」那么便宜。
 
 ---
 
@@ -115,11 +122,15 @@ Unity 的 `PropertyField`，验证需求真实存在再往下走。
 
 ## 七、折叠/展开状态的跨会话持久化
 
-**该不该做：暂缓。**
+**该不该做：暂缓（2026-10-04 复核，结论不变）。**
 
-现状：`[FoldoutGroup]` 尚不存在，所以还没有状态要持久化。等它来了再说，
-且要先想清楚存哪——`EditorPrefs`（按键路径，跨项目共享）、`SessionState`（不跨会话）、
-还是序列化进场景（会污染资产）。Odin 的做法是前者。
+现状：`[FoldoutGroup]` `[TabGroup]` `[ToggleGroup]` 的展开/选中状态都**只活在每棵属性树上**
+（域重载、重开 Inspector 回到初值），`[DetailedInfoBox]` 的展开状态同样如此。
+
+要跨会话就得先定存哪：`EditorPrefs`（按键路径，跨项目共享——Odin 的做法）、
+`SessionState`（不跨会话）、还是序列化进场景（会污染资产）。
+**键怎么构成**是另一道坎：分组路径在不同类型间会重名（两个类都有「基础」分组），
+得带上类型名甚至程序集名，而后者在重命名后就会失配。
 
 ---
 

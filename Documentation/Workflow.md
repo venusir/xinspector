@@ -66,6 +66,18 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
 它是**独立的一条通道**——Unity 生成的 csproj 没设 `DocumentationFile`，
 **默认编译根本不检查文档注释**，不开这一枪则写坏文档不会有任何反馈。
 
+**没有 GUI 编辑器时的变通检查（2026-10-04 用过一次）：** 门禁的第 1 项（XML 文档告警）
+可以脱离 csproj 单独验——在仓库外搭一个临时 csproj，把 `Runtime/**` 与 `Editor/**` 一起
+`<Compile Include>` 进来，`Reference` 指向 Unity 安装目录的
+`Data/Managed/UnityEngine/*.dll`（**要 `Remove` 掉里面的 `UnityEditor.CoreModule.dll`**，
+否则与 `UnityEditor.dll` 重复定义、报一片 CS0433）与 `Data/Managed/UnityEditor.dll`，
+设 `DocumentationFile` 后 `dotnet build`。全包 0 告警即可信。
+
+它验不了第 2 项（「源文件都参与了编译」——临时工程用通配符，本来就全收），
+也验不了「两个程序集分开编译」带来的可见性差异。**门禁本身仍以 GUI 生成的 csproj 为准**，
+这条只是让「没有编辑器时也能审查文档」这件事变得可得——2026-10 就是靠它揪出一处
+指向不存在命名空间的 `cref` 死链。
+
 三处本包特有的处理，改脚本时别删：
 
 - `Editor/AutoEditor/` 被排除出「是否参与编译」检查——它是宏门控的，宏关掉时

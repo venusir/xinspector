@@ -99,7 +99,7 @@ namespace XInspector
         /// </summary>
         /// <remarks>
         /// 判定依据：容器的特性由 <see cref="PropertyGroupAttribute.CloneForPath"/>
-        /// 改写路径而来，<see cref="GroupID"/> 被改成了容器路径，而
+        /// 改写路径而来，<see cref="PropertyGroupAttribute.GroupID"/> 被改成了容器路径，而
         /// <see cref="TabsGroupID"/> 因 MemberwiseClone 保持原值——两者相等即容器。
         /// </remarks>
         internal bool IsContainer => string.Equals(GroupID, TabsGroupID, StringComparison.Ordinal);
