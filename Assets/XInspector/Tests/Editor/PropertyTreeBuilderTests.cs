@@ -177,6 +177,87 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 树的归属
+
+        /// <summary>
+        /// 树里的每个节点都能回到它所属的树——**包括分组装配期才挂进来的分组节点**。
+        /// <para>
+        /// 这条是「处理器在树构造之后跑」那套顺序的地基：需要目标对象的处理器
+        /// （按钮族按名解析方法、条件族定位序列化对象）只有这一条路能拿到树。
+        /// 分组节点走的是 <c>AddChild</c> 传播，与构造期的递归回填是两条不同的路径，
+        /// 故用一棵**带分组**的树来钉。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void Build_每个节点都能回到所属的树()
+        {
+            var owner = ScriptableObject.CreateInstance<OwnershipFixture>();
+
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(owner)))
+                {
+                    var visited = 0;
+                    AssertOwnedBy(tree.Root, tree, ref visited);
+
+                    Assert.That(visited, Is.GreaterThan(2), "至少该有根、分组、成员三个节点，用例才验到了东西。");
+                    Assert.That(tree.Root.Kind, Is.EqualTo(InspectorPropertyKind.Root));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
+        }
+
+        /// <summary>目标对象列表来自序列化对象，单目标时只有一个。</summary>
+        [Test]
+        public void Build_目标对象列表与序列化对象一致()
+        {
+            var serializedObject = new SerializedObject(_target);
+
+            using (var tree = PropertyTree.Create(serializedObject))
+            {
+                Assert.That(tree.Targets.Count, Is.EqualTo(1));
+                Assert.That(tree.Targets[0], Is.SameAs(_target));
+            }
+        }
+
+        /// <summary>多选时列表含全部目标——按钮「对每个目标各调用一次」靠的就是它。</summary>
+        [Test]
+        public void Build_多选时目标列表含全部目标()
+        {
+            var second = ScriptableObject.CreateInstance<BuilderFixture>();
+
+            try
+            {
+                var serializedObject = new SerializedObject(new Object[] { _target, second });
+
+                using (var tree = PropertyTree.Create(serializedObject))
+                {
+                    Assert.That(tree.Targets.Count, Is.EqualTo(2));
+                    Assert.That(tree.Targets, Has.Member(_target));
+                    Assert.That(tree.Targets, Has.Member(second));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(second);
+            }
+        }
+
+        /// <summary>默认记 Undo；窗口路径由宿主置为假（见 PropertyTreeHostTests）。</summary>
+        [Test]
+        public void Build_默认记Undo()
+        {
+            using (var tree = PropertyTree.Create(new SerializedObject(_target)))
+            {
+                Assert.That(tree.UndoEnabled, Is.True);
+            }
+        }
+
+        #endregion
+
         #region 参数防御
 
         /// <summary>
@@ -197,6 +278,21 @@ namespace XInspector.Tests.Editor
         private PropertyTree BuildTree()
         {
             return PropertyTree.Create(new SerializedObject(_target));
+        }
+
+        /// <summary>递归断言每个节点都指向同一棵树，并数一数总共走了几个节点。</summary>
+        /// <param name="node">当前节点。</param>
+        /// <param name="expected">期望所属的树。</param>
+        /// <param name="visited">累计访问数。</param>
+        private static void AssertOwnedBy(InspectorProperty node, PropertyTree expected, ref int visited)
+        {
+            visited++;
+            Assert.That(node.Owner, Is.SameAs(expected), $"节点「{node.Path}」没有指回它所属的树。");
+
+            for (var i = 0; i < node.Children.Count; i++)
+            {
+                AssertOwnedBy(node.Children[i], expected, ref visited);
+            }
         }
 
         /// <summary>取根下所有成员的路径。</summary>
@@ -241,5 +337,16 @@ namespace XInspector.Tests.Editor
 
         /// <summary>读一下私有字段，避免 CS0414 告警。</summary>
         public string Second => _second;
+    }
+
+    /// <summary>
+    /// 验证「每个节点都能回到所属的树」用的资产：刻意**带一个分组**，
+    /// 好让断言覆盖到分组装配期才挂进来的节点（它们走 <c>AddChild</c> 传播，与构造期回填不是同一条路）。
+    /// </summary>
+    internal sealed class OwnershipFixture : ScriptableObject
+    {
+        /// <summary>归入一个分组，于是树里会多出一个分组节点。</summary>
+        [BoxGroup("组")]
+        public int grouped;
     }
 }

@@ -67,14 +67,28 @@ namespace XInspector.Editor
         /// <param name="property">起点。</param>
         /// <returns>序列化对象；整棵子树都没有值入口时返回 <c>null</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 不能假定 <c>Children[0]</c>：页签容器的第一个孩子是页节点，同样是分组、
         /// 同样没有值入口。
+        /// </para>
+        /// <para>
+        /// <b>先走 <see cref="InspectorProperty.Owner"/>。</b> 方法节点（<c>[Button]</c> 一族）
+        /// 既没有值入口也没有子节点，只靠向下找会一路 null，症状是「按钮上的条件静默失效」
+        /// 加上每次建树一条「取不到序列化对象」的告警。
+        /// </para>
         /// </remarks>
         public static SerializedObject FindSerializedObject(InspectorProperty property)
         {
             if (property == null)
             {
                 return null;
+            }
+
+            // 树是权威来源：它直接持有构造它的那个序列化对象。
+            var owner = property.Owner;
+            if (owner != null)
+            {
+                return owner.SerializedObject;
             }
 
             var entry = property.ValueEntry;

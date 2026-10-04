@@ -137,6 +137,10 @@ namespace XInspector.Editor
             {
                 _serializedObject = new SerializedObject(target);
                 _tree = PropertyTree.Create(_serializedObject, _memberFilter);
+
+                // 窗口内编辑不进 Undo——本包对窗口的一贯约定。绘制器里的写操作
+                // （眼下是按钮调用）据此不记撤销步。
+                _tree.UndoEnabled = false;
                 return true;
             }
             catch (Exception exception)

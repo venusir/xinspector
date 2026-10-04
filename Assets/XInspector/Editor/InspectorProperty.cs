@@ -110,10 +110,26 @@ namespace XInspector.Editor
         /// <remarks>
         /// 构建期存下来供特性处理器读取**成员自身**的特性——处理器拿到的是一个节点，
         /// 而它要判断的可能是「这个成员上有没有某个特性」，那件事只有 <see cref="MemberInfo"/> 知道。
-        /// 用 <see cref="MemberInfo"/> 而非 <see cref="FieldInfo"/>：眼下成员都是字段，
-        /// 但普通属性进来时不该再改一次签名。
+        /// 用 <see cref="MemberInfo"/> 而非 <see cref="FieldInfo"/>：成员既有字段也有方法
+        /// （<c>[Button]</c> 一族），按 <see cref="MemberInfo"/> 存就不必为后者再改一次签名。
         /// </remarks>
         internal MemberInfo Member { get; set; }
+
+        /// <summary>
+        /// 本节点所属的树。根节点之外都靠构建期回填，第三方不应读写。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>为什么需要它。</b> 绘制签名只有「属性 + 特性 + 标签」三样（给全部绘制器加一个上下文
+        /// 已被否决），所以需要树级信息（目标对象列表、是否记 Undo）的绘制器只能沿节点往回找。
+        /// </para>
+        /// <para>
+        /// <b>两个回填点，缺一不可。</b> 树在处理器之前就构造好（处理器需要目标对象才能工作），
+        /// 彼时子树只含根与成员——<see cref="PropertyTree"/> 的构造递归回填它们；
+        /// 分组节点是之后的分组装配期才挂进来的，靠 <see cref="AddChild"/> 从父节点继承。
+        /// </para>
+        /// </remarks>
+        internal PropertyTree Owner { get; set; }
 
         /// <summary>
         /// 当前是否可见。等价于 <c>State.IsVisible</c>，为绘制器提供便利。
@@ -201,9 +217,13 @@ namespace XInspector.Editor
         #region Internal
 
         /// <summary>
-        /// 追加一个子节点，并回填其父引用。
+        /// 追加一个子节点，并回填其父引用与所属的树。
         /// </summary>
         /// <param name="child">子节点。</param>
+        /// <remarks>
+        /// 顺带回填 <see cref="Owner"/> 是为了分组装配：那些节点在树构造**之后**才挂进来，
+        /// 递归回填那一步已经过去了。
+        /// </remarks>
         internal void AddChild(InspectorProperty child)
         {
             if (child == null)
@@ -212,6 +232,7 @@ namespace XInspector.Editor
             }
 
             child.Parent = this;
+            child.Owner = Owner;
             _children.Add(child);
         }
 

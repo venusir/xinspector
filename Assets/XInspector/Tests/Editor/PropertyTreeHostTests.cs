@@ -84,6 +84,22 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 宿主建出来的树**不记 Undo**——窗口内编辑不进撤销栈是本包对窗口的一贯约定，
+        /// 按钮调用这类写操作同样受它约束。
+        /// <para>
+        /// 由宿主统一置位而不是让每个绘制器自己判断：绘制器无从知道自己在哪条路径上被画，
+        /// 而宿主恰好知道。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void Attach_窗口树不记Undo()
+        {
+            Assert.That(_host.Attach(_target), Is.True);
+
+            Assert.That(_host.Tree.UndoEnabled, Is.False);
+        }
+
+        /// <summary>
         /// 换目标会重建树。
         /// </summary>
         [Test]

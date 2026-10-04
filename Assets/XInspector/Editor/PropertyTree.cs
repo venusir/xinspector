@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
+using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -20,11 +22,38 @@ namespace XInspector.Editor
         /// 构造树。由构建期调用。
         /// </summary>
         /// <param name="serializedObject">底层序列化对象。</param>
-        /// <param name="root">根节点。</param>
+        /// <param name="root">根节点，其子树须已全部成形。</param>
+        /// <remarks>
+        /// <b>构造点必须在处理器之前</b>（见 <see cref="PropertyTreeBuilder"/> 的构建顺序）：
+        /// 需要目标对象的处理器，只能经 <see cref="InspectorProperty.Owner"/> 拿到树。
+        /// 因此这里要求「子树已成形」——分组装配会把新节点挂进来，但那些节点只被挂链，
+        /// 不再跑处理器。
+        /// </remarks>
         internal PropertyTree(SerializedObject serializedObject, InspectorProperty root)
         {
             SerializedObject = serializedObject ?? throw new ArgumentNullException(nameof(serializedObject));
             Root = root ?? throw new ArgumentNullException(nameof(root));
+
+            Targets = serializedObject.targetObjects;
+            AssignOwner(root, this);
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>递归回填每个节点的 <see cref="InspectorProperty.Owner"/>。</summary>
+        /// <param name="node">起始节点。</param>
+        /// <param name="owner">所属的树。</param>
+        private static void AssignOwner(InspectorProperty node, PropertyTree owner)
+        {
+            node.Owner = owner;
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                AssignOwner(children[i], owner);
+            }
         }
 
         #endregion
@@ -94,6 +123,25 @@ namespace XInspector.Editor
         /// 根节点。
         /// </summary>
         public InspectorProperty Root { get; }
+
+        /// <summary>
+        /// 本树正在检视的全部目标对象（多选时不止一个）。
+        /// </summary>
+        /// <remarks>
+        /// 构造时从 <see cref="UnityEditor.SerializedObject.targetObjects"/> 取一次并缓存：
+        /// 目标集合在树的存活期内不会变（选中项一变，编辑器就重建整棵树）。
+        /// </remarks>
+        internal IReadOnlyList<Object> Targets { get; }
+
+        /// <summary>
+        /// 绘制器发起的写操作是否记入 Undo。默认 <c>true</c>；窗口路径由宿主置为 <c>false</c>。
+        /// </summary>
+        /// <remarks>
+        /// 「窗口内编辑不进 Undo」是本包对窗口的一贯约定：窗口是工具面板，
+        /// 它上面的改动不该混进场景的撤销栈里。按钮调用也是写操作，同样受这条约束——
+        /// 否则在窗口里点一下，场景里按 Ctrl+Z 会撤销到一个用户看不见的地方。
+        /// </remarks>
+        internal bool UndoEnabled { get; set; } = true;
 
         /// <summary>
         /// 绘制整棵树。
