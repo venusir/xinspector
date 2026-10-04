@@ -180,22 +180,51 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 不记 Undo 时（窗口路径）撤销栈里没有这一步。
+        /// 窗口路径（<c>undoEnabled = false</c>）的改动**撤销收不回去**。
         /// <para>
-        /// 判据用**当前撤销组的名字**：记了就会是我们给的那个名字，
-        /// 没记就还是上一步的名字。比「组号有没有变」可靠——<c>RecordObjects</c> 是往
-        /// 当前组里追加记录，组号本来就可能不变。
+        /// <b>判据不是 <c>Undo.GetCurrentGroupName()</c>。</b> 那条路看着对，其实恒真：
+        /// 组名只在显式 <c>SetCurrentGroupName</c> 之后才有，<c>RecordObjects</c> 不会给它命名，
+        /// 于是「没记时组名不等于我们给的名字」在任何情况下都成立——一个什么都测不到的断言。
+        /// 这里改成可观测的判据：**先记一步已知可撤销的**（撤销栈因此非空、行为确定），
+        /// 再来一步不记的，然后撤一次，看收回的是哪一步。
         /// </para>
         /// </summary>
         [Test]
-        public void 不记Undo时撤销栈无此步()
+        public void 不记Undo时的改动撤销收不回去()
         {
             var method = Method(nameof(InvocationFixture.Bump));
 
+            MethodInvoker.Invoke(new[] { method }, new Object[] { _first }, null, true, "记一步");
             MethodInvoker.Invoke(new[] { method }, new Object[] { _first }, null, false, "点按钮");
 
-            Assert.That(_first.calls, Is.EqualTo(1));
-            Assert.That(Undo.GetCurrentGroupName(), Is.Not.EqualTo("点按钮"));
+            Assert.That(_first.calls, Is.EqualTo(2));
+
+            Undo.PerformUndo();
+
+            // 收回的是**第一步之前**的状态。若第二步也被记了，撤销会停在 1。
+            Assert.That(_first.calls, Is.EqualTo(0), "收回的该是记过 Undo 的那一步，而不是后一步。");
+        }
+
+        /// <summary>
+        /// 目标是普通对象、且开了 Undo 时，方法照调、也不抛。
+        /// <para>
+        /// 反射树上的按钮走的就是这条路径。<c>Undo.RecordObjects</c> 只认
+        /// <see cref="UnityEngine.Object"/>，对 POCO 无从下手（类型系统就挡着，
+        /// 那正是「<c>is Object[]</c> 判断」想表达的语义）；而按钮本身该照常可点——
+        /// 否则「POCO 窗口里有按钮却点不动」又是一个新的静默面。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void 反射目标上的方法照常可调()
+        {
+            var poco = new PocoInvocationFixture();
+            var method = typeof(PocoInvocationFixture).GetMethod(nameof(PocoInvocationFixture.Bump));
+
+            Assert.That(
+                () => MethodInvoker.Invoke(new[] { method }, new object[] { poco }, null, true, "点按钮"),
+                Throws.Nothing);
+
+            Assert.That(poco.calls, Is.EqualTo(1));
         }
 
         #endregion
@@ -224,6 +253,19 @@ namespace XInspector.Tests.Editor
         }
 
         #endregion
+    }
+
+    /// <summary>反射树那种普通对象目标——刻意不是 Unity 对象。</summary>
+    internal sealed class PocoInvocationFixture
+    {
+        /// <summary>调用计数。</summary>
+        public int calls;
+
+        /// <summary>数一次。</summary>
+        public void Bump()
+        {
+            calls++;
+        }
     }
 
     /// <summary>调用测试用的资产：每个方法做一件可观测的小事。</summary>

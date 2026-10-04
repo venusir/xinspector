@@ -43,7 +43,7 @@ namespace XInspector.Editor
         /// </remarks>
         public static void Invoke(
             MethodInfo[] methods,
-            Object[] targets,
+            object[] targets,
             object[] arguments,
             bool undoEnabled,
             string undoLabel)
@@ -64,12 +64,17 @@ namespace XInspector.Editor
                 return;
             }
 
-            if (undoEnabled)
+            // 只有 Unity 目标数组才可能、才应该记 Undo。
+            //
+            // 目标列表是 object[]（反射树的目标可以是 POCO），而序列化路径传进来的
+            // 仍然是运行时的 Object[]——这个判断零分配，也不必为 POCO 造一套假的撤销语义。
+            // 顺带解决了「POCO 树也能画出按钮」这件事：按钮照常可点，只是不记撤销。
+            if (undoEnabled && targets is Object[] unityTargets && unityTargets.Length > 0)
             {
                 // 一次传整个数组：多选下点击一次只该产生**一步**撤销。
                 try
                 {
-                    Undo.RecordObjects(targets, undoLabel);
+                    Undo.RecordObjects(unityTargets, undoLabel);
                 }
                 catch (Exception exception)
                 {
@@ -81,7 +86,7 @@ namespace XInspector.Editor
 
             for (var i = 0; i < count; i++)
             {
-                if (targets[i] != null && methods[i] != null)
+                if (TargetObjects.IsAlive(targets[i]) && methods[i] != null)
                 {
                     InvokeOn(methods[i], targets[i], arguments);
                 }
@@ -96,7 +101,7 @@ namespace XInspector.Editor
         /// <param name="method">方法。</param>
         /// <param name="target">目标对象；静态方法为 <c>null</c>。</param>
         /// <param name="arguments">实参。</param>
-        private static void InvokeOn(MethodInfo method, Object target, object[] arguments)
+        private static void InvokeOn(MethodInfo method, object target, object[] arguments)
         {
             try
             {

@@ -2,7 +2,6 @@ using System;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -180,7 +179,7 @@ namespace XInspector.Editor
             public string[] Names;
 
             /// <summary>目标对象。</summary>
-            public Object[] Targets;
+            public object[] Targets;
 
             /// <summary>是否记 Undo。</summary>
             public bool UndoEnabled;

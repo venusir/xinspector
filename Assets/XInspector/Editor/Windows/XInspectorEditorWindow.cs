@@ -1,3 +1,5 @@
+using System;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -38,10 +40,9 @@ namespace XInspector.Editor
     /// 因此窗口里的改动在域重载、编辑器重启后仍在——与 Inspector 里字段的行为一致。
     /// </para>
     /// <para>
-    /// <b>只支持 Unity 会序列化的字段。</b> 值后端是 <see cref="UnityEditor.SerializedObject"/>，
-    /// 因此 <c>public</c> 字段与 <c>[SerializeField]</c> 私有字段可画，
-    /// 普通属性、静态成员、<c>[ShowInInspector]</c> 那类非序列化成员不行——这与 Inspector 侧的
-    /// 限制是同一条，不是窗口特有的。
+    /// <b>默认画窗口自身的序列化字段</b>（<c>public</c> 字段与 <c>[SerializeField]</c> 私有字段），
+    /// 外加带 <c>[ShowInInspector]</c> 的成员——普通属性、静态成员都行。
+    /// 想检视别的对象，覆写 <see cref="GetTarget"/>。
     /// </para>
     /// <para>
     /// 本类必须 <c>public</c>：Unity 经类型反射实例化 <see cref="UnityEditor.EditorWindow"/>
@@ -53,6 +54,9 @@ namespace XInspector.Editor
         #region Private Fields
 
         private PropertyTreeHost _host;
+
+        /// <summary>窗口自身的成员过滤器。缓存起来：每帧新建一个闭包是要计入绘制路径的。</summary>
+        private Func<FieldInfo, bool> _windowFilter;
 
         #endregion
 
@@ -69,17 +73,48 @@ namespace XInspector.Editor
         protected PropertyTree Tree => _host?.Tree;
 
         /// <summary>
-        /// 把窗口字段恢复为它们的 C# 初始值。
+        /// 这个窗口要检视的对象。默认是**窗口自身**。
+        /// </summary>
+        /// <returns>被检视的对象。</returns>
+        /// <remarks>
+        /// <para>
+        /// 覆写它就能检视**任意**对象——不必可序列化，甚至不必是
+        /// <see cref="UnityEngine.Object"/>：
+        /// </para>
+        /// <code>
+        /// protected override object GetTarget() =&gt; Selection.activeObject;
+        /// </code>
+        /// <para>
+        /// <b>不是 Unity 对象的目标只显示带 <c>[ShowInInspector]</c> 的成员</b>，
+        /// 且一律只读——那种目标没有序列化后端，写进去也无处保存。
+        /// </para>
+        /// <para>
+        /// <b>它每帧都会被调用，必须返回稳定引用。</b> 每次返回一个新对象会让宿主每帧重建
+        /// 整棵树——那是绘制路径上的建树，代价远超本意。
+        /// </para>
+        /// </remarks>
+        protected virtual object GetTarget()
+        {
+            return this;
+        }
+
+        /// <summary>
+        /// 把目标上的字段恢复为它们的 C# 初始值。
         /// </summary>
         /// <returns>至少重置了一项返回 <c>true</c>。</returns>
         /// <remarks>
         /// 这是「窗口内编辑不可撤销」的补偿手段，工具栏上的「重置」按钮调的就是它。
         /// 默认值的来源是一个同类型的一次性实例——它的字段还停在 C# 初始值上。
+        /// <para>
+        /// 目标不是 Unity 对象时恒返回 <c>false</c>：反射后端是只读的，没有写路径。
+        /// 工具栏那个按钮据此置灰。
+        /// </para>
         /// </remarks>
         public virtual bool ResetToDefaults()
         {
             var host = EnsureHost();
-            host.Attach(this);
+            var target = GetTarget();
+            host.Attach(target, FilterFor(target));
             return host.ResetToDefaults();
         }
 
@@ -114,7 +149,8 @@ namespace XInspector.Editor
         protected virtual void OnGUI()
         {
             var host = EnsureHost();
-            host.Attach(this);
+            var target = GetTarget();
+            host.Attach(target, FilterFor(target));
 
             DrawToolbar();
             host.Draw(position.width);
@@ -133,9 +169,14 @@ namespace XInspector.Editor
             {
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("重置", EditorStyles.toolbarButton, GUILayout.Width(60f)))
+                // 目标不是 Unity 对象时置灰：反射后端没有写路径，重置无从谈起。
+                // 置灰而不是「点了没反应」——后者正是本包最忌讳的那种现象。
+                using (new EditorGUI.DisabledScope(!EnsureHost().CanResetToDefaults))
                 {
-                    ResetToDefaults();
+                    if (GUILayout.Button("重置", EditorStyles.toolbarButton, GUILayout.Width(60f)))
+                    {
+                        ResetToDefaults();
+                    }
                 }
             }
         }
@@ -160,6 +201,27 @@ namespace XInspector.Editor
             }
 
             return _host;
+        }
+
+        /// <summary>
+        /// 按目标挑这次要用的字段过滤器。
+        /// </summary>
+        /// <param name="target">本次要检视的对象。</param>
+        /// <returns>过滤器；全收时为 <c>null</c>。</returns>
+        /// <remarks>
+        /// <b>目标是窗口自身时才用窗口过滤器。</b> 那条过滤器要求「字段声明在窗口基类及其派生
+        /// 类型上」——它是为「画窗口自身」设计的（挡掉 <see cref="UnityEditor.EditorWindow"/>
+        /// 自带的那 7 个内部字段），套到别的目标上会把目标的字段**全部拒掉**，树是空的。
+        /// 这个错误很隐蔽：不是画错，是几乎什么都不画。
+        /// </remarks>
+        private Func<FieldInfo, bool> FilterFor(object target)
+        {
+            if (!ReferenceEquals(target, this))
+            {
+                return null;
+            }
+
+            return _windowFilter ?? (_windowFilter = WindowMemberFilter.For(typeof(XInspectorEditorWindow)));
         }
 
         #endregion

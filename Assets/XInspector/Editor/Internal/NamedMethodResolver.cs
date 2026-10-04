@@ -1,7 +1,6 @@
 using System;
 using System.Reflection;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -49,7 +48,7 @@ namespace XInspector.Editor
 
             for (var i = 0; i < targets.Length; i++)
             {
-                if (targets[i] == null)
+                if (!TargetObjects.IsAlive(targets[i]))
                 {
                     missing++;
                     continue;

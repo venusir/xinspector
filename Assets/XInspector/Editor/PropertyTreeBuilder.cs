@@ -76,14 +76,27 @@ namespace XInspector.Editor
         /// <summary>
         /// 构建属性树。
         /// </summary>
-        /// <param name="serializedObject">目标序列化对象，其 <c>targetObject</c> 须非空。</param>
+        /// <param name="serializedObject">
+        /// 目标序列化对象；**反射树没有它**（目标是 POCO 之类），那时传 <c>null</c>。
+        /// </param>
+        /// <param name="targets">目标对象列表，至少一个。</param>
         /// <param name="memberFilter">
-        /// 成员过滤器；返回 <c>false</c> 的成员不建节点。传 <c>null</c> 等价于全收。
+        /// 字段过滤器；返回 <c>false</c> 的成员不建节点。传 <c>null</c> 等价于全收。
         /// </param>
         /// <returns>构建好的树。</returns>
-        public static PropertyTree Build(SerializedObject serializedObject, Func<FieldInfo, bool> memberFilter)
+        /// <remarks>
+        /// <paramref name="serializedObject"/> 为 <c>null</c> 时序列化通道整条不跑：
+        /// 没有 <see cref="SerializedObject"/> 就没有「Unity 会序列化什么」这回事，
+        /// 剩下的只有 <c>[ShowInInspector]</c> 那条反射通道与方法节点。
+        /// </remarks>
+        public static PropertyTree Build(
+            SerializedObject serializedObject,
+            object[] targets,
+            Func<FieldInfo, bool> memberFilter)
         {
-            var targetType = serializedObject.targetObject.GetType();
+            var targetType = targets != null && targets.Length > 0 && targets[0] != null
+                ? targets[0].GetType()
+                : typeof(object);
 
             var root = new InspectorProperty(
                 targetType.Name,
@@ -94,8 +107,11 @@ namespace XInspector.Editor
 
             // 类级 [HideMonoScript]：脚本槽位直接不建节点——它是「Inspector 路径刻意保留
             // m_Script 以与原生一致」那条默认行为的显式退出，两个行为各有用途。
+            // 反射树没有序列化通道，这条自然用不上。
             var hideMonoScript = root.Attributes.Has<HideMonoScriptAttribute>();
-            var members = CollectMembers(serializedObject, targetType, memberFilter, hideMonoScript);
+            var members = serializedObject != null
+                ? CollectMembers(serializedObject, targetType, memberFilter, hideMonoScript)
+                : new List<InspectorProperty>();
 
             // 反射成员接在序列化成员之后、方法节点之前：它们是「字段性质」的东西，
             // 紧跟着字段比夹在按钮之间合理。
@@ -104,7 +120,7 @@ namespace XInspector.Editor
             // SerializedObject，反射成员来自元数据表，两者之间没有共同的可比次序——
             // 字段在 0x04 表、属性在 0x17 表，而序列化顺序本身就是 Unity 说了算的。
             // 与其猜一个，不如定一条确定的规矩。
-            members.AddRange(CollectReflectedMembers(serializedObject.targetObjects, targetType, members));
+            members.AddRange(CollectReflectedMembers(targets, targetType, members));
 
             // 方法节点一律接在字段之后。**不是没试过按声明顺序交错**——实测拿不到那个信息：
             // 字段令牌与方法令牌分属元数据的两张表（0x04 与 0x06）各自编号，跨表没有可比性；
@@ -116,7 +132,7 @@ namespace XInspector.Editor
             //
             // 树必须在**处理器之前**构造好：需要目标对象的处理器（按钮族按名解析方法、
             // 条件族定位序列化对象）只能经 node.Owner 拿到树。
-            var tree = new PropertyTree(serializedObject, root);
+            var tree = new PropertyTree(serializedObject, targets, root);
 
             // 成员此刻还不在树上（要等分组装配才挂上去），故构造期那次递归回填够不着它们。
             // 这一步补上；此后分组装配挂进来的节点由 AddChild 传播。

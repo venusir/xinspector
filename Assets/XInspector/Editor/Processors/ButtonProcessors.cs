@@ -117,9 +117,9 @@ namespace XInspector.Editor
 
             for (var i = 0; i < targets.Length; i++)
             {
-                state.Methods[i] = targets[i] == null
-                    ? null
-                    : MethodResolver.BySignature(targets[i].GetType(), discovery);
+                state.Methods[i] = TargetObjects.IsAlive(targets[i])
+                    ? MethodResolver.BySignature(targets[i].GetType(), discovery)
+                    : null;
 
                 if (state.Methods[i] == null)
                 {

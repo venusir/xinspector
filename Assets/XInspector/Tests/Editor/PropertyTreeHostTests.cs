@@ -351,6 +351,134 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 反射目标
+
+        /// <summary>
+        /// 任意对象都能附加——目标不必是 <see cref="UnityEngine.Object"/>。
+        /// </summary>
+        [Test]
+        public void Attach_反射目标也能附加()
+        {
+            var host = new PropertyTreeHost(null);
+
+            try
+            {
+                Assert.That(host.Attach(new ReflectedPoco()), Is.True);
+                Assert.That(host.IsAttached, Is.True);
+                Assert.That(host.Tree.SerializedObject, Is.Null, "反射树没有序列化对象。");
+                Assert.That(host.Tree.Root.Children.Count, Is.EqualTo(2), "两个带标记的成员都在。");
+            }
+            finally
+            {
+                host.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 反射目标不能重置——后端是只读的，没有写路径。
+        /// <para>
+        /// 返回 <c>false</c> 而不是抛异常，工具栏据 <see cref="PropertyTreeHost.CanResetToDefaults"/>
+        /// 把按钮置灰：<b>不让它「看起来能点」</b>。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void Attach_反射目标不可重置()
+        {
+            var host = new PropertyTreeHost(null);
+
+            try
+            {
+                host.Attach(new ReflectedPoco());
+
+                Assert.That(host.CanResetToDefaults, Is.False);
+                Assert.That(() => host.ResetToDefaults(), Throws.Nothing);
+                Assert.That(host.ResetToDefaults(), Is.False);
+            }
+            finally
+            {
+                host.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 控制项：Unity 目标可以重置。
+        /// <para>
+        /// 没有这一条，上面那条无法区分「按后端判断」与「恒返回 false」。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void Attach_Unity目标可重置()
+        {
+            _host.Attach(_target);
+
+            Assert.That(_host.CanResetToDefaults, Is.True);
+        }
+
+        /// <summary>
+        /// 空树要被认得出来——窗口据此给一句「只显示标注成员」的解释，而不是留一片空白。
+        /// </summary>
+        [Test]
+        public void Attach_空反射树可识别()
+        {
+            var host = new PropertyTreeHost(null);
+
+            try
+            {
+                host.Attach(new EmptyPoco());
+
+                Assert.That(host.HasNothingToDraw, Is.True);
+            }
+            finally
+            {
+                host.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 控制项：只要树里有东西，就不是「空树」。
+        /// </summary>
+        [Test]
+        public void HasNothingToDraw_有成员时为假()
+        {
+            var host = new PropertyTreeHost(null);
+
+            try
+            {
+                host.Attach(new ReflectedPoco());
+
+                Assert.That(host.HasNothingToDraw, Is.False);
+            }
+            finally
+            {
+                host.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 已销毁的 Unity 对象等价于清空。
+        /// <para>
+        /// 形参类型是 <c>object</c>，裸写 <c>target == null</c> 会退化成引用比较、
+        /// 挡不住销毁过的对象——放它进去的后果是 <c>new SerializedObject</c> 抛异常，
+        /// 附加以「错误」而不是「清空」收场。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void Attach_已销毁的目标等价于清空()
+        {
+            var asset = ScriptableObject.CreateInstance<HostFixture>();
+            _host.Attach(_target);
+
+            var destroyed = asset;
+            Object.DestroyImmediate(asset);
+
+            Assert.That(() => _host.Attach(destroyed), Throws.Nothing);
+            Assert.That(_host.Attach(destroyed), Is.False);
+            Assert.That(_host.IsAttached, Is.False);
+            Assert.That(_host.Target, Is.Null);
+        }
+
+        #endregion
+
         #region 释放
 
         /// <summary>

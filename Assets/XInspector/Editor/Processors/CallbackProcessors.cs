@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -24,7 +23,7 @@ namespace XInspector.Editor
         /// 自定义绘制**只执行一次**（见绘制器的说明），故这里预先把单目标数组备好——
         /// 每帧现建一个单元素数组是要计入绘制路径的分配的。
         /// </remarks>
-        public Object[] SingleTarget;
+        public object[] SingleTarget;
 
         /// <summary>与 <see cref="SingleTarget"/> 配套的单元素方法数组。</summary>
         public MethodInfo[] SingleMethod;
@@ -120,9 +119,9 @@ namespace XInspector.Editor
 
             for (var i = 0; i < targets.Length; i++)
             {
-                methods[i] = targets[i] == null
-                    ? null
-                    : MethodResolver.BySignature(targets[i].GetType(), discovery);
+                methods[i] = TargetObjects.IsAlive(targets[i])
+                    ? MethodResolver.BySignature(targets[i].GetType(), discovery)
+                    : null;
             }
 
             if (methods[0] == null)

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -70,7 +69,7 @@ namespace XInspector.Editor
         /// <param name="targetType">目标对象的运行时类型。</param>
         /// <param name="targets">目标对象列表。</param>
         /// <returns>收集结果；一个都没有时各字段为 <c>null</c>。</returns>
-        public static TreeLifecycleHooks Collect(Type targetType, Object[] targets)
+        public static TreeLifecycleHooks Collect(Type targetType, object[] targets)
         {
             var hooks = new TreeLifecycleHooks
             {
@@ -106,7 +105,7 @@ namespace XInspector.Editor
         /// <remarks>
         /// 不记 Undo：生命周期钩子是「没人再看这个对象了」这类通知，不是用户的编辑。
         /// </remarks>
-        public static void InvokeAll(MethodInfo[][] hooks, Object[] targets, string undoLabel)
+        public static void InvokeAll(MethodInfo[][] hooks, object[] targets, string undoLabel)
         {
             if (hooks == null)
             {
@@ -128,7 +127,7 @@ namespace XInspector.Editor
         /// <param name="targets">目标对象列表。</param>
         /// <param name="attributeType">要查的特性类型。</param>
         /// <returns>逐方法、逐目标的方法表；没有则为 <c>null</c>。</returns>
-        private static MethodInfo[][] CollectOne(Type targetType, Object[] targets, Type attributeType)
+        private static MethodInfo[][] CollectOne(Type targetType, object[] targets, Type attributeType)
         {
             var discovered = new List<MethodInfo>();
 
@@ -170,9 +169,9 @@ namespace XInspector.Editor
 
                 for (var t = 0; t < targets.Length; t++)
                 {
-                    perTarget[t] = targets[t] == null
-                        ? null
-                        : MethodResolver.BySignature(targets[t].GetType(), discovered[i]);
+                    perTarget[t] = TargetObjects.IsAlive(targets[t])
+                        ? MethodResolver.BySignature(targets[t].GetType(), discovered[i])
+                        : null;
                 }
 
                 hooks[i] = perTarget;

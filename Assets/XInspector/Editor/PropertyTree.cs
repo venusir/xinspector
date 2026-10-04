@@ -2,7 +2,6 @@ using System;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -28,7 +27,8 @@ namespace XInspector.Editor
         /// <summary>
         /// 构造树。由构建期调用。
         /// </summary>
-        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="serializedObject">底层序列化对象；反射树没有它，传 <c>null</c>。</param>
+        /// <param name="targets">目标对象列表。</param>
         /// <param name="root">根节点，其子树须已全部成形。</param>
         /// <remarks>
         /// <b>构造点必须在处理器之前</b>（见 <see cref="PropertyTreeBuilder"/> 的构建顺序）：
@@ -36,12 +36,12 @@ namespace XInspector.Editor
         /// 因此这里要求「子树已成形」——分组装配会把新节点挂进来，但那些节点只被挂链，
         /// 不再跑处理器。
         /// </remarks>
-        internal PropertyTree(SerializedObject serializedObject, InspectorProperty root)
+        internal PropertyTree(SerializedObject serializedObject, object[] targets, InspectorProperty root)
         {
-            SerializedObject = serializedObject ?? throw new ArgumentNullException(nameof(serializedObject));
             Root = root ?? throw new ArgumentNullException(nameof(root));
 
-            Targets = serializedObject.targetObjects;
+            SerializedObject = serializedObject;
+            Targets = targets ?? Array.Empty<object>();
             AssignOwner(root, this);
         }
 
@@ -118,12 +118,62 @@ namespace XInspector.Editor
                     "序列化对象没有目标（通常是脚本丢失）。XInspector 无法为不存在的对象建树。");
             }
 
-            return PropertyTreeBuilder.Build(serializedObject, memberFilter);
+            return PropertyTreeBuilder.Build(serializedObject, serializedObject.targetObjects, memberFilter);
         }
 
         /// <summary>
-        /// 底层的序列化对象。
+        /// 从一个**任意对象**构建属性树——它不必是 <see cref="UnityEngine.Object"/>，
+        /// 也不必可序列化。
         /// </summary>
+        /// <param name="target">目标对象。</param>
+        /// <returns>构建好的树。</returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="target"/> 为 <c>null</c>，或是一个已被销毁的 Unity 对象。
+        /// </exception>
+        /// <remarks>
+        /// <para>
+        /// <b>这种树只画带 <c>[ShowInInspector]</c> 的成员。</b> 目标不是 Unity 对象时没有
+        /// <see cref="SerializedObject"/>，于是没有「Unity 会序列化什么」这回事——
+        /// 自动收一批 public 成员会制造出「Inspector 里靠序列化、窗口里靠可见性」两套语义。
+        /// 想让它出现，就标上。
+        /// </para>
+        /// <para>
+        /// <b>名字里带 <c>Reflected</c> 而不是做成 <c>Create(object)</c> 重载</b>：
+        /// 目标可以为 <c>null</c>，那就与 <see cref="Create(SerializedObject)"/> 撞成二义，
+        /// 现有调用 <c>Create(null)</c> 会直接编译不过。
+        /// </para>
+        /// </remarks>
+        public static PropertyTree CreateReflected(object target)
+        {
+            return CreateReflected(target, null);
+        }
+
+        /// <summary>
+        /// 从一个任意对象构建属性树，并**过滤掉**不被接受的成员。
+        /// </summary>
+        /// <param name="target">目标对象。</param>
+        /// <param name="memberFilter">字段过滤器，语义同 <see cref="Create(SerializedObject, Func{FieldInfo, bool})"/>。</param>
+        /// <returns>构建好的树。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="target"/> 为 <c>null</c> 或已被销毁。</exception>
+        internal static PropertyTree CreateReflected(object target, Func<FieldInfo, bool> memberFilter)
+        {
+            if (!TargetObjects.IsAlive(target))
+            {
+                throw new ArgumentNullException(
+                    nameof(target),
+                    "目标对象为 null（或是一个已被销毁的 Unity 对象），XInspector 无法为不存在的对象建树。");
+            }
+
+            return PropertyTreeBuilder.Build(null, new[] { target }, memberFilter);
+        }
+
+        /// <summary>
+        /// 底层的序列化对象；**反射树为 <c>null</c>**。
+        /// </summary>
+        /// <remarks>
+        /// 为 <c>null</c> 时这棵树的目标不是 Unity 对象：没有 Undo、没有多对象编辑、
+        /// 也没有「域重载后取值」，值只可能来自 <c>[ShowInInspector]</c> 那条反射通道。
+        /// </remarks>
         public SerializedObject SerializedObject { get; }
 
         /// <summary>
@@ -135,12 +185,20 @@ namespace XInspector.Editor
         /// 本树正在检视的全部目标对象（多选时不止一个）。
         /// </summary>
         /// <remarks>
-        /// 构造时从 <see cref="UnityEditor.SerializedObject.targetObjects"/> 取一次并缓存：
-        /// 目标集合在树的存活期内不会变（选中项一变，编辑器就重建整棵树）。
+        /// <para>
+        /// 构造时取一次并缓存：目标集合在树的存活期内不会变（选中项一变，编辑器就重建整棵树）。
         /// 保持数组形态是为了把它原样交给 <c>Undo.RecordObjects</c>——多选下的一次点击
         /// 只该产生一步撤销，那就得一次传整个数组。
+        /// </para>
+        /// <para>
+        /// <b>类型是 <c>object[]</c> 而不是 <c>Object[]</c>：</b> 反射树的目标可以是任意对象。
+        /// 序列化路径下传进来的实例**仍然是运行时的 <c>Object[]</c>**（
+        /// <see cref="UnityEditor.SerializedObject.targetObjects"/> 本来就返回它，协变不复制），
+        /// 故 <see cref="MethodInvoker"/> 用一个 <c>is Object[]</c> 判断就能零分配地保住 Undo。
+        /// 代价是各处判空不能再裸写 <c>!= null</c>——见 <see cref="TargetObjects"/>。
+        /// </para>
         /// </remarks>
-        internal Object[] Targets { get; }
+        internal object[] Targets { get; }
 
         /// <summary>
         /// 绘制器发起的写操作是否记入 Undo。默认 <c>true</c>；窗口路径由宿主置为 <c>false</c>。

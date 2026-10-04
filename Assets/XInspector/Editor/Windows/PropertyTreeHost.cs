@@ -40,10 +40,13 @@ namespace XInspector.Editor
 
         private readonly Func<FieldInfo, bool> _memberFilter;
 
-        private Object _target;
+        private object _target;
         private SerializedObject _serializedObject;
         private PropertyTree _tree;
         private bool _disposed;
+
+        /// <summary>当前这次附加实际用的过滤器，供 <see cref="Reload"/> 复原。</summary>
+        private Func<FieldInfo, bool> _activeFilter;
 
         #endregion
 
@@ -60,6 +63,7 @@ namespace XInspector.Editor
         public PropertyTreeHost(Func<FieldInfo, bool> memberFilter)
         {
             _memberFilter = memberFilter;
+            _activeFilter = memberFilter;
         }
 
         #endregion
@@ -69,7 +73,11 @@ namespace XInspector.Editor
         /// <summary>
         /// 当前托管的目标对象；未附加时为 <c>null</c>。
         /// </summary>
-        public Object Target => _target;
+        /// <remarks>
+        /// 类型是 <c>object</c>：目标不必是 <see cref="UnityEngine.Object"/>——
+        /// 任意对象都能建树，那种树上只有 <c>[ShowInInspector]</c> 的成员。
+        /// </remarks>
+        public object Target => _target;
 
         /// <summary>
         /// 当前的属性树；未成功附加时为 <c>null</c>。
@@ -111,20 +119,42 @@ namespace XInspector.Editor
         /// 而把它们吞掉会让「画错了」变成「什么都没画」，更难查。
         /// </para>
         /// </remarks>
-        public bool Attach(Object target)
+        public bool Attach(object target)
+        {
+            return Attach(target, _memberFilter);
+        }
+
+        /// <summary>
+        /// 附加到一个既有对象并建树，且指定本次要用的成员过滤器。
+        /// </summary>
+        /// <param name="target">目标对象；传 <c>null</c>（或已销毁的 Unity 对象）等价于清空。</param>
+        /// <param name="memberFilter">
+        /// 本次用的成员过滤器；传 <c>null</c> 表示全收。语义同
+        /// <see cref="PropertyTree.Create(SerializedObject, Func{FieldInfo, bool})"/>。
+        /// </param>
+        /// <returns>建树成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>过滤器必须按目标给，不能一个用到底。</b> 窗口那条过滤器要求「字段声明在窗口基类
+        /// 及其派生类型上」——它是为「画窗口自身」设计的，套到别的目标上会把目标的字段
+        /// **全部拒掉**，树是空的。故这里由调用方按目标传，宿主只负责记住本次用的是哪一个。
+        /// </remarks>
+        public bool Attach(object target, Func<FieldInfo, bool> memberFilter)
         {
             if (_disposed)
             {
                 return false;
             }
 
-            if (target == null)
+            // 已销毁的 Unity 对象要显式挡掉：形参类型是 object，裸写 `target == null`
+            // 退化成引用比较，而销毁过的对象引用不为 null。放它进去的后果是
+            // `new SerializedObject` 抛异常、附加以「错误」而不是「清空」收场。
+            if (!TargetObjects.IsAlive(target))
             {
                 Clear();
                 return false;
             }
 
-            if (ReferenceEquals(_target, target))
+            if (ReferenceEquals(_target, target) && _activeFilter == memberFilter)
             {
                 return _tree != null;
             }
@@ -132,11 +162,22 @@ namespace XInspector.Editor
             Clear();
 
             _target = target;
+            _activeFilter = memberFilter;
 
             try
             {
-                _serializedObject = new SerializedObject(target);
-                _tree = PropertyTree.Create(_serializedObject, _memberFilter);
+                // 是 Unity 对象就走序列化通道（Undo、预制体覆盖、多对象编辑全都在）；
+                // 不是就只有反射通道可用。
+                if (target is Object unityTarget)
+                {
+                    _serializedObject = new SerializedObject(unityTarget);
+                    _tree = PropertyTree.Create(_serializedObject, memberFilter);
+                }
+                else
+                {
+                    _serializedObject = null;
+                    _tree = PropertyTree.CreateReflected(target, memberFilter);
+                }
 
                 // 窗口内编辑不进 Undo——本包对窗口的一贯约定。绘制器里的写操作
                 // （眼下是按钮调用）据此不记撤销步。
@@ -153,6 +194,26 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 能不能把值重置为 C# 初始值。
+        /// </summary>
+        /// <remarks>
+        /// 反射树没有写路径（值后端是只读的），重置无从谈起。工具栏据此把按钮置灰
+        /// ——<b>不让它「看起来能点」</b>。
+        /// </remarks>
+        public bool CanResetToDefaults => _serializedObject != null;
+
+        /// <summary>
+        /// 当前树是不是「一片空白」——反射目标且一个成员都没有。
+        /// </summary>
+        /// <remarks>
+        /// 反射目标只收带 <c>[ShowInInspector]</c> 的成员，什么都没标时树确实是空的。
+        /// 那时给一句解释比留一片空白强：空白看起来像坏了。暴露成属性是为了可无头断言，
+        /// 绘制本身照本仓策略不测 GUI。
+        /// </remarks>
+        public bool HasNothingToDraw =>
+            _tree != null && _tree.SerializedObject == null && _tree.Root.Children.Count == 0;
+
+        /// <summary>
         /// 丢弃当前的树并用同一目标重建。
         /// </summary>
         /// <remarks>
@@ -162,11 +223,12 @@ namespace XInspector.Editor
         public void Reload()
         {
             var target = _target;
+            var filter = _activeFilter;
             Clear();
 
-            if (target != null)
+            if (TargetObjects.IsAlive(target))
             {
-                Attach(target);
+                Attach(target, filter);
             }
         }
 
@@ -188,6 +250,15 @@ namespace XInspector.Editor
                 return;
             }
 
+            if (HasNothingToDraw)
+            {
+                // 空白要解释：反射目标只收带 [ShowInInspector] 的成员，
+                // 什么都不标时留一片白，看起来像坏了。
+                EditorGUILayout.HelpBox(
+                    "这个目标上没有可显示的成员。不是 Unity 对象的目标只显示标注了 [ShowInInspector] 的成员。",
+                    MessageType.Info);
+            }
+
             var savedLabelWidth = EditorGUIUtility.labelWidth;
             var savedWideMode = EditorGUIUtility.wideMode;
 
@@ -198,9 +269,10 @@ namespace XInspector.Editor
                 EditorGUIUtility.labelWidth = Mathf.Clamp(availableWidth * 0.38f, 90f, 220f);
                 EditorGUIUtility.wideMode = availableWidth >= 320f;
 
-                _serializedObject.Update();
+                // 反射树没有序列化对象，这一对更新/落盘自然跳过——它本来也没有要落的东西。
+                _serializedObject?.Update();
                 _tree.Draw();
-                _serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                _serializedObject?.ApplyModifiedPropertiesWithoutUndo();
             }
             finally
             {
@@ -220,7 +292,9 @@ namespace XInspector.Editor
         /// </remarks>
         public bool ResetToDefaults()
         {
-            if (_tree == null || _target == null)
+            // 反射树没有写路径，重置无从谈起——返回 false 而不是抛异常，
+            // 调用方（工具栏）据 CanResetToDefaults 早就把按钮置灰了。
+            if (_tree == null || _target == null || _serializedObject == null)
             {
                 return false;
             }
