@@ -39,6 +39,8 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
 
 放进任意编辑器程序集即可，**不需要注册**：`DrawerTypeRegistry` 扫描所有已加载的
 编辑器程序集，使用方在自己项目里写的绘制器同样会被发现。
+**被发现的代价是必须能无参实例化**（全工程共享单例）——没有公开无参构造的会被
+**跳过并在 Console 告警**：那意味着这个绘制器一次都不会生效，不吭声才是最坏的结果。
 
 ### 三条硬性纪律
 
@@ -107,7 +109,8 @@ internal sealed class MyProcessor : AttributeProcessor<MyAttribute>
 }
 ```
 
-放进任意编辑器程序集即可，**不需要注册**（与绘制器同样扫全部程序集）。
+放进任意编辑器程序集即可，**不需要注册**（与绘制器同样扫全部程序集，
+也同样要求能无参实例化——没有的会被跳过并告警）。
 
 ### 两个钩子
 
