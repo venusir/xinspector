@@ -40,6 +40,22 @@ namespace XInspector.Editor
         /// <summary>逐格标签宽度（像素）；0 表示不调整。可为 <c>null</c>。</summary>
         public float[] CellLabelWidths;
 
+        /// <summary>逐格行号；仅当 <see cref="RowsManagedByTerminal"/> 为真时有效。可为 <c>null</c>。</summary>
+        public int[] CellRows;
+
+        /// <summary>行数；仅当 <see cref="RowsManagedByTerminal"/> 为真时有效。</summary>
+        public int RowCount;
+
+        /// <summary>
+        /// 行作用域是否**由末端自己开关**（多行排布用）。
+        /// </summary>
+        /// <remarks>
+        /// 单行的分组（水平分组、按钮组）由分组绘制器开一个作用域包住全部子节点就够了；
+        /// 多行则必须在画各格之间换作用域，而只有末端能插进那个位置——于是这面旗
+        /// 把「谁来开作用域」的约定表达出来。分组绘制器每帧重设它。
+        /// </remarks>
+        public bool RowsManagedByTerminal;
+
         /// <summary>分数换算的暂存：逐格分数。就地复用，避免每帧分配。</summary>
         public float[] ScratchFractions;
 
@@ -59,6 +75,7 @@ namespace XInspector.Editor
             {
                 CellWidths = new float[count];
                 CellLabelWidths = new float[count];
+                CellRows = new int[count];
                 ScratchFractions = new float[count];
                 ScratchMinWidths = new float[count];
                 ScratchMaxWidths = new float[count];

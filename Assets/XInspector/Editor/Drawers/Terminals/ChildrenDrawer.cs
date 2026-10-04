@@ -53,6 +53,14 @@ namespace XInspector.Editor
 
             var children = property.Children;
 
+            // 多行排布：行作用域得在画各格**之间**开关，而只有末端站得到那个位置，
+            // 故这一模式下由末端自己开——见 GroupChildrenLayout.RowsManagedByTerminal。
+            if (layout.RowsManagedByTerminal && layout.CellRows != null && layout.RowCount > 0)
+            {
+                DrawRows(children, layout);
+                return;
+            }
+
             // 页签：只画被选中的那一页。越界或空选择**回退为画全部**并告警一次——
             // 「什么都不画」是最难归因的一类现象（属性明明在，Inspector 里却是空的）。
             if (layout.OnlyChildIndex != GroupChildrenLayout.AllChildren)
@@ -84,6 +92,48 @@ namespace XInspector.Editor
         #endregion
 
         #region Private Helpers
+
+        /// <summary>按行画：行号一变就换一个水平作用域。</summary>
+        /// <param name="children">子节点。</param>
+        /// <param name="layout">分组装下的策略，行号来自 <see cref="GroupChildrenLayout.CellRows"/>。</param>
+        /// <remarks>
+        /// 手写 <c>BeginHorizontal</c>/<c>EndHorizontal</c> 而不是 <c>using</c> 作用域：
+        /// 作用域要跨循环迭代，<c>using</c> 表达不了。收尾放在循环之后，
+        /// 中途抛异常会留下一个没关的作用域——IMGUI 里这属于「一次绘制坏了」，
+        /// 下一帧重新开始，不会累积。
+        /// </remarks>
+        private static void DrawRows(System.Collections.Generic.IReadOnlyList<InspectorProperty> children,
+            GroupChildrenLayout layout)
+        {
+            var currentRow = -1;
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                var row = i < layout.CellRows.Length ? layout.CellRows[i] : layout.RowCount - 1;
+
+                if (row != currentRow)
+                {
+                    if (currentRow >= 0)
+                    {
+                        EditorGUILayout.EndHorizontal();
+                    }
+
+                    EditorGUILayout.BeginHorizontal();
+                    currentRow = row;
+                }
+                else if (layout.CellGap > 0f)
+                {
+                    GUILayout.Space(layout.CellGap);
+                }
+
+                DrawCell(children[i], layout, i);
+            }
+
+            if (currentRow >= 0)
+            {
+                EditorGUILayout.EndHorizontal();
+            }
+        }
 
         /// <summary>按策略画一格：宽度与标签宽度各就各位。</summary>
         /// <param name="child">子节点。</param>
