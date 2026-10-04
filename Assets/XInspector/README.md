@@ -87,6 +87,20 @@ public class PlayerProfileEditor : XInspectorEditor
 > 一个独立的门控程序集，它用 `DrawDefaultInspector()` 回退，因此**没用到本插件的类型外观不变**。
 > 删掉宏即完全恢复 Unity 默认行为——按项目生效，可逆。
 
+## 示例
+
+包内带两个示例，挂到任意物体上即可看，各自另有一份 README：
+
+| 示例 | 演示什么 |
+|---|---|
+| [`Samples/Overview/`](Samples/Overview/README.md) | **最小可用形态**：类级与成员级标题、嵌套分组、未分组字段夹在分组之间留在原位 |
+| [`Samples/AttributeShowcase/`](Samples/AttributeShowcase/README.md) | **逐个特性**：只读、标签、提示、配色、缩进、间距、标签宽、后缀、信息框 |
+
+两个示例都**不含**自动接管——它们走的是上面第 3 步的显式编辑器那条路。
+
+> 上面说过 `Samples/` 缺波浪号，所以这两个示例会随包一并导入并**在你的工程里编译**。
+> 不想要的话，直接删掉 `Samples/` 目录即可，包本体不依赖它。
+
 ## 核心概念
 
 | 概念 | 职责 |

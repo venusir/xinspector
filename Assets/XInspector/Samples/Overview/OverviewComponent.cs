@@ -28,13 +28,17 @@ namespace XInspector.Samples
         public float speed = 5f;
 
         /// <summary>
-        /// 未分组字段：它留在根层级，不会因为上面有分组就被吞进去。
+        /// 未分组字段，**刻意夹在两个分组之间**。
         /// <para>
-        /// 「未分组字段夹在两个分组之间时留在原位」那条规则，在
-        /// <c>Assets/Sandbox/AttributeDemo.cs</c> 里有更直观的演示。
+        /// 它应当留在原位——夹在「基础」与「附加」中间，而不是被挤到 Inspector 末尾。
+        /// 后者是「先摆所有分组、再摆散字段」那种朴素实现的必然结果，一眼就能看出不对。
         /// </para>
         /// </summary>
         public int ungrouped = 1;
+
+        /// <summary>第二个顶层分组，用来把未分组字段夹在中间。</summary>
+        [BoxGroup("附加")]
+        public string note = "末尾的分组";
 
         #endregion
     }

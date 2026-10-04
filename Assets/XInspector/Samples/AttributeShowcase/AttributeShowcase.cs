@@ -1,20 +1,20 @@
 using UnityEngine;
 using XInspector;
 
-namespace XInspector.Sandbox
+namespace XInspector.Samples
 {
     /// <summary>
-    /// L1a 特性展示台：本轮补的每个特性都在这里放一个，便于在场景里逐条目视。
+    /// 逐特性展示台：每个特性在这里放一个，便于逐条目视。
     /// <para>
-    /// **属于工程壳，不随包发布。**
+    /// 与 <see cref="OverviewComponent"/> 的分工：那个演示**最小可用形态**
+    /// （类级标题 + 嵌套分组，架构的垂直切片），这个演示**逐个特性本身**，
+    /// 字段按批次成组，一组一个 <c>#region</c>。
     /// </para>
     /// <para>
-    /// 与 <see cref="AttributeDemo"/> 的分工：那个演示**分组与标题**（架构的垂直切片），
-    /// 这个演示**逐个特性本身**，字段按提交批次成组，一组一个 <c>#region</c>。
     /// 新增特性时在这里加一行——这是 CLAUDE.md「如何新增一个特性」的第 5 步。
     /// </para>
     /// </summary>
-    [Title("L1a 特性展示", Subtitle = "逐个特性，按批次分组")]
+    [Title("XInspector 特性展示", Subtitle = "逐个特性，按批次分组")]
     public class AttributeShowcase : MonoBehaviour
     {
         #region 状态与标签

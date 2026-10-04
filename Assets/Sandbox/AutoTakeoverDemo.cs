@@ -1,5 +1,6 @@
 using UnityEngine;
 using XInspector;
+using XInspector.Samples;
 
 namespace XInspector.Sandbox
 {
@@ -10,7 +11,8 @@ namespace XInspector.Sandbox
     /// </para>
     /// <para>
     /// 本开发工程把脚本宏 <c>XINSPECTOR_AUTO_EDITOR</c> 开着，因此这个组件应当
-    /// 与 <see cref="AttributeDemo"/> 渲染得一模一样——尽管它没有任何编辑器代码。
+    /// 与 <see cref="OverviewComponent"/>（包内示例，走显式编辑器那条路）渲染得一模一样
+    /// ——尽管它没有任何编辑器代码。
     /// 把 <c>ProjectSettings</c> 里的宏删掉，它就会退回 Unity 原生外观（特性不再生效），
     /// 这就是「可逆」的验证方式。
     /// </para>

@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using XInspector.Sandbox;
+using XInspector.Samples;
 
 namespace XInspector.Sandbox.EditorTools
 {
@@ -34,15 +35,24 @@ namespace XInspector.Sandbox.EditorTools
         }
 
         /// <summary>
-        /// 创建场景：默认摄像机与平行光，外加五个演示对象。
+        /// 创建场景：默认摄像机与平行光，外加四个演示对象。
         /// </summary>
         /// <remarks>
         /// 供 <c>-executeMethod</c> 调用，故必须是 public static 且无参。
-        /// 五个对象各代表一条集成路径，逐一选中即可对照。
+        /// 四个对象各代表一条集成路径，逐一选中即可对照。
         /// <para>
         /// Demo 1 与 Demo 4 是一组对照：前者**刻意不带任何 XInspector 特性**，
         /// 后者只带 Unity 原生装饰器，两者外观都应与原生 Inspector 一致
         /// ——差别只在「值管道」与「原生装饰器是否流经管线」这两件事上。
+        /// </para>
+        /// <para>
+        /// Demo 2 与 Demo 3 是另一组对照：**同一个渲染结果**，Demo 2 走显式编辑器
+        /// （用的就是随包发出去的示例 <see cref="OverviewComponent"/>，
+        /// 故顺带验证它本身画得对），Demo 3 靠宏自动接管。
+        /// </para>
+        /// <para>
+        /// 演示对象的名字被 <c>OdinGap.md</c> 等文档按名引用，**改名会打断那些验证步骤**。
+        /// 顶层组件与场景的一一对应由 <c>Tools/check-docs.ps1</c> 守卫。
         /// </para>
         /// </remarks>
         public static void CreateSandboxScene()
@@ -50,10 +60,9 @@ namespace XInspector.Sandbox.EditorTools
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
             AddDemo<DemoComponent>("Demo 1 - Value Pipeline Baseline");
-            AddDemo<AttributeDemo>("Demo 2 - Explicit Editor");
+            AddDemo<OverviewComponent>("Demo 2 - Explicit Editor");
             AddDemo<AutoTakeoverDemo>("Demo 3 - Auto Takeover");
             AddDemo<NativeDecoratorDemo>("Demo 4 - Native Decorators (L0)");
-            AddDemo<AttributeShowcase>("Demo 5 - L1a Showcase");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
