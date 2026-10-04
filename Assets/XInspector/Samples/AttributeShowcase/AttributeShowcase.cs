@@ -232,6 +232,17 @@ namespace XInspector.Samples
         [TabGroup("页签", "高级")]
         public int tabDebugLevel;
 
+        /// <summary>开关分组：标题前的复选框关掉时，组内内容**不画**。</summary>
+        [ToggleGroup("showAdvanced", groupTitle: "高级选项")]
+        public int advancedValue = 1;
+
+        /// <summary>同组的第二个成员。</summary>
+        [ToggleGroup("showAdvanced")]
+        public int advancedTuning = 2;
+
+        /// <summary>上面那一组的开关——**组 ID 就是它的名字**（勾上才看得到组内成员）。</summary>
+        public bool showAdvanced;
+
         /// <summary>三个未指定宽度的格子：均分整行。</summary>
         [HorizontalGroup("三格")]
         public int cellA = 1;

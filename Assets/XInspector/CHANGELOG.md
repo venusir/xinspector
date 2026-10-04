@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Added — L1b：开关分组（ToggleGroup）
+
+- **`[ToggleGroup("showAdvanced", groupTitle: "高级选项")]`**：组标题前一个复选框，关掉时
+  组内内容**不画**（整组消失）——与 `[Toggle]` 的「变灰但仍可见」刻意不同。
+  **组 ID 就是开关成员名**（照 Odin 的语义）：同组成员必须写同一个 bool 成员名。
+- 开关是同一个对象上的序列化 bool（相对路径），从**第一个带值入口的后代**取序列化对象再解析
+  ——不能假定 `Children[0]`，页签容器的第一个孩子是页节点，同样是分组。
+- **本包唯一一处绘制期解析**：分组节点在构建期的处理器阶段还不存在，装不上去。
+  解析结果缓存进 `PropertyState`（`SerializedProperty` 是活句柄，解析一次就够），
+  失败时告警一次并**恒显示内容**——拼错的名字不该让一整组字段消失。
+  这条例外连同理由写进了 Editor/README 的「构建期的顺序是契约」一节。
+- 混合态走 `EditorGUI.showMixedValue`（`try/finally` 还原）；档位 -180：在折叠（-190）之内、
+  框与标题之外——决定内容存在与否的恒最外。
+- `CollapseOthersOnExpand` 只留字段、不做行为（跨组协调没有明确语义），
+  与 `[Toggle]` 的同名参数、`[DrawWithUnity]` 的 `PreferImGUI` 同一条处置。
+
 ### Added — L1b：页签（TabGroup）
 
 - **`[TabGroup("设置", "基础")]`**：把成员分进页签，一次只显示一页。

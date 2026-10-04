@@ -135,6 +135,12 @@ internal sealed class MyProcessor : AttributeProcessor<MyAttribute>
 装配必须看到它；后者是因为注入的特性会改变链条的构成。顺序反过来，症状是
 **静默地不生效**——所以这条写在 `PropertyTreeBuilder` 的注释里，别改。
 
+**一处刻意的例外：`[ToggleGroup]` 的开关解析发生在首次绘制时**（结果缓存进
+`PropertyState`）。原因是分组节点在这个阶段**还不存在**（它由分组装配创建），
+处理器没有可以挂上去的节点。这不是疏忽：`SerializedProperty` 是活句柄（跨 `Update()`
+有效），解析一次就够，与条件族的用法一致。若将来出现第二个同类需求，再考虑给构建期
+加一个「分组装配之后」的后置阶段。
+
 ## 在窗口里复用 `PropertyTree`
 
 管线本身与 Inspector 无关：给它一个 `SerializedObject`，它就能画。窗口基类

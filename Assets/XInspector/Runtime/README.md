@@ -203,6 +203,22 @@ public bool isAlive = true;
 | 选中页越界 | 回退到第一页并告警一次——不静默什么都不画 |
 | `UseFixedHeight` | 保留参数、不产生行为（官方的固定高度模式是为滚动内容准备的，本包还没有那套布局） |
 
+`[ToggleGroup]` 用一个 bool 成员门控整组：
+
+```csharp
+public bool showAdvanced;
+
+[ToggleGroup("showAdvanced", groupTitle: "高级选项")] public int debugLevel;
+[ToggleGroup("showAdvanced")]                          public int traceFlags;
+```
+
+| 行为 | 说明 |
+|---|---|
+| 组 ID | **就是开关成员名**——同组必须写同一个 bool 成员名（照 Odin 的语义） |
+| 关掉时 | 组内内容**不画**（整组消失），与 `[Toggle]` 的「变灰但仍可见」不同 |
+| 解析失败 | 告警一次并**恒显示内容**——拼错的名字不该让一整组字段消失 |
+| 与 `[FoldoutGroup]` 的档位 | 开关 -180 在折叠 -190 之内；两者都**决定内容存在与否**，故都排在框与标题之外 |
+
 `[HorizontalGroup]` 的宽度分数：
 
 ```csharp
