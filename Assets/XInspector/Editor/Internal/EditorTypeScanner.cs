@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -37,6 +38,7 @@ namespace XInspector.Editor
         /// <para>
         /// 没有公开无参构造的类型**跳过并告警**，而不是让扫描整个失败：
         /// 一个写坏的第三方扩展不该让整个 Inspector 瘫掉。
+        /// （测试程序集里的类型跳过但**不**告警，见 <see cref="ShouldWarnAbout"/>。）
         /// </para>
         /// </remarks>
         public static List<Type> CollectInstantiable<TBase>(string roleName) where TBase : class
@@ -53,8 +55,13 @@ namespace XInspector.Editor
 
                 if (type.GetConstructor(Type.EmptyTypes) == null)
                 {
-                    skipped ??= new List<string>();
-                    skipped.Add(type.FullName);
+                    // 测试程序集里故意不可实例化的夹具静默跳过——告警的收件人是使用方，见 ShouldWarnAbout。
+                    if (ShouldWarnAbout(type))
+                    {
+                        skipped ??= new List<string>();
+                        skipped.Add(type.FullName);
+                    }
+
                     continue;
                 }
 
@@ -70,6 +77,56 @@ namespace XInspector.Editor
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 这条告警该不该为这个类型发出。
+        /// </summary>
+        /// <param name="type">被跳过的类型。</param>
+        /// <returns>该告警返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>测试程序集里的类型不告警。</b> 这是刻意的收窄，而且只收窄**告警**、不收窄**扫描**：
+        /// 扫描必须覆盖所有已加载的程序集（那是「使用方零注册扩展」的前提，两条
+        /// <c>Registry_Discovers*FromThisAssembly</c> 用例守着它）。
+        /// 理由在告警的收件人身上——它要说给**写坏了自己扩展的使用方**听；
+        /// 测试里那些故意不可实例化的夹具不是它的目标，那两条
+        /// <c>Registry_SkipsTypesWithoutPublicParameterlessConstructor</c> 用例
+        /// 自己断言了「确实被跳过」，不必借 Console 说话。
+        /// </remarks>
+        public static bool ShouldWarnAbout(Type type)
+        {
+            return !IsTestAssembly(type.Assembly);
+        }
+
+        /// <summary>
+        /// 这个程序集是不是测试程序集。
+        /// </summary>
+        /// <param name="assembly">候选程序集，可为 <c>null</c>。</param>
+        /// <returns>是测试程序集返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 判据是**引用了 <c>nunit.framework</c>**——测试程序集必然用到它，
+        /// 而生产程序集不会去引用一个测试框架。这与 Unity 自己分辨测试程序集的口径一致。
+        /// <para>
+        /// 判据只决定「要不要打一行日志」，故万一误判，代价仅是少一行话，
+        /// **不会让任何绘制器或处理器少注册一个**——这正是它不去动扫描范围的原因。
+        /// </para>
+        /// </remarks>
+        public static bool IsTestAssembly(Assembly assembly)
+        {
+            if (assembly == null)
+            {
+                return false;
+            }
+
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (string.Equals(reference.Name, "nunit.framework", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #endregion
