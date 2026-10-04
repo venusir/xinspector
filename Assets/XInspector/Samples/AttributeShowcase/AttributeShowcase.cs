@@ -123,6 +123,21 @@ namespace XInspector.Samples
         [PropertyRange(0, 100)]
         public float rangedValue = 30f;
 
+        /// <summary>双滑块：x 是下限、y 是上限，两个把手不许交叉。</summary>
+        [MinMaxSlider(0f, 100f)]
+        public Vector2 hpRange = new Vector2(20f, 80f);
+
+        /// <summary>同一条滑块 + 两个可输入的数值框（<c>showFields</c>）。</summary>
+        [MinMaxSlider(-10f, 10f, true)]
+        public Vector2 signedRange = new Vector2(-3f, 4f);
+
+        /// <summary>边界取自成员（序列化 Vector2 字段，x/y 即上下限）。</summary>
+        [MinMaxSlider("dynamicRange", true)]
+        public Vector2 dynamicRangeValue = new Vector2(25f, 50f);
+
+        /// <summary>上一条的边界来源——改它的 x/y，上面那条滑块的量程立刻跟着变。</summary>
+        public Vector2 dynamicRange = new Vector2(0f, 60f);
+
         /// <summary>回绕：初始的 400 在绘制后被绕成 40（区间按半开处理）。</summary>
         [Wrap(0f, 360f)]
         public float angle = 400f;

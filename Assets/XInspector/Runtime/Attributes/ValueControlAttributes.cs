@@ -140,6 +140,134 @@ namespace XInspector
     }
 
     /// <summary>
+    /// 把 <c>Vector2</c> 画成**双滑块**：<c>x</c> 是下限、<c>y</c> 是上限。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 只对 <c>Vector2</c> 生效。<c>Vector2Int</c> **不做**——值后端
+    /// （<c>SerializedPropertyValueEntry</c>）支持的类型里没有它，绕开值入口直读
+    /// <c>SP.vector2IntValue</c> 会让本特性成为唯一一个不走值后端的值绘制器，
+    /// 为半个类型破一条架构缝不值得。
+    /// </para>
+    /// <para>
+    /// <b>边界可以是字面量，也可以是序列化成员名。</b> Odin 那边的字符串参数是
+    /// resolved string（支持 <c>@</c> 表达式与方法调用），本包只认**序列化成员名**——
+    /// 与条件族、<c>[InfoBox].visibleIf</c> 同一条边界。
+    /// </para>
+    /// <para>
+    /// 五组构造与官方一致。其中 <see cref="MinMaxValueGetter"/> **优先于**其余四个
+    /// （官方原文：non-null 时覆盖它们的行为）。
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// [MinMaxSlider(0f, 100f)]
+    /// public Vector2 hpRange;
+    ///
+    /// [MinMaxSlider("dynamicRange", true)]
+    /// public Vector2 dynamic;          // dynamicRange 是序列化 Vector2 字段
+    /// </code>
+    /// </example>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    public sealed class MinMaxSliderAttribute : Attribute
+    {
+        /// <summary>
+        /// 以两个字面量边界构造。
+        /// </summary>
+        /// <param name="minValue">滑块左端。</param>
+        /// <param name="maxValue">滑块右端，必须大于 <paramref name="minValue"/>。</param>
+        /// <param name="showFields">是否在滑块旁再画两个可输入的数值框。</param>
+        /// <exception cref="ArgumentException"><paramref name="maxValue"/> 不大于 <paramref name="minValue"/>。</exception>
+        public MinMaxSliderAttribute(float minValue, float maxValue, bool showFields = false)
+        {
+            if (maxValue <= minValue)
+            {
+                throw new ArgumentException(
+                    $"滑块的上限必须大于下限（收到 minValue={minValue}、maxValue={maxValue}）。", nameof(maxValue));
+            }
+
+            MinValue = minValue;
+            MaxValue = maxValue;
+            ShowFields = showFields;
+        }
+
+        /// <summary>
+        /// 以一个字面量下界 + 一个成员提供的上界构造。
+        /// </summary>
+        /// <param name="minValue">滑块左端。</param>
+        /// <param name="maxValueGetter">上界所在的**序列化成员名**（<c>float</c> 字段）。</param>
+        /// <param name="showFields">是否再画两个数值框。</param>
+        public MinMaxSliderAttribute(float minValue, string maxValueGetter, bool showFields = false)
+        {
+            MinValue = minValue;
+            MaxValueGetter = maxValueGetter;
+            ShowFields = showFields;
+        }
+
+        /// <summary>
+        /// 以一个成员同时提供上下界构造（该成员是 <c>Vector2</c>，<c>x</c> 为下界、<c>y</c> 为上界）。
+        /// </summary>
+        /// <param name="minMaxValueGetter">上下界所在的**序列化成员名**（<c>Vector2</c> 字段）。</param>
+        /// <param name="showFields">是否再画两个数值框。</param>
+        public MinMaxSliderAttribute(string minMaxValueGetter, bool showFields = false)
+        {
+            MinMaxValueGetter = minMaxValueGetter;
+            ShowFields = showFields;
+        }
+
+        /// <summary>
+        /// 以一个成员提供的下界 + 一个字面量上界构造。
+        /// </summary>
+        /// <param name="minValueGetter">下界所在的**序列化成员名**（<c>float</c> 字段）。</param>
+        /// <param name="maxValue">滑块右端。</param>
+        /// <param name="showFields">是否再画两个数值框。</param>
+        public MinMaxSliderAttribute(string minValueGetter, float maxValue, bool showFields = false)
+        {
+            MinValueGetter = minValueGetter;
+            MaxValue = maxValue;
+            ShowFields = showFields;
+        }
+
+        /// <summary>
+        /// 以两个成员分别提供上下界构造（都是 <c>float</c> 字段）。
+        /// </summary>
+        /// <param name="minValueGetter">下界所在的**序列化成员名**。</param>
+        /// <param name="maxValueGetter">上界所在的**序列化成员名**。</param>
+        /// <param name="showFields">是否再画两个数值框。</param>
+        public MinMaxSliderAttribute(string minValueGetter, string maxValueGetter, bool showFields = false)
+        {
+            MinValueGetter = minValueGetter;
+            MaxValueGetter = maxValueGetter;
+            ShowFields = showFields;
+        }
+
+        /// <summary>字面量下界；未使用该形态时为 0。</summary>
+        public float MinValue { get; }
+
+        /// <summary>字面量上界；未使用该形态时为 0。</summary>
+        public float MaxValue { get; }
+
+        /// <summary>
+        /// 下界所在的序列化成员名；未使用该形态时为 <c>null</c>。
+        /// </summary>
+        public string MinValueGetter { get; }
+
+        /// <summary>
+        /// 上界所在的序列化成员名；未使用该形态时为 <c>null</c>。
+        /// </summary>
+        public string MaxValueGetter { get; }
+
+        /// <summary>
+        /// 同时提供上下界的序列化成员名（<c>Vector2</c>）；未使用该形态时为 <c>null</c>。
+        /// <para>非 <c>null</c> 时**覆盖**上面四个。</para>
+        /// </summary>
+        public string MinMaxValueGetter { get; }
+
+        /// <summary>是否在滑块旁再画两个可输入的数值框。</summary>
+        public bool ShowFields { get; }
+    }
+
+    /// <summary>
     /// 把数值**回绕**到给定范围内：超出上限就从下限重新开始（角度、时间这类周期值的常用语义）。
     /// </summary>
     /// <remarks>

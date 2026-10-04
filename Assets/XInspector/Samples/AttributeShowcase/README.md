@@ -95,6 +95,17 @@
 | `[TypeInfoBox]`（类级） | Inspector 最顶部一条信息框 |
 | `[HideMonoScript]`（类级） | 脚本槽位（Script 字段）消失 |
 
+### 范围与滑块
+
+| 特性 | 预期看到 |
+|---|---|
+| `[MinMaxSlider(0f, 100f)]` | 双滑块：拖左把手改 `x`、右把手改 `y`，两个把手不许交叉 |
+| `[MinMaxSlider(-10f, 10f, true)]` | 同一条滑块，左右各多一个可输入的数值框 |
+| `[MinMaxSlider("dynamicRange", true)]` | 量程**取自另一个成员**（序列化 `Vector2`，x/y 即上下限）——改 `dynamicRange` 的值，这条滑块的可拖范围立刻跟着变 |
+
+> 边界也可以是**成员名**：Odin 那边这个字符串是 resolved string（支持 `@` 表达式与方法调用），
+> 本包只认序列化成员名——与条件族同一条边界。
+
 ### 路径选择
 
 | 特性 | 预期看到 |
