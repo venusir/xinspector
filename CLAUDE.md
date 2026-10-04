@@ -21,7 +21,8 @@
   都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
   包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
-- 当前版本 `0.1.0-preview.1`，只有骨架与一条垂直切片，API 尚未稳定
+- 当前版本 `0.1.0-preview.1`，已实现 **58 个特性**；**L1b 整层清完**，
+  下一个目标是 L5 的 `[Button]` 家族。API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -152,7 +153,8 @@ Assets/Sandbox/              零特性基线 / 原生装饰器 / 自动接管，
 ## 编码规范
 
 - **命名：** 接口 `I` 前缀；私有/受保护字段 `_camelCase`；常量 PascalCase；方法 `TryXxx(out T)`、
-  `GetOrCreateXxx`；bool 属性 `IsXxx`。**标识符一律英文**（含测试方法名），中文只出现在注释与文档里
+  `GetOrCreateXxx`；bool 属性 `IsXxx`。**测试方法名用中文**（它描述的是「这组断言在说什么」，
+  如 `只声明支持的选项`），**其余标识符一律英文**；中文只另外出现在注释与文档里
 - **风格：** Allman 大括号；`#region` 按功能分区；using 按 System → 第三方 → XInspector 排序
 - **注释：** 全中文 XML doc，公开 API 必带 `<summary>`
   - **XML 必须能解析：** 泛型尖括号与 `&` 一律转义（`&lt;T&gt;`、`&amp;`）。未转义触发 CS1570
@@ -217,8 +219,9 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 1. Runtime 侧加特性类（`Runtime/Attributes/`），声明正确的 `AttributeUsage`
 2. 若要参与绘制，写 `AttributeDrawer<TAttribute>`（`Editor/Drawers/BuiltIn/`），
    按需加 `[DrawerPriority]`。**只画东西、把决策留给别处**，且不得有可变字段
-3. 若它影响**别的**属性（可见性、分组归属、标签），那需要一个能改写属性特性列表或
-   `PropertyState` 的阶段——目前尚未建该层，加它时是纯新增
+3. 若它影响**别的**属性（可见性、分组归属、标签），写一个 `AttributeProcessor<TAttribute>`
+   （`Editor/Processors/`）：它在构建期跑，能改写成员的 `PropertyState`（装每帧求值的求值器）
+   或往特性列表里注入特性。两个钩子与三条纪律见 `Editor/README.md`
 4. 补无头测试（链装配顺序、分组归属、路径解析这类）
 5. 在包内展示台 `Assets/XInspector/Samples/AttributeShowcase/` 里加一行（第三方看的就是这里）；
    若该特性会改变渲染、需要一个对照基准，再按需在 `Assets/Sandbox/` 加对照组
@@ -295,12 +298,14 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 ## 明确不在本轮范围
 
 自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
-数组/列表展开、`[Button]` 家族与回调族、`[InlineEditor]` / `[PreviewField]` / `[FilePath]`
-这类重型绘制器、`[SerializeReference]` 类型切换、折叠状态的跨会话持久化、UI Toolkit。
+数组/列表展开、`[Button]` 家族与回调族、`[SerializeReference]` 类型切换、
+折叠状态的跨会话持久化、UI Toolkit。
+（`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完。）
 
 **特性处理器层已做**（`Editor/Processors/`），条件族做了 `[ShowIf]` `[HideIf]` `[EnableIf]`
-`[DisableIf]` 与四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`
-`[DisableInPlayMode]`），外加类级分组分发。
+`[DisableIf]`、四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`
+`[DisableInPlayMode]`）、三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]`
+`[DisableInInlineEditors]`），外加类级分组分发。
 
 **条件族仍不做**：`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接
 `PrefabKind` 之类的枚举参数，签名未核对到，**猜一个形状写下去比不做更糟**）、
@@ -309,9 +314,3 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 
 **编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段）。
 **仍不做**：多 target 检视、字段拖拽重排、窗口内 Undo、`[ShowInInspector]` 那类非序列化成员。
-
-**其中「特性处理器层」是刻意推迟的：** 它原本的用途是把类级特性合成到别的节点上，
-但构建期已把类型特性直接放在根节点，这件事不再需要；剩下的潜在用户（`[ShowIf]` 改状态、
-类级 `[BoxGroup]` 分发）都不在范围内，于是它在 v0 里一个调用方都没有。
-为一个没有调用方的扩展点引入抽象基类加发现注册表，正是本轮一直在砍的那类臆测性 API。
-等 `[ShowIf]` 到来时再加，是纯新增，不改动任何既有签名。
