@@ -2,7 +2,8 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 只有骨架与一条垂直切片。API 尚未稳定。
+> **状态：** `0.1.0-preview.1` — 已覆盖 Odin 常用特性的多数（七十五个），
+> 但 API 尚未稳定，边界与自定值见 README 的「已知限制」。
 
 ## 这套管线解决什么
 
@@ -26,8 +27,8 @@ Unity 默认的 `PropertyDrawer` 模型是「首个匹配者胜出」：一个�
 
 ## 已知限制
 
-本轮刻意不包含：自定义序列化后端、样式系统、编辑器窗口、数组展开、
-`[ShowIf]` / `[FoldoutGroup]` / `[Button]`、`[SerializeReference]` 类型切换、
-折叠状态的跨会话持久化、UI Toolkit。
+本轮刻意不包含：样式系统、数组与列表展开、
+`[SerializeReference]` 类型切换、折叠状态的跨会话持久化、UI Toolkit，
+以及分组条件 `[ShowIfGroup]` / `[HideIfGroup]`。
 
 完整清单与说明见 [README 的「已知限制」](../README.md#已知限制)。

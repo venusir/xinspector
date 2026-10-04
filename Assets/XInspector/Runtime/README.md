@@ -94,15 +94,21 @@ public bool isAlive = true;
 
 [HideInPlayMode]      public int debugOnly;   // 判据是 Application.isPlaying
 [DisableInEditorMode] public int runtimeOnly;
+
+[ShowIn(PrefabKind.PrefabAsset)]        public string iconName;   // 判据是「被检视对象所处的预制体上下文」
+[HideIn(PrefabKind.PrefabInstance)]     public string sceneOnly;
+[EnableIn(PrefabKind.NonPrefabInstance)] public float tuning;     // 其余上下文里变灰
+[DisableIn(PrefabKind.PrefabAsset)]     public float bakedRadius;
 ```
 
 | 行为 | 说明 |
 |---|---|
 | 条件对象 | 按这个顺序找：**序列化成员**（public 字段或 `[SerializeField]` 私有字段）→ 普通字段 / 属性 → **无参、非泛型、返回 `bool`** 的方法。序列化成员的名字可以是 `a/b` 这样的嵌套路径 |
-| 求值时机 | **每帧重新求值**，所以被条件的字段可以随时跟着切换，不需要重建属性树 |
+| 求值时机 | **每帧重新求值**，所以被条件的字段可以随时跟着切换，不需要重建属性树（预制体那一族同理：进出隔离编辑模式会自动跟随） |
 | 条件名不存在 / 类型不对 / 方法带参数 | **保持可见并记一条告警**，不抛异常。一个拼错的名字不该让整个 Inspector 白屏 |
 | 隐藏 vs 禁用 | 禁用（变灰但仍可见）保留了「这个字段存在、只是现在不能改」的信息，通常比直接藏掉更有用 |
-| 多选 | 条件值取**第一个目标**（与序列化成员那条路一致） |
+| 多选 | 条件为**成员值**时取**第一个目标**；判据是**预制体上下文**时要求**全部目标都匹配**（上下文是整个选择的性质，不是某一个目标的事） |
+| 多个条件并存 | **后装入者覆盖前者**（每个节点只有一个可见性槽与一个只读槽）。要表达「全部满足」请写一个返回 `bool` 的条件成员 |
 
 ```csharp
 public bool IsHealthy => health > 0;      // 普通属性也能当条件——不必序列化，也不必标 [ShowInInspector]
@@ -112,8 +118,13 @@ public bool HasAmmo() => ammo > 0;        // 无参、返回 bool 的方法同�
 [ShowIf(nameof(HasAmmo))]   public int reloadButton;
 ```
 
-**不支持的**：条件写在别的对象上（Odin 的 `"@other.field"` 语法）、`[ShowIn]` / `[HideIn]`
-那类接 `PrefabKind` 的枚举参数、以及 `[ShowIfGroup]` / `[HideIfGroup]`。
+**预制体上下文族**接的是 `PrefabKind`——一个**位标志枚举**，含义照 Odin
+（`PrefabAsset`、`PrefabInstance`、`InstanceInScene`、`InstanceInPrefab`、`Regular`、`Variant`、
+`NonPrefabInstance`……），多个可以用 `|` 组合。两条本包自定的边界：
+**模型预制体归 `Regular`**；**普通 C# 对象与非预制体资产（`ScriptableObject` 等）没有上下文**
+（`None`），既不满足 `[ShowIn]` 也不满足 `[HideIn]`。
+
+**不支持的**：条件写在别的对象上（Odin 的 `"@other.field"` 语法）、`[ShowIfGroup]` / `[HideIfGroup]`。
 
 ### `[ShowInInspector]`
 
@@ -241,6 +252,9 @@ public static string BuildTag = "静态成员也可以标";
 [MaxValue(100f)]               public float heat;
 [AssetsOnly]                   public GameObject prefab; // 只提示、不拦赋值
 [SceneObjectsOnly]             public Transform target;
+
+[RequiredIn(PrefabKind.PrefabAsset)]                      public Sprite icon;  // 只在资产上必填
+[DisallowModificationsIn(PrefabKind.PrefabAsset)]         public float bakedRadius;
 ```
 
 | 行为 | 说明 |
@@ -251,6 +265,8 @@ public static string BuildTag = "静态成员也可以标";
 | 钳制的三种跳过 | 多对象值不一致、字段当前只读（`[ReadOnly]`/`[DisableIf]`）、非数值类型（告警一次）。理由都是「不悄悄改数据」 |
 | 整数边界取整 | `[MinValue(2.5)]` 的最小合法整数是 3（向上取整），`[MaxValue(2.5)]` 是 2（向下取整） |
 | 引用判定 | 工程资产 vs 场景对象（预制体**实例**算场景对象）。空引用不算违反——那是 `[Required]` 的职责 |
+| `[RequiredIn]` | 判空规则与 `[Required]` **完全一致**（同一个校验器），多的只是「先看上下文对不对」那道门。`ErrorMessage` 只做纯文本，层级固定为错误 |
+| `[DisallowModificationsIn]` | 两件事：**上下文匹配时变灰**（处理器装的只读），以及**「加上本特性之前就已经改过」时画一条提示**（判据是 `SerializedProperty.prefabOverride`）。多选与反射成员**不报**后一条（前者官方语义未写明、后者没有值入口），**只读那一半照常生效** |
 
 ### 结构与门控特性
 

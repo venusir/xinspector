@@ -222,6 +222,13 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 这条与「不为没有调用方的扩展点建抽象」是同一种纪律的另一面——
 **不为不确定的东西造表面。**
 
+> **2026-10-04 追记：** 这条纪律**成立**，但它的条件是会变的——四个 `[XxxIn]` 的签名
+> 后来核到了（§十），于是它们落地了；`[ShowIfGroup]` / `[HideIfGroup]` 的签名同日一并核到
+> （构造 `(string path, bool animate = true)` 与 `(string path, object value, bool animate = true)`，
+> 另有 `Value` / `Animate` / `Condition` 与 `CombineValuesWith`），**仍没做的原因换了一个**：
+> 它们要在**分组装配之后**才能挂判据（分组节点那时才存在），而构建期没有那个阶段。
+> **「不做」的理由要跟着复核，不然它会过期成一句空话。**
+
 **（c）求值与解析分离。**
 
 解析（找成员、校类型、失败告警）在构建期做一次；求值（读一个 bool）在绘制期每帧做。
@@ -470,6 +477,7 @@ Serializer 类型系统上的：他有一套「什么算可序列化」的定义
 - **`TitleAlignments`**：`TitleGroup` 的 `alignment` 参数用。官方 4 个成员（Centered / Left / Right / Split），
   文档站按字母序排，**数值未核实**——我们按此顺序从 0 起排。
 - `PrefabKind`（`[Flags]`，10 成员）、`Units`（约 200 成员）、`TabLayouting`——**本轮不做**，见下表。
+  （`PrefabKind` **2026-10-04 已做**，见 §十；`Units` 与 `TabLayouting` 仍不做。）
 
 ### 本轮不实现（都记在此，别处不再重复）
 
@@ -478,7 +486,7 @@ Serializer 类型系统上的：他有一套「什么算可序列化」的定义
 | `[CustomValueDrawer]` | 唯一重载就是 `(string action)`——resolved string（方法/表达式调用）。**属 L5 性质**（调用目标对象） |
 | `[ValidateInput]` | `(string condition, string defaultMessage = null, InfoMessageType = Error)`——condition 可为方法，另有 `$value` 具名参数。同样 L5 性质，且需要一个尚不存在的「校验消息层」 |
 | `[Unit]` | 6 个重载里 4 个直接吃 `Units`——约 200 个成员的自有枚举，外加换算/显示引擎与右键换单位菜单。**独立大件**，没有便宜的半成品形态 |
-| `[RequiredIn]` `[DisallowModificationsIn]` | 都要 `PrefabKind`（**数值未核实**）+ 预制体种类探测（`PrefabUtility`）+ 校验消息层。两者共用同一块尚不存在的基础设施，**成对推迟** |
+| `[RequiredIn]` `[DisallowModificationsIn]` | 都要 `PrefabKind`（**数值未核实**）+ 预制体种类探测（`PrefabUtility`）+ 校验消息层。两者共用同一块尚不存在的基础设施，**成对推迟**（**2026-10-04 已翻案**：那块基础设施随 §十 落地，两个特性一并实现） |
 | `[HideNetworkBehaviourFields]` | 作用于 UNet 的 `NetworkBehaviour`（Network Channel / Send Interval）——该类型在 Unity 6 已不存在，唯一可能的实现是静默 no-op |
 | `[ShowPropertyResolver]` | 本包只有一个值后端，没有「property resolver」这个概念，做出来是编造的调试信息。等反射后端出现再说 |
 | `[SuppressInvalidAttributeError]` | 当前没有「特性用在不该用的类型上」的告警层可抑制，声明它等于静默 no-op |
@@ -818,7 +826,107 @@ L3 只有两个新面孔，但两个都得核——它们各自的形状直接�
 
 ---
 
-## 十、审计记忆
+## 十、第七批签名核对（2026-10-04）——预制体上下文一族
+
+补 L2 剩余里的预制体上下文族之前，把 6 个特性 + 1 个支撑枚举的 **Odin 官方签名**逐条抄了下来。
+取法同前：**`Invoke-WebRequest` 抓原始 HTML，再抽 `<pre><code class="lang-csharp hljs">` 代码块**，
+别用 `WebFetch`（它会被侧边栏挤到截断）。这一批**一次就中**，没有新的取法坑。
+
+**这一批的直接意义：** `OdinGap.md` 把这一族记在「签名未核——猜一个形状写下去比不做更糟」下，
+本批把那个前提消掉了。同时它也是**第一次**出现「同一块基础设施解锁两个 ⛔ 特性」的情形
+——`[RequiredIn]` `[DisallowModificationsIn]` 当初判 ⛔ 的理由写着「共用同一块尚不存在的基础设施，
+成对推迟」，那块基础设施就是这一族的 `PrefabKind` + 种类探测。
+
+### 逐条：官方签名 → 本轮实现
+
+| 特性 | 官方签名（逐字） | 本轮实现 | 不实现的部分与理由 |
+|---|---|---|---|
+| `[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]` | `public XxxInAttribute(PrefabKind prefabKind)`；属性 `public PrefabKind PrefabKind` | 全部 | 无参数可收窄。`[EnableIn]`/`[DisableIn]` 还带 `[DontApplyToListElements]`——那是 Odin 列表元素特性体系的标记，本包没有对应物，不做 |
+| `[RequiredIn]` | `public RequiredInAttribute(PrefabKind kind)`；`public string ErrorMessage`；`AllowMultiple = false, Inherited = true` | 全部 | `ErrorMessage` 在 Odin 支持它的表达式语法，本包**只做纯文本** |
+| `[DisallowModificationsIn]` | `public DisallowModificationsInAttribute(PrefabKind kind)`；属性 `public PrefabKind PrefabKind` | 全部 | 无 |
+| `PrefabKind` | `[Flags] public enum PrefabKind` | 10 个成员的名字与语义照抄，**数值自定** | 见下 |
+
+官方那 10 个成员（按文档站的字母序）：`All`、`InstanceInPrefab`、`InstanceInScene`、`None`、
+`NonPrefabInstance`、`PrefabAsset`、`PrefabInstance`、`PrefabInstanceAndNonPrefabInstance`、
+`Regular`、`Variant`。**与 §五 早已记下的「`[Flags]`，10 成员」一致**——那次核对只记了成员数与
+标志位，这次把名字与逐条说明抄全了。
+
+### 跨特性共性
+
+1. 六个都在 `Sirenix.OdinInspector`（程序集 `Sirenix.OdinInspector.Attributes`），都带
+   `[Conditional("UNITY_EDITOR")]`，`AttributeUsage` 都是 `AttributeTargets.All`。
+   本包照旧**刻意收窄**，也照旧**不带** `[Conditional]`。
+2. **`AttributeUsage` 收窄分两档**：四个条件收窄到 `Field | Property | Method`——它们对按钮
+   节点**确实生效**（`[Button, DisableIn(PrefabKind.PrefabAsset)]` 是常见用法），
+   与那 11 个条件特性同一条判据；两个校验只到 `Field | Property`——判空要 `SerializedProperty`、
+   「已改过」也要，照 `[Required]` 的既有收窄。放宽的只该是真正会生效的那一侧。
+3. **官方枚举里的模型预制体缺口。** `PrefabKind` 没有和 `PrefabAssetType.Model` 对应的成员，
+   而模型预制体确确实实是一种预制体资产。本包**把 Model 归入 `Regular`**（见下），
+   不发明第 11 个成员。
+
+### 本包自定的值
+
+| 值 | 取什么 | 落在哪 |
+|---|---|---|
+| 十个成员的数值 | 5 个具体位（`1<<0`…`1<<4`）+ 4 个复合成员（具体位的并集）+ `None = 0` | `PrefabKind.cs`（注释里写明本包自定） |
+| 模型预制体 | 归 `Regular` | `PrefabKindResolver.KindOf` |
+| 非 Unity 对象与非预制体资产 | 解析为 `None`（没有上下文） | 同上 |
+| 多选语义 | 全部目标都匹配才算匹配 | `PrefabContextProbe.MatchesAll` |
+
+**为什么数值要是一套干净的位分解：** 匹配算法就是求交集。解析出恰好一个具体位，
+与特性给的位求 `&`，非空即匹配——于是 `PrefabInstance` / `PrefabAsset` /
+`PrefabInstanceAndNonPrefabInstance` / `All` 这些复合成员天然可用，不需要任何特判。
+
+### 判定阶梯（次序本身是设计）
+
+```
+0. 不是 GameObject/组件（POCO、SO、材质…）                        → None
+A. 预制体隔离编辑模式（必须最先判：那里 GetPrefabAssetType 不可靠）
+   A1 内容里的嵌套实例                                            → InstanceInPrefab
+   A2 其余（内容根与普通子物体）：种类取自 stage.assetPath 的资产  → Regular / Variant
+B. 属于预制体实例
+   B1 在资产内部：变体资产自身 → Variant；其余 → InstanceInPrefab
+   B2 在场景里：嵌套实例（最近根 ≠ 最外层根）→ InstanceInPrefab；其余 → InstanceInScene
+C. 不属于实例的预制体资产（按 GetPrefabAssetType）                  → Regular / Variant / None
+D. 场景里的非预制体对象                                            → NonPrefabInstance
+E. 其余（预览场景里的非 stage 对象等）                             → None
+```
+
+**核对时纠了两处想当然：**
+
+- `PrefabInstanceStatus` 在 6000.x **只有 3 个取值**（`NotAPrefab` / `Connected` / `MissingAsset`）
+  ——旧预制体时代的 `Disconnected` 早已不在 API 里。
+- **隔离编辑模式里 `GetPrefabAssetType` 不可靠**（常规预制体的内容根会报 `NotAPrefab`，
+  变体的内容根报 `Regular`）。故 stage 那一支**绕道 `stage.assetPath` 加载资产**再判种类，
+  不依赖那个行为。这也是阶梯次序的由来：stage 必须最先判，否则变体的内容根会被判成实例。
+
+**两处不确定处，一律往「不会误判成资产」的一侧兜底：** 缺资产实例的两个实例根查询行为未实证
+→ 落 `InstanceInScene`；「加进实例但未应用」的对象（官方只保证实例根查询返回 `null`）
+→ 落 `NonPrefabInstance`。
+
+### 一处刻意的语义差异与三条收窄
+
+- **多选取「全部匹配」**。既有条件族（`[ShowIf]`/`[DisableIf]`/内嵌三兄弟）取的是
+  「首个存活目标」——两者口径不同，且**不是疏漏**：成员**值**读一个目标就够，
+  预制体**上下文**是整个选择的性质，混选一个资产与一个场景对象时说「这个字段可见」
+  对其中一半目标是错的。
+- **`[RequiredIn].ErrorMessage` 只做纯文本**（Odin 支持表达式）。
+- **`[DisallowModificationsIn]` 的「已经改过」判据是 `SerializedProperty.prefabOverride`**，
+  因此多选时不报（多选下它反映的是谁官方未写明），反射成员也不报（没有值入口，
+  绘制器会说明一句）。**只读那一半照常生效。**
+- **同一成员上多个条件仍是后装入者覆盖**（`PropertyState` 只有一个求值器槽）。
+  这是既有事实，本轮把它写进了 README 与 Roadmap 的未决项，没有引入组合机制。
+
+### 落地时的两处既有痕迹
+
+- §五 的「本轮不实现」表里 `[RequiredIn]` `[DisallowModificationsIn]` 一行、以及
+  「需要自建的类型」里 `PrefabKind` 那句「**本轮不做**」，都已被本节翻案。
+- §二「已否决的形状」里那条以「**具体签名没从 Odin 官网核对到，就不写**」为由不做的记录，
+  理由已不成立（签名在本节）。
+
+---
+
+## 十一、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 

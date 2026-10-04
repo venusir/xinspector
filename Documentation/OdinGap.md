@@ -15,15 +15,20 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-04，L3 之后）：**
+**本项目的家底（2026-10-04，L2 收尾之一之后）：**
 
-- 公开特性 **69 个**（清单见文末「总账」），分八族：分组与条件、状态与门控、标签与外观、
-  值绘制、校验与钳制、按钮、回调、**反射成员**，另有调试 1 个
-- 自定义分组的公开基类 `PropertyGroupAttribute`（外加两个自建枚举 `TitleAlignments`、`ButtonSizes`）
+- 公开特性 **75 个**（清单见文末「总账」），分九族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**，另有调试 1 个
+- 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
+  **`PrefabKind`**）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
 - **方法节点**：树上第一次出现没有值的节点（`InspectorPropertyKind.Method`）
 - **反射成员节点**：树上第一次出现值不来自 Unity 序列化的节点（`InspectorPropertyKind.ReflectedMember`），
   配套**第二套值后端** `ReflectedValueEntry`（只读），以及把成员编译成委托的 `ReflectedAccessor`
+- **预制体种类探测**（`PrefabKindResolver` 纯映射 + `PrefabContextProbe` 薄探测）：
+  第一次出现「按被检视对象所处的 Unity 上下文开关成员」的判据，也是第一次由一块基础设施
+  同时解锁条件族与校验族（`[RequiredIn]` `[DisallowModificationsIn]` 当初正是判在
+  「共用一块尚不存在的基础设施」上）
 - 三个标记接口各司其职：`ITreeLifecycleAttribute`（不产生节点）、`ITreeMembershipAttribute`
   （产生节点但不画也不改别人）、自定义分组的 `PropertyGroupAttribute`（抽象基类）
 - 窗口基类 1 个（`XInspectorEditorWindow`，默认画自身字段，覆写 `GetTarget()` 可检视任意对象）
@@ -52,9 +57,9 @@
 | **L0** | Unity 原生装饰器：`[Range]` `[Space]` `[TextArea]` `[Multiline]` `[Header]` `[Tooltip]` | **无需工作**——由 `PropertyField` 绘制。✅ 结构侧已实测（2026-10-03），见文末「L0 的验证记录」 |
 | **L1a** | 21 个十几行的特性 | **零新基础设施** ✅ **已清完**（2026-10-04） |
 | **L1b** | 分组族与重型值绘制器 | **✅ 整层已清完**（2026-10-04）：分组族 6 个、值绘制器 6 个，收尾的 `[InlineEditor]` 一族（含三个内嵌环境条件）也落地了 |
-| **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做 |
+| **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做；预制体那一族 ✅ **已做**（2026-10-04，含两个原先判 ⛔ 的校验）。仍缺 `[ShowIfGroup]`/`[HideIfGroup]`（卡在「构建期没有分组装配之后的阶段」）与跨对象条件 |
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
-| **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持 |
+| **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持（签名已核，见 §七末） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
 | **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 集合自绘 |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
@@ -96,6 +101,13 @@
 > 「条件指向普通属性/方法」）。家底 68 → 69，缺口 26 → 25。
 > 三处与 Odin 的差异在这一轮固定下来：反射成员**只读**、静态成员会显示、
 > `[ShowInInspector]` **不标方法**（编译期报错而不是静默）。
+>
+> **同日的第七批**（[Pipeline.md](Modules/Pipeline.md) §十）：**预制体上下文族** 6 个特性落地
+> ——四个条件 `[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]` 加两个原先判 ⛔ 的校验
+> `[RequiredIn]` `[DisallowModificationsIn]`。家底 69 → 75，缺口 25 → 21，⛔ 10 → 8，
+> **Conditionals 一类的缺口清零**。它把「签名未核」这个前提消掉之后，又暴露出三件当初没料到的事：
+> 种类探测本身是真的难（隔离编辑模式里资产类型判定失效，得排到阶梯第一位并绕道资产路径）、
+> 官方有三处没写明只能选兜底、以及**预制体夹具是本仓第一处往盘上写资产的测试**。
 
 ### Type Specifics（24）
 
@@ -144,7 +156,7 @@
 | **`[PropertySpace]`** | **✅ 已实现** | — |
 | **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ✅ 已实现 | — |
-| `[RequiredIn]` | ⛔ 不做 | 需 `PrefabKind` + 预制体探测 + 校验消息层，与 `[DisallowModificationsIn]` 成对推迟 |
+| `[RequiredIn]` | ✅ 已实现 | 接 `PrefabKind`；`ErrorMessage` 只做纯文本（Odin 支持表达式） |
 | `[Searchable]` | ❌ 缺 | **L6**（过滤的是字段/类型的**子成员**，不拥有子绘制权就无从过滤；2026-10-04 由 L1b 改判） |
 | `[ShowInInspector]` | ✅ 已实现 | 第二套值后端：**只读**展示（`SetValue` 恒抛），标在方法上编译不过 |
 | **`[Title]`** | **✅ 已实现** | — |
@@ -153,8 +165,9 @@
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ✅ 已实现 | 数据源只收序列化数组/List；只声明有真行为的选项（另见 Collections） |
 
-**小计：已实现 13 / 缺 2 / 不做 4**（2026-10-04：`[ValueDropdown]` 转已实现、
-`[TypeFilter]` 由「缺」改判「不做」；同日 L3 把 `[ShowInInspector]` 转已实现）
+**小计：已实现 14 / 缺 2 / 不做 3**（2026-10-04：`[ValueDropdown]` 转已实现、
+`[TypeFilter]` 由「缺」改判「不做」；同日 L3 把 `[ShowInInspector]` 转已实现、
+L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 
 ### Validation（15）
 
@@ -162,7 +175,7 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[DisallowModificationsIn]` | ⛔ 不做 | 同 `[RequiredIn]`：共用一块尚不存在的预制体探测基础设施 |
+| `[DisallowModificationsIn]` | ✅ 已实现 | 接 `PrefabKind`；「已经改过」用 `prefabOverride` 判（多选与反射成员不报） |
 | `[MaxValue]` | ✅ 已实现 | — |
 | `[MinMaxSlider]` | ✅ 已实现 | 只作用 `Vector2`；边界可取自序列化成员名（另见 Numbers） |
 | `[MinValue]` | ✅ 已实现 | — |
@@ -170,7 +183,8 @@
 | `[Range]` | ➖ 不需要 | Unity 自己的（另见 Unity） |
 | `[RequiredListLength]` | ❌ 缺 | L6 |
 
-**小计：已实现 4 / 缺 1 / 不做 1 / 不需要 1**（2026-10-04：`[MinMaxSlider]` 转已实现）
+**小计：已实现 5 / 缺 1 / 不做 0 / 不需要 1**（2026-10-04：`[MinMaxSlider]` 转已实现；
+同日 L2 收尾之一把 `[DisallowModificationsIn]` 从「不做」翻成已实现）
 
 ### Groups（12）
 
@@ -246,21 +260,22 @@
 | 特性 | 状态 | 层 |
 |---|---|---|
 | **`[DisableIf]`** | **✅ 已实现** | — |
-| `[DisableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
-| **`[DisableInEditorMode]`** | **✅ 已实现** | — |
+| `[DisableIn]` | ✅ 已实现 | 接 `PrefabKind`；多选要求全部目标匹配 |
+| `[DisableInEditorMode]` | ✅ 已实现 | — |
 | `[DisableInInlineEditors]` | ✅ 已实现 | 同族三兄弟之一 |
-| **`[DisableInPlayMode]`** | **✅ 已实现** | — |
+| `[DisableInPlayMode]` | ✅ 已实现 | — |
 | **`[EnableIf]`** | **✅ 已实现** | — |
-| `[EnableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| `[EnableIn]` | ✅ 已实现 | 接 `PrefabKind`；多选要求全部目标匹配 |
 | **`[HideIf]`** | **✅ 已实现** | — |
-| `[HideIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| `[HideIn]` | ✅ 已实现 | 接 `PrefabKind`；多选要求全部目标匹配 |
 | **`[HideInEditorMode]`** | **✅ 已实现** | — |
 | **`[HideInPlayMode]`** | **✅ 已实现** | — |
 | **`[ShowIf]`** | **✅ 已实现** | — |
-| `[ShowIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
+| `[ShowIn]` | ✅ 已实现 | 接 `PrefabKind`；多选要求全部目标匹配 |
 | `[ShowInInlineEditors]` | ✅ 已实现 | 同族三兄弟之一 |
 
-**小计：已实现 10 / 缺 4**
+**小计：已实现 14 / 缺 0**（2026-10-04：`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`
+四项转已实现——签名核到后先阻塞的那条前提消失了）
 
 ### Numbers（7）
 
@@ -308,10 +323,10 @@
 ### 总账
 
 ```
-108 个不重复特性 = 69 已实现 + 25 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 75 已实现 + 21 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 69 个：
+已实现的 75 个：
 
 - **分组与条件**（19）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -327,6 +342,9 @@
   `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
+- **预制体上下文**（6，2026-10-04 L2 收尾之一）：四个条件 `[ShowIn]` `[HideIn]` `[EnableIn]`
+  `[DisableIn]`（接 `PrefabKind`），两个校验 `[RequiredIn]` `[DisallowModificationsIn]`
+  ——后两个原先判 ⛔，理由是「共用一块尚不存在的基础设施」，那块基础设施就是这一族
 - **按钮**（4，2026-10-04 L5）：`[Button]` `[InlineButton]` `[ButtonGroup]` `[ResponsiveButtonGroup]`
 - **回调**（6，2026-10-04 L5）：`[OnInspectorInit]` `[OnInspectorDispose]` `[OnStateUpdate]`
   `[OnInspectorGUI]` `[OnValueChanged]` `[CustomContextMenu]`
@@ -335,16 +353,18 @@
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
 
-**标 ⛔ 的 10 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]` `[RequiredIn]`
-`[DisallowModificationsIn]` `[HideNetworkBehaviourFields]` `[ShowPropertyResolver]`
-`[SuppressInvalidAttributeError]` `[DisableContextMenu]` `[TypeFilter]`）**不是「还没做」，
+**标 ⛔ 的 8 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]`
+`[HideNetworkBehaviourFields]` `[ShowPropertyResolver]` `[SuppressInvalidAttributeError]`
+`[DisableContextMenu]` `[TypeFilter]`）**不是「还没做」，
 是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
 `[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
+（`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
+它们做得了、也做了。）
 
-**「缺 26 个」也不等于「26 份工作量」**：其中真正需要新层的集中在
-L3（反射后端）、L6（集合自绘）、L7（Odin 的另一条产品线）——
-L1a、L1b 两族、`[InlineEditor]` 一族、以及 **L5 的按钮与回调两批**（都 2026-10-04）这几块
-已经清完。剩下的缺口里，**L3 是唯一一个卡着一串东西的**（见推荐顺序）。
+**「缺 21 个」也不等于「21 份工作量」**：其中真正需要新层的集中在
+L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族、`[InlineEditor]` 一族、
+**L5 的按钮与回调两批**、**L3 的反射后端**、以及 **L2 的预制体上下文族**（都 2026-10-04）
+这几块已经清完。剩下的缺口里，**L6 是最重的一块**（它比原先估计的更重，见推荐顺序）。
 
 **2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
 `[AssetList]`→L6、`[TypeDrawerSettings]`→L3、`[TypeFilter]`→⛔、
@@ -418,21 +438,30 @@ L1a、L1b 两族、`[InlineEditor]` 一族、以及 **L5 的按钮与回调两�
 | `[ShowIf("cond")]` / `[HideIf("cond")]` | 装 `PropertyState.VisibilityResolver` |
 | `[EnableIf("cond")]` / `[DisableIf("cond")]` | 装 `PropertyState.ReadOnlyResolver` |
 | `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]` | 零参数，谓词是 `Application.isPlaying` |
+| `[ShowIn(PrefabKind)]` `[HideIn(PrefabKind)]` `[EnableIn(PrefabKind)]` `[DisableIn(PrefabKind)]` | 接 `PrefabKind` 位标志，谓词是「目标所处的预制体上下文」（2026-10-04 落地，见 §十） |
 | 类级 `[BoxGroup]`（及任何分组特性） | 分发到成员；成员自己的分组作为它的**子路径**，故类级恒在最外层 |
 
 **这一层的实现成本落在两处，都不在「加特性」上**：一是处理器层本身（基类 + 注册表 +
 构建期集成点），二是条件的**求值与解析分离**——解析在构建期做一次（找成员、校类型、
 失败时告警），求值在绘制期每帧做（读一个 bool）。后者正是「不碰 GUI 就能测」的前提。
 
+预制体那一族把这条分工又验证了一次：**构建期一行没改**，四个特性各自只是一个
+「装求值器」的处理器；唯一的新东西是那块探测（见 §十）。
+
 **仍缺**（不是遗漏，是刻意未做）：
 
 | 缺口 | 为什么 |
 |---|---|
-| `[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]` | 它们接的是 `PrefabKind` 之类的枚举参数，**具体签名未从官网核对到**。猜一个形状写下去比不做更糟——它会被当成已有能力 |
-| `[ShowIfGroup]` `[HideIfGroup]` | 同上，分组变体的签名待核 |
+| ~~`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`~~ | ✅ 已随预制体上下文族落地（2026-10-04）：签名核到后原来的拦阻条件消失 |
+| `[ShowIfGroup]` `[HideIfGroup]` | 签名已核（构造 `(string path, bool animate = true)` 与 `(string path, object value, bool animate = true)`，另有 `Value` / `Animate` / `Condition` 与 `CombineValuesWith`）。**仍不做是换了个理由**：判据要挂在**分组节点**上，而分组节点在处理器阶段之后才由分组装配创建——构建期没有「分组装配之后」那个阶段（`Editor/README.md` 已把这个口子记下）。要么加那个阶段（动顺序契约），要么把决策搬回绘制期（与「处理器专有」的分界相抵） |
 | ~~条件为**方法**或**普通属性**~~ | ✅ 已随 L3 落地（2026-10-04）：三级解析「序列化成员 → 反射字段/属性 → 无参返回 bool 的方法」 |
 | 条件写在**别的对象**上（Odin 的 `"@other.field"`） | 需要跨对象引用解析，与本包「条件名只认本对象」的既有边界冲突 |
-| ~~`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`~~ | ✅ 已随 `[InlineEditor]` 一族落地（2026-10-04）——这张表里只剩上面三行 |
+| ~~`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`~~ | ✅ 已随 `[InlineEditor]` 一族落地（2026-10-04） |
+
+**同层内的一处口径不一致，刻意留着**：既有的 `[ShowIf]` 一系取「首个存活目标」的值，
+预制体那一族取「全部目标都匹配」。理由见 §十——成员**值**读一个目标就够，
+预制体**上下文**是整个选择的性质。这条不一致连同「同一成员上多个条件取后装入者」
+一起记进了 `Roadmap.md` 的未决项。
 
 ## L3 · 需要反射值后端　✅ 已做（2026-10-04）
 
@@ -544,27 +573,42 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    它当初「卡着一串东西」的说法也**部分落空**——`[TypeDrawerSettings]` 核过签名后
    确认是独立的一批（依赖 `System.Type` 的绘制，不依赖反射后端），
    这是本表第二次因为「一个『等』字」而估错层（第一次见本轮的经验三）。
-6. **L2 剩余四项**——**下一个候选**。`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`
-   与 `[ShowIfGroup]` / `[HideIfGroup]` 全卡在**签名未核**：它们接 `PrefabKind` 之类的枚举参数，
-   猜一个形状写下去比不做更糟。跨对象条件 `"@other.field"` 另需一套对象引用解析。
-   这一批的性价比取决于能否核到签名。
-7. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
+6. ~~**L2 剩余：预制体上下文族**~~——✅ **已做**（2026-10-04，六个特性）。当初把它列在这里的
+   前提是「**签名未核**」，那一轮把签名核了（[Pipeline.md](Modules/Pipeline.md) §十），
+   前提消失它就成了。**这是本表第三次验证「核对签名之后再动手」这条纪律划算**：
+   核完才知道它接的是 `PrefabKind` 位标志、一核就顺带发现它还能解锁两个判 ⛔ 的校验特性
+   （`[RequiredIn]` `[DisallowModificationsIn]` 当初的理由正是「共用一块尚不存在的基础设施」）。
+   一处当初没料到的成本：**种类探测是真的难**——隔离编辑模式里 `GetPrefabAssetType` 不可靠，
+   判定阶梯得把它排在第一位并绕道资产路径；还有三处官方没写明的地方只能给兜底。
+   一处当初也没料到的**测试代价**：预制体夹具必须往盘上写资产，这是本仓头一遭。
+7. **L2 剩下的两族**——`[ShowIfGroup]` / `[HideIfGroup]`（签名已核，卡在「构建期没有
+   分组装配之后的阶段」）与跨对象条件 `"@other.field"`（与本包「条件名只认本对象」冲突）。
+   两族都不再卡在签名上，卡的是结构性改动，故性价比要单独评估。
+8. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
    以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
-8. **L7**——要么不做，要么当成独立产品立项。
+9. **L7**——要么不做，要么当成独立产品立项。
 
 **判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
 已兑现；L3 是**低杠杆但清掉了一类能力**——它只添了一个特性，却让「画 Unity 不序列化的东西」
-这件事从「做不到」变成「做得到（只读）」，顺带解锁了条件族与窗口。
+这件事从「做不到」变成「做得到（只读）」，顺带解锁了条件族与窗口；
+预制体那一族是**中杠杆高复用**——一块探测换来六个特性，而且把 Unity 原生的一类上下文
+（预制体资产 / 实例 / 嵌套 / 隔离编辑）第一次接进了条件体系。
 L7 是另一条产品线。
 
-**四条经验留给下一轮**：其一，**核对签名之后再动手**——三轮共核过 41 个特性，
-才敢把 10 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
+**四条经验留给下一轮**：其一，**核对签名之后再动手**——四轮共核过 47 个特性，
+才敢把 8 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
 （分组绘制器落在成员与根节点上、同路径多类型被静默丢弃），它们是设计评审读源码时发现的，
 不修的话六个新特性会各自把它放大一遍；其三，**分层本身会错**——上一轮把五个特性从 L1b
 挪到 L6/L3/⛔，说明「一个「等」字」足以让整层的成本估算失真，**分类也是要核对的结论**；
 其四，**改一个类型会弄丢一条白送的语义**——目标列表从 `Object[]` 变 `object[]`，
 `!= null` 就从「Unity 的重载」退化成「引用比较」，而没有任何编译器提醒。
 **改型时要问的不只是「哪里编译不过」，还有「哪些语义是那种类型免费给的」**。
+
+**第五条（2026-10-04 新增）：官方文档没写的地方，先问「错了会怎样」，再选兜底。**
+预制体那一族有三处查不到权威结论（缺资产实例的实例根查询、未应用的新增对象、
+隔离编辑模式里的资产类型）。三处都不是靠猜，而是**各自挑一个「不会误判成另一类」的落点**
+并写进注释：宁可少报，不可错报。这一条与「不猜 API 形状」是一对——形状不许猜，
+**兜底必须选**，选完要写下来。
 
 ---
 
