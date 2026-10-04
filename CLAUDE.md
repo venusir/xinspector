@@ -30,7 +30,7 @@
 | 路径 | 会不会分发 |
 |---|---|
 | `Assets/XInspector/` | **会** |
-| `Assets/Sandbox/` | 不会。开发用演示组件与场景 |
+| `Assets/Sandbox/` | 不会。维护用**对照组**组件与场景（诊断台） |
 | `Tools/` | 不会。测试与文档门禁脚本 |
 | `ProjectSettings/`、`Packages/` | 不会。开发工程的壳 |
 
@@ -42,6 +42,12 @@
 包本体与工程壳**都在 `Assets/` 下平级**，因此不能再靠「在不在 `Packages/`」区分——只能靠
 目录名与这条约定：**`Assets/XInspector/` 之外的一切都是工程壳**。往包里加东西前先问一句：
 这东西是给使用方的吗？
+
+**判据是收件人，不是「是不是演示」。** 包内有 `Samples/`（示例，收件人是第三方），
+沙盒里也有演示组件（收件人是维护者）——同样写着演示代码，一边进包一边不进，差别只在谁看：
+示例回答「这插件长什么样」，沙盒的对照组回答「值管道有没有改变外观」。
+后者作为示例是噪音（有个组件刻意一个特性都不带），前者作为对照物不成立。
+2026-10 按这条判据分过一次家：展示台并入 `Samples/`，对照组留在沙盒。
 
 这是把包从 `Packages/com.xinspector/` 搬到 `Assets/` 的**直接代价**：原先位置上自带边界，
 现在边界得靠人守。搬家的理由与放弃的能力见
@@ -110,7 +116,15 @@ Editor/                      Venusir.Xinspector.Editor
 Editor/AutoEditor/           Venusir.Xinspector.AutoEditor（宏门控，见下）
 Tests/Runtime/               PlayMode
 Tests/Editor/                EditMode
-Samples/Overview/            示例（随工程直接存在，挂上组件即可看）
+Samples/Overview/            示例：最小可用形态，挂上组件即可看（面向第三方）
+Samples/AttributeShowcase/   示例：逐特性展示台（面向第三方）
+```
+
+包外的对照组（不随包分发，见「仓库布局与边界规则」）：
+
+```
+Assets/Sandbox/              零特性基线 / 原生装饰器 / 自动接管，各一个组件 + Sandbox.unity
+  Editor/                    场景生成器等工具（不进场景）
 ```
 
 ## 自动接管与 `XINSPECTOR_AUTO_EDITOR` 宏
@@ -157,7 +171,7 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 
 **三条门禁**：`Tools/run-tests.ps1`（全量双平台）、
 `dotnet test Tests.Native/Tests.Native.csproj`（离线，约 20 毫秒，只覆盖 Runtime 逻辑）、
-`Tools/check-docs.ps1 -Enforce`（文档 + .meta + 源文件全参与编译）。
+`Tools/check-docs.ps1 -Enforce`（文档 + .meta + 源文件全参与编译 + 沙盒场景对齐）。
 
 **具体命令、参数手感与踩过的坑见 [Documentation/Workflow.md](Documentation/Workflow.md) §一**
 ——那里是流程的唯一真相，本节只写规则。
@@ -171,23 +185,27 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 - **测试程序集与 `defineConstraints`：** 测试程序集用 `UNITY_INCLUDE_TESTS` 门控
   （不同于 XFramework 的旧式 `optionalUnityReferences`）——只有它才能保证测试不被编进玩家构建
 
-## 文档门禁要守的三件事
+## 文档门禁要守的四件事
 
-`Tools/check-docs.ps1 -Enforce` 三项都须满足：包内 XML 文档告警为 0、所有源文件都已参与编译、
-所有资源都有 `.meta`。它是独立的一条通道：csproj 未设 `DocumentationFile`，
-**默认编译根本不检查文档注释**，不开这一枪则写坏文档不会有任何反馈。
+`Tools/check-docs.ps1 -Enforce` 四项都须满足：包内 XML 文档告警为 0、所有源文件都已参与编译、
+所有资源都有 `.meta`、**沙盒顶层组件与 `Sandbox.unity` 一一对应**。它是独立的一条通道：
+csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**，不开这一枪则写坏文档不会有任何反馈。
 
 **前置条件：需要 `.csproj`，而它只在 GUI 编辑器里生成**——纯批处理环境下这条门禁跑不起来，
 脚本会判失败。那不是脚本坏了，是它拒绝给假绿。细节见
 [Documentation/Workflow.md](Documentation/Workflow.md) §一。
 
-两处本包特有的处理，改动时别删：
+三处本包特有的处理，改动时别删：
 
 - `Editor/AutoEditor/` 在「是否参与编译」检查中被排除——它是宏门控的，宏关掉时那里的源文件
   本来就不该被编译，不排除会长期误报
 - 「缺 `.meta`」检查跳过**点开头**的条目（Unity 不给它们生成 meta）。包在 `Packages/` 时
   还有一条处理 `~` 结尾目录的规则，搬到 `Assets/` 后波浪号已去掉，那条成了永不触发的
   死代码，已删——若日后又出现 `~` 目录，记得加回来
+- 沙盒对齐检查的作用域是 `Assets/Sandbox/`（工程壳），与上面三条的包内作用域分开写。
+  沙盒不随包分发，但仓库内的一致性一样是门禁的事——2026-10 场景曾漂移过，
+  [Documentation/OdinGap.md](Documentation/OdinGap.md) 的验证步骤指着场景里不存在的 `Demo 4`；
+  照文档做的人会得出「原生装饰器没流经管线」这种反向结论
 
 ## 如何新增一个特性
 
@@ -197,7 +215,9 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 3. 若它影响**别的**属性（可见性、分组归属、标签），那需要一个能改写属性特性列表或
    `PropertyState` 的阶段——目前尚未建该层，加它时是纯新增
 4. 补无头测试（链装配顺序、分组归属、路径解析这类）
-5. 在 `Assets/Sandbox/` 里加一行演示
+5. 在包内展示台 `Assets/XInspector/Samples/AttributeShowcase/` 里加一行（第三方看的就是这里）；
+   若该特性会改变渲染、需要一个对照基准，再按需在 `Assets/Sandbox/` 加对照组
+   （顶层加组件后**必须重建场景**，否则门禁会拦下你——见 Workflow.md）
 6. 更新 `CHANGELOG.md` 与包 README 的「已知限制」（若边界有变）
 
 **分组特性**另需：继承 `PropertyGroupAttribute`（`Runtime/Attributes/Groups/`）并覆写 `Combine`，
@@ -251,8 +271,12 @@ Samples/Overview/            示例（随工程直接存在，挂上组件即可
 | `Documentation/ModuleAudit.md` | 维护者 | 审计手册：判据清单、报告格式、结论落点 |
 | `Assets/XInspector/Documentation/` | 随包分发 | 包内文档（跟包一起被拷走） |
 
-**包内不指向包外：** 包内 README 不引用仓库根 `Documentation/` 下的维护向文档
-——第三方装了包却打不开它。
+**包内不指向包外：** 包内 README **与源码注释**都不引用 `Assets/XInspector/` 之外的东西
+——第三方装了包却打不开它。反方向（沙盒 → 包内）不受限，维护者两边都看得到。
+
+曾踩过一次：`OverviewComponent` 的注释写着「更直观的演示在 `Assets/Sandbox/AttributeDemo.cs`」，
+那个路径在第三方那里根本不存在。它的成因是同一件事被两个文件夹各讲了一遍——
+**重复的演示迟早会互相引用**，所以遇到这类注释，先看是不是该把重复消掉。
 
 ## Git
 

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    XInspector 包内自检：XML 文档注释的编译告警（CS1570 / CS1574）+ 资源 .meta 完整性。
+    XInspector 自检：XML 文档注释的编译告警（CS1570 / CS1574）+ 资源 .meta 完整性 + 沙盒场景对齐。
 
 .DESCRIPTION
     **一、文档注释告警。** Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本
@@ -46,7 +46,14 @@
     注意 Unity 自身不给「点开头的文件/目录」与「`~` 结尾」的条目生成 meta（如
     `Samples/Example/.sample.json`），这两类一律跳过，否则会永远误报。
 
-    **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（两类检查都须为 0）。
+    **三、沙盒场景对齐。** 作用域是 `Assets/Sandbox/`——**工程壳，不随包分发**，与上面两项的
+    包内作用域分开（改包内规则不该误伤它）。不变量：**顶层的每个 `.cs` 都必须在
+    `Sandbox.unity` 里被引用恰好一次**（顶层 = 对照组组件，`Editor/` = 不进场景的工具）。
+    2026-10 踩过一次：场景里的对象比组件少两个，而文档的目视验证步骤正指着其中一个不存在的
+    对象——照文档做的人会得出「原生装饰器没流经管线」这种反向结论。只做单向检查（脚本 → 场景）：
+    重建后的场景里可能有来自包内的组件（如 `Samples/Overview`），它不是沙盒顶层的脚本。
+
+    **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（各项检查都须为 0）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -136,6 +143,54 @@ foreach ($item in (Get-ChildItem $pkgRoot -Recurse -Force -ErrorAction SilentlyC
     if ($name -like '*.meta' -or $name.StartsWith('.')) { continue }
     if (-not (Test-Path ("$($item.FullName).meta"))) {
         $metaMissing += ($item.FullName.Substring($repoRoot.Length + 1) -replace '\\', '/')
+    }
+}
+
+# ---------- 再查「沙盒对照组有没有都进场景」 ----------
+#
+# 作用域是 Assets/Sandbox/，**不是包本体**——上面那段看的是 Assets/XInspector/。两者必须分开写：
+# 沙盒不随包分发，日后改包内规则不该误伤它。
+#
+# 沙盒是维护者的诊断台：顶层放对照组组件（进场景），Editor/ 放工具（不进场景）。
+# 不变量：顶层的每个 .cs 都必须在 Sandbox.unity 里被引用恰好一次。
+#
+# 只做单向检查（顶层脚本 → 场景）。反向会误报：重建后的场景里可能有来自包内的组件
+# （如 Samples/Overview 的 OverviewComponent），它不是沙盒顶层的脚本。
+#
+# 不做整场景逐字节比对：Unity 给场景对象分配的 fileID 依赖构建顺序与会话，逐字节比对太脆，
+# 改一次就红。GUID 计数稳定，且恰好挡住实际遇到的这类漂移。
+#
+# 错了要重建：菜单 Tools/XInspector/重建 Sandbox 场景（或 -executeMethod 调
+# SandboxSceneBuilder.CreateSandboxScene）。注意重建后对象名不要改——文档按名引用它们。
+
+$sandboxDir = Join-Path $repoRoot "Assets\Sandbox"
+$sandboxScene = Join-Path $sandboxDir "Sandbox.unity"
+$sandboxDrift = @()
+
+if (Test-Path $sandboxDir) {
+    if (-not (Test-Path $sandboxScene)) {
+        $sandboxDrift += "Sandbox.unity 不存在"
+    } else {
+        $sceneText = Get-Content $sandboxScene -Raw
+        foreach ($cs in (Get-ChildItem $sandboxDir -Filter *.cs -File)) {
+            $metaPath = "$($cs.FullName).meta"
+            if (-not (Test-Path $metaPath)) {
+                $sandboxDrift += "$($cs.Name)：缺 .meta，读不到 GUID"
+                continue
+            }
+
+            $guid = $null
+            if ((Get-Content $metaPath -Raw) -match 'guid:\s*([0-9a-f]{32})') { $guid = $Matches[1] }
+            if (-not $guid) {
+                $sandboxDrift += "$($cs.Name)：.meta 里读不到 guid"
+                continue
+            }
+
+            $hits = ([regex]::Matches($sceneText, [regex]::Escape($guid))).Count
+            if ($hits -ne 1) {
+                $sandboxDrift += "$($cs.Name)：在 Sandbox.unity 里被引用 $hits 次（应为 1）"
+            }
+        }
     }
 }
 
@@ -232,6 +287,13 @@ if ($Module) {
         $metaMissing | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($metaMissing.Count -gt 10) { Write-Host "      …共 $($metaMissing.Count) 个" -ForegroundColor Yellow }
     }
+    if ($sandboxDrift.Count -eq 0) {
+        Write-Host "  沙盒对齐: 顶层组件都已在 Sandbox.unity 中" -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  沙盒对齐: {0} 个顶层组件未正确进场景" -f $sandboxDrift.Count) -ForegroundColor Yellow
+        $sandboxDrift | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+        Write-Host "      处置：跑一次菜单 Tools/XInspector/重建 Sandbox 场景" -ForegroundColor Yellow
+    }
     Write-Host "  提示：先清 CS1570（它是遮蔽源），再看 CS1574 的真实数量。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
 
@@ -249,6 +311,7 @@ $problems = @()
 if ($warnings.Count -gt 0) { $problems += "包内 XML 文档告警 $($warnings.Count) 条（须为 0）" }
 if ($metaMissing.Count -gt 0) { $problems += "包内有 $($metaMissing.Count) 个条目缺 .meta（第三方导入会拿到不同 GUID）" }
 if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
+if ($sandboxDrift.Count -gt 0) { $problems += "沙盒有 $($sandboxDrift.Count) 个顶层组件未正确进场景（文档的目视验证步骤会指向不存在的对象）" }
 
 if ($problems.Count -gt 0) {
     Write-Host ""
@@ -259,5 +322,5 @@ if ($problems.Count -gt 0) {
 }
 
 Write-Host ""
-Write-Host "文档门禁：通过（包内 0 条，且所有源文件都参与了编译）" -ForegroundColor Green
+Write-Host "文档门禁：通过（包内 0 条、所有源文件都参与了编译、沙盒顶层组件与场景一一对应）" -ForegroundColor Green
 exit 0

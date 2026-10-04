@@ -15,7 +15,7 @@ pwsh -File Tools/run-tests.ps1
 # 2. 离线测试（Runtime 侧逻辑，约 20 毫秒）
 dotnet test Tests.Native/Tests.Native.csproj --nologo
 
-# 3. 文档门禁：包内 XML 告警 0 + 所有源文件参与编译 + 所有资源有 .meta
+# 3. 文档门禁：包内 XML 告警 0 + 所有源文件参与编译 + 所有资源有 .meta + 沙盒顶层组件与场景一一对应
 pwsh -File Tools/check-docs.ps1 -Enforce
 ```
 
@@ -61,11 +61,12 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
 这**不是脚本坏了，恰恰是它拒绝给出假的绿色**：没有 csproj 时「0 条告警」毫无意义。
 处置：在 Unity 里打开一次工程，csproj 即生成，之后门禁可跑。
 
-门禁守三件事：包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`。
+门禁守四件事：包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`、
+沙盒顶层组件与 `Sandbox.unity` 一一对应（见下）。
 它是**独立的一条通道**——Unity 生成的 csproj 没设 `DocumentationFile`，
 **默认编译根本不检查文档注释**，不开这一枪则写坏文档不会有任何反馈。
 
-两处本包特有的处理，改脚本时别删：
+三处本包特有的处理，改脚本时别删：
 
 - `Editor/AutoEditor/` 被排除出「是否参与编译」检查——它是宏门控的，宏关掉时
   那里的源文件本来就不该被编译。
@@ -73,6 +74,34 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
   包在 `Packages/` 时还有一条处理 `~` 结尾目录的规则（`-Recurse` 会钻进 `Samples~/`
   内部，那里的文件同样没有 meta）。搬到 `Assets/` 后波浪号已去掉，那条成了永不触发的
   死代码，已删。
+- **沙盒对齐检查的作用域是 `Assets/Sandbox/`，与上面三项的包内作用域分开写。**
+  沙盒不随包分发，但仓库内的一致性一样是门禁的事。只做单向检查（顶层脚本 → 场景）：
+  重建后的场景里可能有来自包内的组件（如 `Samples/Overview` 的 `OverviewComponent`），
+  它不是沙盒顶层的脚本，反向查会误报。也**不做整场景逐字节比对**——Unity 给场景对象
+  分配的 fileID 依赖构建顺序与会话，逐字节比对太脆，改一次就红。
+
+### 沙盒场景怎么重建
+
+`Assets/Sandbox/Sandbox.unity` 是**生成物**：它由 `SandboxSceneBuilder` 建，不是手改的
+（手写 `.unity` 的 YAML 容易写出「能打开但设置怪异」的文件，让 Unity 自己创建格式永远是对的）。
+
+**什么时候要重建**：在 `Assets/Sandbox/` 顶层加/删了对照组组件之后。忘了重建会被上面第 3 条
+门禁拦下——2026-10 就发生过一次：场景里的对象比组件少两个，而 `Documentation/OdinGap.md`
+的目视验证步骤正指着其中一个不存在的对象，照文档做的人会得出「原生装饰器没流经管线」
+这种反向结论。
+
+```powershell
+# 菜单入口（编辑器里）
+Tools/XInspector/重建 Sandbox 场景
+
+# 批处理等价入口（走测试壳，编辑器可保持开启）
+& "D:\Program Files\Unity\<版本>\Editor\Unity.exe" -batchmode -nographics -quit `
+  -projectPath "<仓库>.TestRun" `
+  -executeMethod XInspector.Sandbox.EditorTools.SandboxSceneBuilder.CreateSandboxScene `
+  -logFile "<绝对路径>.log"
+```
+
+**对象名不要改**：文档（OdinGap 等）按名引用 `Demo 1` … `Demo 4`。
 
 ---
 
