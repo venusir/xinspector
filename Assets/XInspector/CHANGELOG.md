@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+### Added — L1a：值绘制
+
+- **`[DisplayAsString]`**、**`[ToggleLeft]`**、**`[ProgressBar]`**、**`[EnumToggleButtons]`**：
+  四个**替换型**值绘制器——画完自己就结束，不调用链上的下一个。这是绘制器链本就支持的能力
+  （「不调用下一个」等于把内侧藏起来），因此「值控件换成文本/开关/进度条/按钮排」没有特例代码。
+- 绕过内侧的代价是**绕过末端那层只读禁用罩**（`UnityFallbackDrawer` 上的那圈
+  `DisabledScope`），所以三者各自处理 `State.IsReadOnly`——否则 `[ReadOnly]` / `[DisableIf]`
+  在这四个特性上会静默失效。`[DisplayAsString]` 除外：它本来就画不出可编辑的东西。
+- 三条实现纪律：**类型不符时告警并调下一个**（不静默什么都不画）；**每属性状态进
+  `PropertyState`**（枚举的掩码与按钮宽度解析一次就够）；**纯逻辑进静态纯函数**
+  （`ValueTextFormatter`、`ProgressBarValues`——归一化、鼠标换算、文本化都可无头断言）。
+- 两处与 Odin 的差异：`[ProgressBar]` **不钳制数据**，只把条画到端点（想钳制请配
+  `[MinValue]`/`[MaxValue]`——绘制器悄悄改值是钳制族的职责）；`[DisplayAsString]` 只支持简单类型，
+  数组与嵌套结构**退回普通绘制**而不是发明一种显示形状。
+- `[DisplayAsString]` 的多对象显示沿用 Unity 的「—」占位符：值入口的 `GetValue()` 在这种情形下
+  会抛（「没有单一当前值可读」），文本化因此直接读 `SerializedProperty`。
+
 ### Changed — 示例归位：展示台并入包内
 
 - **新增 `Samples/AttributeShowcase/`**：逐特性展示台，每个特性一条，挂上组件即可逐条目视。

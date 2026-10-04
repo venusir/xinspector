@@ -107,6 +107,26 @@ public bool isAlive = true;
 （Odin 的 `"@other.field"` 语法）、`[ShowIn]` / `[HideIn]` 那类接 `PrefabKind` 的枚举参数、
 以及 `[ShowIfGroup]` / `[HideIfGroup]`。
 
+### 值绘制特性
+
+```csharp
+[DisplayAsString]                 public int computedId;      // 只读文本
+[DisplayAsString(true)]           public string json;         // 允许折行溢出
+[ToggleLeft]                      public bool enableTracing;  // 开关在左
+[ProgressBar(0, 100)]             public float health;        // 可拖动的进度条
+[EnumToggleButtons]               public DamageType damage;   // 一排按钮
+[EnumToggleButtons]               public StatusFlags status;  // [Flags] 逐位多选
+```
+
+| 行为 | 说明 |
+|---|---|
+| 替换而非包裹 | 这四个特性**不调用下一个绘制器**——它们把值控件整个换掉。外层的 `[Indent]` `[GUIColor]` 等照常包住它们 |
+| 只读 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存（各自处理禁用，不依赖末端那层罩） |
+| 类型不符 | **告警并退回普通绘制**，字段不会消失。每种特性的支持类型见上表 |
+| `[ProgressBar]` 的越界值 | **不钳制数据**，只把条画到端点。要钳制请配 `[MinValue]`/`[MaxValue]` |
+| `[DisplayAsString]` 的复合类型 | 数组与嵌套结构退回普通绘制——显示成什么形状没有显然的答案 |
+| 多对象编辑 | `[DisplayAsString]` 值不一致时显示 `—`（与 Unity 一致）；`[ProgressBar]` 值不一致时不可拖动 |
+
 ## 自定义分组特性
 
 继承 `PropertyGroupAttribute` 即可，**构建期不需要改**——分组装配对具体分组类型一无所知：

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using XInspector;
 
@@ -74,6 +75,38 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 值绘制
+
+        /// <summary>值画成只读文本（可选中复制），不带可编辑控件。</summary>
+        [DisplayAsString]
+        public int computedId = 20261004;
+
+        /// <summary>文本允许溢出：长文本折行显示全，而不是裁成一行。</summary>
+        [DisplayAsString(true)]
+        public string longDescription = "这一行刻意写得比较长，用来对比「裁到一行」与「折行显示全」两种模式在展示台里的差别。";
+
+        /// <summary>bool 画成「开关在左、标签在右」——比 Unity 默认的排布更贴近一列复选框的读法。</summary>
+        [ToggleLeft]
+        public bool enableTracing = true;
+
+        /// <summary>数值画成可拖动的进度条（点击/拖动条子改值）。</summary>
+        [ProgressBar(0, 100)]
+        public float stamina = 65f;
+
+        /// <summary>进度条：自定义填充色 + 四段刻度 + 显示数值文本。</summary>
+        [ProgressBar(0f, 1f, 0.9f, 0.45f, 0.2f, Segmented = true)]
+        public float charge = 0.5f;
+
+        /// <summary>枚举画成一排按钮（单选），而不是下拉框。</summary>
+        [EnumToggleButtons]
+        public DamageType damageType = DamageType.Fire;
+
+        /// <summary><c>[Flags]</c> 枚举逐位多选。</summary>
+        [EnumToggleButtons]
+        public StatusFlags status = StatusFlags.Poisoned;
+
+        #endregion
+
         #region 信息框
 
         /// <summary>恒显示的信息框。</summary>
@@ -92,5 +125,35 @@ namespace XInspector.Samples
         public float damage = 10f;
 
         #endregion
+    }
+
+    /// <summary>展示 <c>[EnumToggleButtons]</c> 用的普通枚举。</summary>
+    public enum DamageType
+    {
+        /// <summary>物理。</summary>
+        Physical,
+
+        /// <summary>火焰。</summary>
+        Fire,
+
+        /// <summary>冰霜。</summary>
+        Ice,
+    }
+
+    /// <summary>展示 <c>[EnumToggleButtons]</c> 用的位标志枚举。</summary>
+    [Flags]
+    public enum StatusFlags
+    {
+        /// <summary>无状态。</summary>
+        None = 0,
+
+        /// <summary>中毒。</summary>
+        Poisoned = 1,
+
+        /// <summary>燃烧。</summary>
+        Burning = 2,
+
+        /// <summary>冰冻。</summary>
+        Frozen = 4,
     }
 }
