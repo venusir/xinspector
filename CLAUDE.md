@@ -21,10 +21,10 @@
   都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
   包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
-- 当前版本 `0.1.0-preview.1`，已实现 **69 个特性**；**L1b、L5（按钮族 + 回调族）与
-  L3（反射值后端）已清完**，下一个候选是 **L2 剩余的四项**（`[ShowIn]` 一族、
-  `[ShowIfGroup]` / `[HideIfGroup]`、跨对象条件 `"@other.field"`——这四项**全卡在签名未核**）。
-  API 尚未稳定
+- 当前版本 `0.1.0-preview.1`，已实现 **75 个特性**；**L1b、L5（按钮族 + 回调族）、
+  L3（反射值后端）与 L2 的预制体上下文族（六项）已清完**，下一个候选是 **L2 剩下的两族**：
+  `[ShowIfGroup]` / `[HideIfGroup]`（**签名已核**，卡在「构建期没有分组装配之后的阶段」）
+  与跨对象条件 `"@other.field"`（与本包「条件名只认本对象」的既有边界冲突）。API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -206,7 +206,8 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 
 **前置条件：需要 `.csproj`，而它只在 GUI 编辑器里生成**——纯批处理环境下这条门禁跑不起来，
 脚本会判失败。那不是脚本坏了，是它拒绝给假绿。细节见
-[Documentation/Workflow.md](Documentation/Workflow.md) §一。
+[Documentation/Workflow.md](Documentation/Workflow.md) §一；没有 GUI 时也可以单独核
+XML 文档告警（同一节的「变通检查」），但它验不了「源文件都参与了编译」那一项。
 
 三处本包特有的处理，改动时别删：
 
@@ -294,6 +295,13 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 - **表达式树在本仓的运行环境里能访问私有成员**（11 例 spike 实测过，不必退到
   `DynamicMethod(skipVisibility: true)`）。故反射成员与反射条件的取值都编译成委托，
   构建期一次、绘制期只剩委托调用——`MethodInfo.Invoke` 出现在每帧路径上同样是违规的
+- **`Editor/` 目录下的 MonoBehaviour 挂不成组件**（原话：it is an editor script… it needs to be
+  outside the 'Editor' folder），而脚本要**进资产**又非得有 MonoScript（文件名 ↔ 类名对得上）。
+  测试程序集是 editor-only，两条一起命中时只能二选一：本仓的夹具一律让类名与文件名**不一致**
+  ——那样能 `AddComponent`，但进不了预制体资产（夹具注释里写着「别把它抽成同名文件」）
+- **预制体测试夹具要按创建顺序倒着删资产**：变体引用基预制体、外层预制体嵌着内层预制体，
+  先删被依赖的那个会让 Unity 立刻重导入引用方并报 Missing Prefab **错误**，
+  而测试框架把错误日志算成失败——报错那条用例看着像断言失败，其实断言早过了
 
 ## 文档在哪
 
@@ -342,11 +350,15 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 「方法会产生属性树节点而普通属性不会」，放宽的只该是真正会生效的那一侧
 （`[Button, DisableIf(nameof(alive))]` 靠它才编译得过）。
 
-**条件族仍不做**：`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接
-`PrefabKind` 之类的枚举参数，签名未核对到，**猜一个形状写下去比不做更糟**）、
-`[ShowIfGroup]` / `[HideIfGroup]`、以及条件写在别的对象上的 `"@other.field"` 语法。
+**条件族仍不做**：`[ShowIfGroup]` / `[HideIfGroup]`（签名已核，但判据要挂在**分组节点**上，
+而分组节点在处理器阶段之后才创建——要么给构建期加一个「分组装配之后」的阶段，
+要么把决策搬回绘制期，两条路都还没定）、以及条件写在别的对象上的 `"@other.field"` 语法。
 （**条件为方法或普通属性已做**——L3 起按「序列化成员 → 反射字段/属性 → 无参返回 bool
 的方法」三级解析，构建期绑委托、绘制期不反射。）
+（**预制体上下文四条件已做**——`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]` 接
+`PrefabKind` 位标志，判据每帧现读；同一块探测还解锁了两个原先判 ⛔ 的校验特性
+`[RequiredIn]` / `[DisallowModificationsIn]`。两处与官方的偏差：**模型预制体归 `Regular`**、
+**普通 C# 对象与非预制体资产没有上下文**。）
 
 **编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，默认画窗口自身的序列化
 字段，外加带 `[ShowInInspector]` 的成员）。**`GetTarget()` 已做**（L3）：可返回任意类型
