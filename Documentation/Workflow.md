@@ -39,6 +39,10 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
   壳不存在时回退到仓库本体，此时必须先关编辑器，否则争 Library 锁。
 - 全量跑会与上次的用例总数比较、骤降时告警（防「测试集静默缩水」）。
   基线记在 `TestResults/last-count-<Platform>.txt`，有意删用例时删掉该文件即可重置。
+- **编译失败时 Unity 会 abort，而脚本要等到超时才返回**（实测约十分钟，**别以为卡死了**）。
+  Unity 日志里那句 `Aborting batchmode due to failure: Scripts have compiler errors.` 就是它。
+  想立刻知道是哪个错，直接读最近一份 `TestResults/run-*-<Platform>.log` 里的 `error CS` 行
+  （`Select-String -Pattern 'error CS'`），不必等脚本自己把结论算出来。
 
 ### 第 2 条：离线测试
 

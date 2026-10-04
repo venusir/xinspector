@@ -7,6 +7,75 @@
 
 ## [Unreleased]
 
+### Docs — L1b 收尾：内嵌编辑器一族
+
+- `OdinGap.md`：`[InlineEditor]` 与 `[ShowIn/HideIn/DisableInInlineEditors]` 四项转「已实现」，
+  总账重算为 **`108 = 58 已实现 + 36 缺 + 10 不做 + 4 不需要`**；**L1b 整层清完**，
+  推荐顺序里 `[Button]` 成为下一个。家底那句一直没跟上表格的「48 个」一并修正为 58。
+- `Pipeline.md` §七：第四批签名核对（1 个特性 + 3 个枚举 + 3 个条件族），记下本批两处「第一次」
+  ——签名里**第一次没有 resolved string**；第一次出现**本包自定值**与**与 Odin 的语义差异**。
+  「已否决的形状」新增两条：`CreateCachedEditor`（共享语义，且「谁持有谁销毁」官方没答案）、
+  每帧创建/销毁内嵌 `Editor`（原生对象 churn + 被嵌编辑器的 `OnEnable` 洪水）。
+  §二.6 更新：`IDisposable` **提前到来**（触发它的是内嵌编辑器，不是数组展开），`Update()` 仍推迟。
+  未决项新增三条（内嵌编辑的 Undo 策略、域重载兜底、嵌套上限数值复核）。
+  另顺手记下 L4 两条签名（`PropertyOrder` / `InlineProperty`），免得下轮重核。
+- `Roadmap.md` §三收尾：记下三处形状决定与两样新基建（释放通道、绘制期深度上下文）。
+- `Editor/README.md`：新增「释放：谁建谁销」一节——四环释放链与三条约定
+  （可释放的附加状态必须把释放写进自己的 `Dispose`；`PropertyTree.Dispose()` 不管
+  `SerializedObject`；覆写 `OnDisable` 必须调 `base`）。
+- 包 README：特性数更新到 58；「已知限制」删掉「没有 `[InlineEditor]`」，补上递归上限 4、
+  内嵌预览的默认尺寸与位置、`CompletelyHidden` 空值时的提示、内嵌编辑会进 Undo。
+- `Runtime/README.md`：新增「内嵌编辑器特性」一节；展示台新增两节（内嵌编辑器、内嵌环境条件）
+  与一个自带本管线特性的示例资产类型——它的 `self` 字段就是递归守卫的现场。
+
+### Added — L1b 收尾：内嵌环境条件族
+
+- `[ShowInInlineEditors]`（只在内嵌时显示）、`[HideInInlineEditors]`（内嵌时隐藏）、
+  `[DisableInInlineEditors]`（内嵌时只读）：三个零参数特性，判据是**绘制期的嵌套深度**。
+- 与那四个模式条件同构——Runtime 侧只是空标记，判据在编辑器侧的处理器里：两个无捕获的
+  缓存静态委托每帧现读深度，不产生闭包分配。`IncrementInlineEditorDrawerDepth = false`
+  的那一层**算「不算内嵌」**，三个特性一律不生效（这正是那个选项的用途）。
+
+### Added — L1b 收尾：内嵌编辑器（InlineEditor）
+
+- `[InlineEditor]`：把对象引用字段画成内嵌编辑器。六种模式（只画界面 / 界面 + 编辑器头 /
+  界面 + 小预览 / 三样都画 / 只画小预览 / 只画大预览）与四种对象字段画法（装箱 / 折叠 /
+  有值即隐藏 / 恒隐藏），外加 `MaxHeight` 滚动、`DisableGUIForVCSLockedAssets`、
+  `IncrementInlineEditorDrawerDepth` 与预览尺寸/位置选项。
+- **递归天然成立**：内嵌那一层交给 `Editor.CreateEditor`——被引用对象的类型若接了本管线，
+  画出来就是一棵 XInspector 树。本包只负责摆放、守卫深度与实例生命周期，不自己再画树。
+- 对象字段那一段仍走链条后面的原生 `PropertyField`，所以拖拽赋值、类型限制、预制件覆盖
+  一样不少。
+- **守卫四条，一律告警 + 退回普通绘制，不静默**：类型不符、三面旗被具名实参全关、
+  引用成环、深度超限（上限 **4**，本包自定）。混合值（多对象编辑）不内嵌，
+  不拿第一个目标冒充。
+- **与 Odin 的差异（同时写进特性注释与展示台 README）**：`CompletelyHidden` 且值为空时画
+  **一行灰字提示**而不是留一片空白——本包不接受静默地什么都不画。预览默认尺寸
+  （并排时宽 64、单独时高 64、大预览 128）与默认预览位置（在右）也是本包自定值
+  （Odin 的存在它的偏好设置里，官网核不到）。
+- **已知限制**：内嵌里的编辑**会进 Undo**（窗口路径那条「窗口内编辑不进 Undo」的约定
+  在此不适用——包内没有绘制上下文对象，绘制器无从知道自己被谁画）；字段指向正在被检视的
+  对象时，外层可能晚一帧看到变化。
+
+### Added — 属性状态与属性树的释放通道
+
+- `PropertyState.Reset()` 现在会先释放附加状态里实现 `IDisposable` 的那些，再清空袋
+  （此前只清空）。可释放的状态必须把释放写进自己的 `Dispose`——这条是约定，本类不认识
+  任何具体状态类型。
+- `PropertyTree` 实现 `IDisposable`：递归复位各节点的状态，**不碰 `SerializedObject`**
+  （它的所有权在调用方）。重复释放是幂等的。
+- `XInspectorEditor` 新增 `protected virtual OnDisable` → `Tree?.Dispose()`。
+  **子类覆写必须调用 `base.OnDisable()`**，否则树上的原生对象会泄漏，而症状与覆写处
+  看起来毫无关系。`PropertyTreeHost` 的换目标 / `Reload` / `Dispose` 三条路也一并接上。
+- 这条通道是内嵌编辑器的前置（它此前是包内第一条需要「显式销毁」的路径）。顺带实测确认：
+  **销毁一个 `Editor` 实例会触发它自己的 `OnDisable`**（守卫在
+  `Tests/Editor/PropertyTreeDisposalTests.cs`），嵌套那一层的属性树因此顺着同一条链释放。
+
+### Changed — 预览方块的画法提取为共用
+
+- `[PreviewField]` 的「方块 + 贴图/对象名字」提成 `PreviewFieldGUI.DrawBox(rect, target, state)`，
+  与内嵌编辑器的预览列共用。行为不变，贴图缓存仍由调用方提供。
+
 ### Docs — L1b 值绘制器收尾
 
 - `OdinGap.md`：六个特性转「已实现」，总账重算为 **`108 = 54 已实现 + 40 缺 + 10 不做 + 4 不需要`**；

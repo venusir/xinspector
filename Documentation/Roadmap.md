@@ -93,6 +93,16 @@ Odin 官方签名后（[Pipeline.md](Modules/Pipeline.md) §六），原先那�
 > 「选项」表面被刻意收窄成「只声明有真行为的那些」**——Odin 的其余选项要么只对列表有意义
 > （本包不支持数组形态），要么依赖它自建的弹出层（搜索框、图标、多选、标题、尺寸）。
 > 声明成静默 no-op 正是本包最想避免的现象，**编译不过才是响的**。
+>
+> **2026-10-04 再收尾：** `[InlineEditor]` 一族也落地了——**L1b 整层清完**。
+> 三处形状决定记在这里（细节见 [Pipeline.md](Modules/Pipeline.md) §七与「已否决的形状」）：
+> 其一，内嵌编辑器用 `Editor.CreateEditor` 并自己销毁（`CreateCachedEditor` 的共享语义、
+> 以及「谁持有谁销毁」在官方文档里没有答案，两样都不要）；其二，递归守卫用**栈 + 语义深度
+> 两个计数**而不是一个——合并会漏掉 `IncrementInlineEditorDrawerDepth = false` 那层的环；
+> 其三，`CompletelyHidden` 且值为空时画一行灰字提示，而不是像 Odin 那样留白。
+> 本轮还带出了两样基建：包内第一条**释放通道**（此前 `PropertyTree` 没有 `IDisposable`、
+> `PropertyState.Reset()` 零调用方）与**绘制期深度上下文**——三个内嵌环境条件族靠后者，
+> 而它们自己只是「加个类」。
 
 **一条贯穿全轮的边界：只作用于单个成员值。** Odin 的这些绘制器都能挂数组
 （`[FilePath] string[]`、`[ValueDropdown] List<T>` + `IsUniqueList`），本包做不到——

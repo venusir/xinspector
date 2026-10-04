@@ -2,7 +2,7 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 已实现 **54 个特性**（分组与条件、状态与门控、标签与外观、
+> **状态：** `0.1.0-preview.1` — 已实现 **58 个特性**（分组与条件、状态与门控、标签与外观、
 > 值绘制、校验与钳制，另有自建分组的基类与编辑器窗口基类）。
 > API 尚未稳定，可能随时变更。
 
@@ -129,8 +129,7 @@ public class PlayerProfileEditor : XInspectorEditor
 - **没有数组 / 列表展开。** 数组整个交给 Unity 的 `PropertyField(includeChildren: true)`，
   因而**本包的特性作用不到数组元素上**。也正因如此，本轮的值绘制器
   （`[FilePath]` `[ValueDropdown]` `[AssetSelector]` `[PreviewField]` 等）
-  **一律只作用于单个成员值**，数组形态不支持。没有 `[Button]` / `[OnValueChanged]` /
-  `[InlineEditor]` 这几种。
+  **一律只作用于单个成员值**，数组形态不支持。没有 `[Button]` / `[OnValueChanged]` 这几种。
 - **成员引用的参数只认序列化成员名。** `[ValueDropdown("options")]` 的 `options`、
   `[MinMaxSlider("range")]` 的 `range`、`[FilePath(ParentFolder = …)]` 的插值，
   在 Odin 那边都是「resolved string」（支持 `@` 表达式、`$` 成员引用与方法调用）；
@@ -140,12 +139,18 @@ public class PlayerProfileEditor : XInspectorEditor
   要么依赖它自建的弹出层，写了会**编译不过**（而不是静默失效）。
 - **`[PreviewField]` 的方块是预览、不是控件。** 可编辑的是旁边那个对象字段；
   Odin 的 Ctrl+点击清空、Ctrl+拖拽替换不做。默认高度（64）与默认对齐（Left）由本包定。
+- **`[InlineEditor]` 有几处自定值，另有一条刻意的语义差异。** 嵌套深度上限 **4**、
+  预览默认尺寸（并排时宽 64、单独时高 64、大预览 128）、默认预览位置在右——三处都由本包定
+  （Odin 的默认值存在它的偏好设置里，官网核不到）；超限或引用成环时**告警并退回普通对象字段**。
+  值为空的 `CompletelyHidden` 画一行灰字提示，而不是留一片空白（Odin 留白）。
+  内嵌里的编辑**会进 Undo**；字段指向正在被检视的对象时，外层可能晚一帧看到变化。
 - **没有 `[SerializeReference]` 类型切换。**
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。
 - **条件族只做了三分之一。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]` 与四个
-  模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`）。
+  模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`），
+  以及三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`）。
   **没有** `[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接 `PrefabKind`
   之类的枚举参数）、也没有 `[ShowIfGroup]` / `[HideIfGroup]`。
 - **条件只能指向序列化成员。** `[ShowIf("x")]` 的 `x` 必须是 public 字段或

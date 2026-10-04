@@ -99,6 +99,13 @@ v0 没有任何地方需要强类型取值——绘制器直接把 `SerializedPr
 v0 的树结构在编辑器存活期间不变（没有数组、没有 `[SerializeReference]` 切换），
 因此没有「需要更新」或「需要释放」的东西。等数组展开到来时再加——那是纯新增。
 
+> **2026-10-04 更新：`IDisposable` 提前到了**，但触发它的不是数组展开，而是内嵌编辑器：
+> 它的每属性状态里放着必须显式销毁的嵌套 `Editor` 实例，而包内当时**一条释放路径都没有**。
+> 释放链四环（状态的 `Dispose` → `PropertyState.Reset` → `PropertyTree.Dispose` → 宿主
+> `OnDisable` / `PropertyTreeHost.Clear`）与三条契约写在
+> [Editor/README.md](../../Assets/XInspector/Editor/README.md) 的「释放：谁建谁销」。
+> `Update()` 仍然推迟——树结构还是不变的，没有东西需要重建。
+
 ### 7. `ExpandableCompositeDrawer`（推迟）
 
 原计划里有一个「自己展开嵌套类型」的末端绘制器。实际做的时候发现
@@ -237,6 +244,23 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 （注意与「推迟」的区别：`$` 表达式、`SdfIconType` 是**推迟**——它们迟早能做，
 只是要连着整个表达式语言/图标系统一起做；这一条是**否决**。）
 
+### 15. `Editor.CreateCachedEditor`（否决）
+
+`CreateCachedEditor` 的语义是**共享**：官方原文说它「要么直接返回已在跟踪这些对象的编辑器，
+要么销毁上一个再建一个」。每个属性各自的编辑器不该共享——两个字段指向同一对象时，
+两个编辑器会共用一个 `serializedObject`，一处的写回会经另一处再 apply 一次；
+而「谁持有、谁销毁」在官方文档里没有答案，引入这种模糊正是本仓一贯要避免的。
+
+`CreateEditor` 的所有权是**单边**的（官方原文「Editors created using this function have to be
+destroyed explicitly」），与「状态归 `PropertyState`、清空者负责销毁」的模型同构：
+目标切换时自己 `DestroyImmediate` 旧实例再建新的，行为完全确定。
+
+### 16. 每帧创建/销毁内嵌 `Editor`（否决）
+
+代价是原生对象 churn，加上被嵌编辑器的 `OnEnable` 洪水——不少编辑器在 `OnEnable` 里建树，
+嵌套的 `XInspectorEditor` 就是其中之一，等于每帧重建一棵属性树。
+缓存进 `PropertyState` 才是对的：目标没换就不重建，换了先销毁再建。
+
 ---
 
 ## 三、未决项
@@ -259,6 +283,9 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 | `[PreviewField]` 的拖拽交互 | Odin 的 Ctrl+点击清空、Ctrl+拖拽替换要自绘对象字段的拖拽与点击处理。落点若要做，是 `ProgressBarDrawer` 那套手工事件处理的路子 |
 | `[AssetSelector]` 弹出层的搜索框 | 现在是编辑器自带菜单，没有搜索框/图标/多选。要做得自建弹出窗口——那是 `[InlineEditor]` 那一档的工作量 |
 | `[ColorPalette]` 的调色板来源 | 卡在设计而非实现：得先定「命名调色板存在哪、谁来编辑、怎么进版本控制」。做完这层，特性本身只有几十行 |
+| 内嵌编辑器的 Undo 策略 | 内嵌内容经 `ApplyModifiedProperties` 写回，**会进 Undo**；窗口路径那条「窗口内编辑不进 Undo」的约定在此不适用。根因是包内没有绘制上下文对象，绘制器无从知道自己被谁画；要区分就得给全部绘制器签名加一个上下文——波及面太大，已否决。现阶段接受并写进 README |
+| 域重载下 `OnDisable` 未调时的兜底 | 正常路径是宿主 `OnDisable` 释放嵌套编辑器（官方文档称域重载会调到）；万一某条路没调到，原生对象会泄漏一次。缓解是 `HideFlags.DontSave`（不产生悬空引用），**不做**后备注册表——那会新增一个静态门面与测试复位负担 |
+| 嵌套深度上限的数值 | 现取 `4`，**本包自定**（Odin 的值未核实）。它与预览默认尺寸、默认预览位置同属「本包自定值」，三处都写进了 README 与展示台 |
 
 ---
 
@@ -503,7 +530,72 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 
 ---
 
-## 七、审计记忆
+## 七、第四批签名核对（2026-10-04）——内嵌编辑器一族
+
+补 `[InlineEditor]` 一族之前，把 1 个特性 + 3 个支撑枚举 + 3 个内嵌环境条件族的
+**Odin 官方签名**逐条抄了下来。取法同前：**`Invoke-WebRequest`，别用 `WebFetch`**。
+
+**新增一条取法经验：** 站点改版后「单特性页」（`/attributes/<kebab>-attribute`）已变成
+**客户端渲染**——原始 HTML 里根本没有类定义（按类名 `IndexOf` 全为 -1，本轮先踩了一次）。
+**API 文档页仍是服务端渲染**，照旧可用：
+
+```powershell
+Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.<小写类名>
+```
+
+上一节记的「正文在最后一个 `Version 3.3.1.2` 标记之后」那条锚点也已失效——但那是因为
+抓错了页型；文档页不必截取，直接按 `public class` / `public enum` 定位即可。
+
+### 跨特性共性
+
+1. 全部在 `Sirenix.OdinInspector`（程序集 `Sirenix.OdinInspector.Attributes`），
+   都带 `[Conditional("UNITY_EDITOR")]`，签名里全是 `AttributeTargets.All`。
+   我们照旧**刻意收窄**到 `Field | Property`，也照旧**不带** `[Conditional]`。
+2. **三个内嵌环境条件是零参数空标记**，判据在编辑器侧——与本包那四个模式条件同款
+   （那个判据是 `Application.isPlaying`，这个是绘制期的嵌套深度）。
+3. **本批第一次没有出现 resolved string**：`[InlineEditor]` 的签名里一个字符串都没有
+   （前一批「字符串参数一律是 resolved string」那条共性在这批不适用）。
+
+### 逐条：官方签名 → 本轮实现
+
+| 特性 | 官方构造重载与成员 | 本轮实现 | 不实现的部分与理由 |
+|---|---|---|---|
+| `[InlineEditor]` | `(InlineEditorModes = GUIOnly, InlineEditorObjectFieldModes = Boxed)`、`(InlineEditorObjectFieldModes)`；字段 `DisableGUIForVCSLockedAssets`（默认 true）、`DrawGUI`、`DrawHeader`、`DrawPreview`、`IncrementInlineEditorDrawerDepth`、`MaxHeight`、`ObjectFieldMode`、`PreviewAlignment`、`PreviewHeight`、`PreviewWidth`；属性 `Expanded`、`ExpandedHasValue` | 全部 | 无收窄——六个模式、四种对象字段模式、预览、两个安全选项一次做完 |
+| `InlineEditorModes` | `FullEditor` `GUIAndHeader` `GUIAndPreview` `GUIOnly` `LargePreview` `SmallPreview` | 自建 + 数值自定 | 文档站按字母序排、数值未核实 → 默认成员排 0，其余按「画得越来越多」 |
+| `InlineEditorObjectFieldModes` | `Boxed` `CompletelyHidden` `Foldout` `Hidden` | 自建 + 数值自定 | 按「字段露出多少」由多到少；默认 `Boxed` 排 0 |
+| `PreviewAlignment` | `Bottom` `Left` `Right` `Top` | 自建 + 数值自定 | 本包的默认（在右）排 0，其余先左右后上下 |
+| `[ShowInInlineEditors]`、`[HideInInlineEditors]`、`[DisableInInlineEditors]` | 各自只有 `()` | 全部 | 无参数可收窄 |
+
+**模式 → 三面旗的映射据官方对每种模式的描述文字推导**（不是猜数值）：`FullEditor`
+「编辑器头 + 界面在左、小预览在右」、`GUIAndHeader`「界面与头」、`GUIAndPreview`
+「界面在左、小预览在右」、`GUIOnly`「只有界面」、`LargePreview`/`SmallPreview`
+「只有预览（无界面）」。**Odin 的公开面上没有存模式的地方**，本包照此在构造期把模式
+拆成三面旗——于是具名实参可以事后覆盖任何一面旗（`[InlineEditor(GUIOnly, DrawPreview = true)]`）。
+
+### 本包自定的值（Odin 存在它的偏好设置里，官网核不到）
+
+| 值 | 取多少 | 落在哪 |
+|---|---|---|
+| 嵌套深度上限 | `4` | `InlineEditorDrawContext.MaxDepth`（注释里写明本包自定） |
+| 预览默认尺寸 | 并排时宽 `64`、单独时高 `64`、大预览 `128` | `InlineEditorLayout` 与 `[InlineEditor].DefaultLargePreviewHeight` |
+| 默认预览位置 | 在右 | `PreviewAlignment.Right = 0`（`default` 即默认行为） |
+
+### 一处刻意的语义差异
+
+`CompletelyHidden` 且值为空时，本包画**一行灰字提示**（「隐藏了对象字段」）而不是留一片空白
+（Odin 留白）。理由是一以贯之的那条：**不接受静默地什么都不画**。有值时不提示——
+内嵌内容就在下面，那一行不是空白。这条差异写进了特性注释、包 README 与展示台 README。
+
+### 顺手记下的两条（L4，本轮未做）
+
+核对时顺手取了下一轮候选的签名，免得下轮重核：`PropertyOrderAttribute`——
+构造 `()` 与 `(float order)`，字段 `Order`，`AllowMultiple = false, Inherited = true`；
+`InlinePropertyAttribute`——构造只有 `()`，唯一字段 `LabelWidth`（`int`），
+`Inherited = false`，官方样例明说**类与成员都能标**（标在类上时该类型的字段一律内联）。
+
+---
+
+## 八、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 

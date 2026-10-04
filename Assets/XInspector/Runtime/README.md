@@ -163,6 +163,35 @@ public bool isAlive = true;
 | `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |
 | 只读与多对象 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存。`[MinMaxSlider]` 在多对象值不一致时退回普通绘制（双滑块没有混合值形态） |
 
+### 内嵌编辑器特性
+
+```csharp
+[InlineEditor]                                  public Material material;   // 只画界面
+[InlineEditor(InlineEditorModes.FullEditor)]    public GameObject model;    // 头 + 界面 + 小预览
+[InlineEditor(InlineEditorModes.LargePreview)]  public Mesh mesh;           // 只画大预览
+[InlineEditor(InlineEditorObjectFieldModes.Foldout, MaxHeight = 200f)]
+                                                public ScriptableObject config;
+
+// 只在被内嵌时才有意义的成员——判据是绘制期的嵌套深度。
+[ShowInInlineEditors]     public int onlyInside;    // 外层不出现，被内嵌时才出现
+[HideInInlineEditors]     public int hiddenInside;  // 外层在，被内嵌时不见
+[DisableInInlineEditors]  public int readonlyInside;// 被内嵌时变灰（仍可见）
+```
+
+| 行为 | 说明 |
+|---|---|
+| **只作用于对象引用** | 其它类型**告警并退回普通绘制**；多对象编辑且引用不同时**不内嵌**（不拿第一个目标冒充） |
+| 六种模式 | `GUIOnly`（默认）`GUIAndHeader` `GUIAndPreview` `FullEditor` `SmallPreview` `LargePreview`。模式**在构造期就被拆成三面旗**（`DrawGUI`/`DrawHeader`/`DrawPreview`），因此具名实参可事后覆盖任一面旗 |
+| 四种对象字段画法 | `Boxed`（默认，字段与内嵌内容一起装箱）`Foldout`（折叠行就是字段）`Hidden`（有值即隐藏）`CompletelyHidden`（恒隐藏）。恒隐藏且**值为空时给一行灰字提示**而不是留白——本包不接受静默空白，这是与 Odin 的一处差异 |
+| 递归天然成立 | 内嵌那一层由 Unity 自己的编辑器解析承担：被引用对象的类型若接了本管线，画出来就是一棵 XInspector 树 |
+| 守卫（一律告警 + 退回普通绘制，不静默） | 引用**成环**（A 引用 B、B 又引用 A）、嵌套**超过 4 层**（上限由本包定）、三面旗被具名实参全关、类型不符 |
+| 对象字段仍是原生控件 | 内嵌内容画在字段**下方**，字段本身仍走链条后面的 `PropertyField`——拖拽赋值、类型限制、预制件覆盖一样不少 |
+| `MaxHeight` | 正数才包滚动视图；非正表示按内容全尺寸展开 |
+| `DisableGUIForVCSLockedAssets` | 默认 `true`。只对**工程内的资产**查询、且只罩**内嵌内容**——上方的对象字段照常可用 |
+| `IncrementInlineEditorDrawerDepth` | 默认 `true`。置 `false` 表示「这一层不算内嵌编辑器」——三个内嵌环境条件在里面一律不生效；它**不解除**成环与深度守卫 |
+| 内嵌里的编辑 | **会进 Undo**（窗口路径那条「窗口内编辑不进 Undo」的约定在此不适用）；字段指向正在被检视的对象时，外层可能晚一帧看到变化 |
+| 本包自定值 | 嵌套上限 4、预览默认尺寸（并排时宽 64、单独时高 64、大预览 128）、默认预览位置在右——三处都写进了包 README 的「已知限制」 |
+
 ### 校验与钳制特性
 
 ```csharp

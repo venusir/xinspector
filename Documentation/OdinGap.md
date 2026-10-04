@@ -17,7 +17,7 @@
 
 **本项目的家底（2026-10-04）：**
 
-- 公开特性 **48 个**（清单见文末「总账」），分五族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **58 个**（清单见文末「总账」），分五族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加一个自建枚举 `TitleAlignments`）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
@@ -46,7 +46,7 @@
 |---|---|---|
 | **L0** | Unity 原生装饰器：`[Range]` `[Space]` `[TextArea]` `[Multiline]` `[Header]` `[Tooltip]` | **无需工作**——由 `PropertyField` 绘制。✅ 结构侧已实测（2026-10-03），见文末「L0 的验证记录」 |
 | **L1a** | 21 个十几行的特性 | **零新基础设施** ✅ **已清完**（2026-10-04） |
-| **L1b** | 分组族与重型值绘制器 | 同层，但有实打实的工作量。**分组族 6 个已落地**（2026-10-04）；重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]` 等）与路径选择器仍缺 |
+| **L1b** | 分组族与重型值绘制器 | **✅ 整层已清完**（2026-10-04）：分组族 6 个、值绘制器 6 个，收尾的 `[InlineEditor]` 一族（含三个内嵌环境条件）也落地了 |
 | **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做 |
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`） |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持 |
@@ -80,6 +80,11 @@
 > 值绘制器，结果：`[Searchable]` `[AssetList]` 实为 **L6**、`[TypeDrawerSettings]` 实为 **L3**、
 > `[TypeFilter]` 实为 **⛔**（resolved string + 抽象类型字段）、
 > `[ColorPalette]` **卡在「调色板从哪来」的设计上**。这 5 项原先记在 L1b 下，是**层判错了**。
+>
+> **同日的第四批核对与收尾**（[Pipeline.md](Modules/Pipeline.md) §七）：`[InlineEditor]` 一族
+> （4 个特性）落地，**L1b 整层清完**。本批有两处「第一次」：签名里**第一次没有 resolved string**；
+> 也是第一次出现**本包自定值**（嵌套上限、预览默认尺寸与位置）与**与 Odin 的语义差异**
+> （`CompletelyHidden` 空值时给一行灰字提示而不是留白）。三条自定值都写进了 README 与展示台。
 
 ### Type Specifics（24）
 
@@ -94,12 +99,12 @@
 | `[EnumToggleButtons]` | ✅ 已实现 | — |
 | `[FilePath]` | ✅ 已实现 | 只作用单个 `string`；`$` 成员引用不做（另见 Validation） |
 | `[FolderPath]` | ✅ 已实现 | 与 `[FilePath]` 同形（另见 Validation） |
-| `[HideInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+| `[HideInInlineEditors]` | ✅ 已实现 | 被动随 `[InlineEditor]` 落地 |
 | `[HideInTables]` | ❌ 缺 | 依赖 `[TableList]` |
 | `[HideMonoScript]` | ✅ 已实现 | — |
 | `[HideNetworkBehaviourFields]` | ⛔ 不做 | 目标类型（UNet `NetworkBehaviour`）在 Unity 6 已不存在，只能做成静默 no-op |
 | `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
-| `[InlineEditor]` | ❌ 缺 | L1b |
+| `[InlineEditor]` | ✅ 已实现 | 六模式 + 四对象字段模式 + 预览；递归上限等自定值见 Pipeline §七 |
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
@@ -110,8 +115,8 @@
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 13 / 缺 10 / 不做 1**（2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
-`[PreviewField]` 四项转已实现）
+**小计：已实现 15 / 缺 8 / 不做 1**（2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
+`[PreviewField]` 四项转已实现；同日 `[InlineEditor]` `[HideInInlineEditors]` 转已实现）
 
 ### Essentials（19）
 
@@ -232,7 +237,7 @@
 | **`[DisableIf]`** | **✅ 已实现** | — |
 | `[DisableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
 | **`[DisableInEditorMode]`** | **✅ 已实现** | — |
-| `[DisableInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+| `[DisableInInlineEditors]` | ✅ 已实现 | 同族三兄弟之一 |
 | **`[DisableInPlayMode]`** | **✅ 已实现** | — |
 | **`[EnableIf]`** | **✅ 已实现** | — |
 | `[EnableIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
@@ -242,9 +247,9 @@
 | **`[HideInPlayMode]`** | **✅ 已实现** | — |
 | **`[ShowIf]`** | **✅ 已实现** | — |
 | `[ShowIn]` | ❌ 缺 | L2 剩余（枚举参数，签名待核） |
-| `[ShowInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
+| `[ShowInInlineEditors]` | ✅ 已实现 | 同族三兄弟之一 |
 
-**小计：已实现 8 / 缺 6**
+**小计：已实现 10 / 缺 4**
 
 ### Numbers（7）
 
@@ -292,22 +297,23 @@
 ### 总账
 
 ```
-108 个不重复特性 = 54 已实现 + 40 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 58 已实现 + 36 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 54 个：
+已实现的 58 个：
 
-- **分组与条件**（16）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
+- **分组与条件**（19）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
-  `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`
+  `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`、
+  `[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`
 - **状态与门控**（6）：`[ReadOnly]` `[EnableGUI]` `[Toggle]` `[HideMonoScript]`
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
   `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
-- **值绘制**（15）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+- **值绘制**（16）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
   `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
   `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
-  `[FilePath]` `[FolderPath]`
+  `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
 - **调试**（1）：`[ShowDrawerChain]`
@@ -320,9 +326,9 @@
 是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
 `[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
 
-**「缺 40 个」也不等于「40 份工作量」**：其中真正需要新层的集中在
+**「缺 36 个」也不等于「36 份工作量」**：其中真正需要新层的集中在
 L3（反射后端）、L5（回调与按钮）、L6（集合自绘）、L7（Odin 的另一条产品线）——
-L1a、L1b 分组族、以及 L1b 的六个值绘制器（2026-10-04）这几块
+L1a、L1b 分组族、L1b 的六个值绘制器、以及 `[InlineEditor]` 一族（都 2026-10-04）这几块
 **零新基础设施**的已经清完。
 
 **2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
@@ -374,13 +380,14 @@ L1a、L1b 分组族、以及 L1b 的六个值绘制器（2026-10-04）这几块
 `[ShowDrawerChain]` 对本项目格外贴切：核心就是绘制器链，把它画出来几乎零成本，
 且是极有说服力的自证。
 
-## L1b · 同层，但有工作量
+## L1b · 同层，但有工作量　✅ 整层已清完（2026-10-04）
 
 - **分组族**：`[FoldoutGroup]` `[TabGroup]` `[HorizontalGroup]` `[VerticalGroup]` `[TitleGroup]`
   ——享受**架构红利**：继承 `PropertyGroupAttribute` + 写一个 `AttributeDrawer<T>`，
   **构建期一行都不用改**。代价在别处：折叠状态要进 `PropertyState`，分页布局要自己管。
 - **重型值绘制器**：`[MinMaxSlider]` `[ValueDropdown]` `[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[AssetList]`
-  ——`[InlineEditor]` 尤其重（内嵌编辑器 + 预览宿主 + 递归深度控制）。
+  ——`[InlineEditor]` 最重：它不止是绘制器，还得先有「内嵌 `Editor` 实例的释放通道」与
+  「绘制期深度上下文」两样基建（见 [Pipeline.md](Modules/Pipeline.md) §二.15/16 与 §七）。
 - **路径选择器**：`[FilePath]` `[FolderPath]`——要自己做文件/文件夹选择器。
 
 ## L2 · 需要特性处理器层 ✅ 已做
@@ -488,12 +495,14 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
 
 1. ~~**L1a**~~——✅ 已清完（2026-10-04）。
 2. ~~**L1b**~~——✅ **整层清完**（2026-10-04）：
-   分组族六个 + 值绘制器六个（`[FilePath]` `[FolderPath]` `[MinMaxSlider]` `[PreviewField]`
-   `[ValueDropdown]` `[AssetSelector]`）。**只剩 `[InlineEditor]` 一族**（见下）。
-3. **`[InlineEditor]` 一族**——L1b 的最后一块，本轮刻意留作独立一轮：
-   内嵌 `Editor` + 预览宿主 + 递归深度控制，失败模式与其余值绘制器不同类，
-   两者混在一轮里会互相掩盖设计问题。
-4. **L5 `[Button]`**——**顺序在本轮被重排到 L3 之前**。原先写「L3 是 L5 全部的前置」
+   分组族六个、值绘制器六个（`[FilePath]` `[FolderPath]` `[MinMaxSlider]` `[PreviewField]`
+   `[ValueDropdown]` `[AssetSelector]`），最后一块 `[InlineEditor]` 一族
+   （含 `[ShowIn/HideIn/DisableInInlineEditors]` 三个条件族）同日收尾。
+3. ~~**`[InlineEditor]` 一族**~~——✅ 已落地。当初「刻意留作独立一轮」的两条判断都兑现了：
+   其一，它确实是本层唯一需要**新基建**的——包内此前一条释放路径都没有（`PropertyTree`
+   没有 `IDisposable`、`PropertyState.Reset()` 零调用方），而嵌套 `Editor` 实例必须显式销毁；
+   外加一个绘制期的深度上下文。其二，三个依赖它的条件族是「加个类」，那份基建不是。
+4. **L5 `[Button]`**——**下一个**。**顺序在本轮被重排到 L3 之前**。原先写「L3 是 L5 全部的前置」
    是**过头了**：`[Button]` 只需要树持有目标对象列表 + 按名解析方法（构建期反射即可），
    **不需要反射值后端**——那只对 `[OnValueChanged]` 一类成立。
    `[Button]` 又是使用方最常问「为什么没有」的一个，且 `[CustomValueDrawer]`

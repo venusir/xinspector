@@ -96,7 +96,7 @@ namespace XInspector
     /// </para>
     /// <list type="bullet">
     /// <item><description>嵌套深度上限 <c>4</c>（见 <c>InlineEditorDrawContext.MaxDepth</c>）。超出后告警并退回普通对象字段，不静默消失。</description></item>
-    /// <item><description>预览默认尺寸：与界面同画时宽 <c>64</c>，单独画时高 <c>64</c>；<see cref="LargePreview"/> 单独画时高 <c>128</c>。</description></item>
+    /// <item><description>预览默认尺寸：与界面同画时宽 <c>64</c>，单独画时高 <c>64</c>；<see cref="InlineEditorModes.LargePreview"/> 单独画时高 <c>128</c>。</description></item>
     /// <item><description>默认预览位置为<see cref="PreviewAlignment.Right"/>。</description></item>
     /// </list>
     /// <para>
