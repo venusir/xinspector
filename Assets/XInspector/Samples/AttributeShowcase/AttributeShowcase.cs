@@ -320,6 +320,18 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 资产选择
+
+        /// <summary>对象字段前多一个小 ▼：点开是整个工程的资产树，选一个填进来。</summary>
+        [AssetSelector]
+        public Material anyMaterial;
+
+        /// <summary>限定目录与类型：只列这两个目录下的材质，且拍平成一层（只显示文件名）。</summary>
+        [AssetSelector(Paths = "Assets/XInspector", Filter = "t:Material", FlattenTreeView = true)]
+        public Material scopedMaterial;
+
+        #endregion
+
         #region 预览
 
         /// <summary>预览方块（默认 64 像素）+ 右侧可编辑的对象字段。拖个贴图/模型进来就能看到预览。</summary>

@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### Added — L1b：资产选择（AssetSelector）
+
+- `[AssetSelector]`：对象字段前一个小按钮，点开是工程资产列表，选一个直接填进去。
+  参数 `Paths`（多个目录用 `|` 分隔）`Filter`（AssetDatabase 搜索语法）`FlattenTreeView`。
+- **透传型绘制器**：画完按钮照常调用下一个绘制器，所以对象字段本身仍是 Unity 原生那个——
+  拖拽赋值、类型限制、预制体覆盖一样不少。与本轮其余值绘制器（替换型）最大的不同，
+  也正因为如此**不需要**自己套 `DisabledScope`。
+- 全工程搜索只在**菜单弹出时**发生（事件路径），不是每帧；菜单项构造是纯逻辑
+  （`AssetSelectorOptions`），`AssetDatabase` 只在 `AssetSelectorQuery` 里出现一处——
+  这样「拆分 `Paths`」「分层与拍平」「排序」都还能无头测试。
+- 与 Odin 的差异（写进特性注释与展示台 README）：弹出层是编辑器自带菜单，
+  **没有搜索框、图标与多选**；它那几个只为那个窗口存在的选项与只对列表有意义的选项
+  **不声明**——与 `[ValueDropdown]` 同一条判据。
+
 ### Added — L1b：下拉选择（ValueDropdown）
 
 - `[ValueDropdown("成员名")]`：字段画成下拉框，选项来自同一对象上的**序列化数组/List 成员**。
