@@ -232,6 +232,37 @@ public bool isAlive = true;
 | `[Toggle]` 的叠加顺序 | 条件族（0）< `[Toggle]`（50）< `[ReadOnly]`（100）< `[EnableGUI]`（110）。与 `[DisableIf]` 并存时开关赢，与 `[ReadOnly]` 并存时后者赢 |
 | `[Toggle]` 解析失败 | 告警一次并**保持可编辑**——拼错的名字不该让字段变得不可用（与条件族「失败即放行」同一规矩） |
 
+### 按钮族
+
+```csharp
+[Button]                                private void Reset() { }          // 文本就是方法名
+[Button("随机生命", ButtonSizes.Large)]  private void Roll() { }
+[Button("设为")]                         private void Set(int value) { }    // 带参：折叠参数区
+
+[InlineButton("Roll", "随机")]           public float speed;               // 字段右侧的小按钮
+
+[ButtonGroup] [Button] private void Walk() { }                            // 一行等分
+[ButtonGroup] [Button] private void Run()  { }
+
+[ResponsiveButtonGroup(UniformLayout = true)]
+[Button] private void Short() { }                                         // 按标签宽度折行
+```
+
+| 行为 | 说明 |
+|---|---|
+| 位置 | 按钮**一律排在字段之后**（分组内的排在组内）。Odin 会紧跟相关字段，本包做不到——见包 README 的已知限制 |
+| 生效范围 | 只对正在检视的那个对象（含继承链）。嵌套 `[Serializable]` 类型里的 `[Button]` 不生效 |
+| 多选 | 每个目标各调一次；静态方法只调一次。Inspector 里一次记**一步**撤销，**窗口路径不记** |
+| 参数 | 支持 `bool`／`int`／`float`／`double`／`string`／枚举／`UnityEngine.Object` 派生／`Vector2-4`／`Color`／`Rect`；初值是 C# 的 `default`（字符串取空串） |
+| 不可调用 | 泛型、`ref`/`out`、参数类型不在支持集、目标上没有这个方法——四种都给原因并把按钮画成禁用 |
+| 异常 | 方法抛出的异常**捕获后打进 Console**，不打断 Inspector 的绘制（按钮是在 `OnGUI` 里被点的） |
+| 高度 | `ButtonSizes` 的像素值是**本包自定值**；组上的高度设定只在按钮自己没表态时生效 |
+| `[InlineButton]` | 只标字段；方法必须无参；解析失败时按钮禁用、原因挂 Tooltip，**字段照常绘制** |
+| 能配什么 | 条件族（`[ShowIf]` `[DisableIf]` `[DisableInPlayMode]` …）与两个按钮分组特性可标在方法上；`[LabelText]`／`[Indent]`／`[GUIColor]` 那几个的用法声明是 `Field | Property`，**标不到方法上** |
+
+> 按钮能配条件族，是因为条件族本轮把用法声明放宽到了 `AttributeTargets.Method`。
+> 判据是**方法会产生属性树节点而普通属性不会**——放宽的只该是真正会生效的那一侧。
+
 ### 其余分组特性
 
 ```csharp

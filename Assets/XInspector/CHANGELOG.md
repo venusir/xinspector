@@ -7,6 +7,69 @@
 
 ## [Unreleased]
 
+### Added — L5 第一批：按钮族
+
+- **`[Button]`**（仅方法）：把方法画成按钮，点击调用它。带参方法画参数输入框，
+  参数区固定为 Odin 的 `CompactBox` 形态（按钮与折叠箭头同一行，默认收起）。
+  按 `ButtonSizes`（`Small` 20 / `Medium` 25 / `Large` 30 / `Gigantic` 60 像素——
+  **数值是本包自定值**，官方只在它的偏好设置里）选高度；`[ButtonGroup]` /
+  `[ResponsiveButtonGroup]` 上的高度设定**只在按钮自己没表态时**生效。
+- **`[InlineButton]`**（字段）：字段右侧的小按钮，可重复标注，各调各的方法。
+- **`[ButtonGroup]`**：一组按钮排成一行、等分宽度。裸用的默认组名照抄官方的 `"_DefaultGroup"`。
+- **`[ResponsiveButtonGroup]`**：按标签宽度折行的按钮带，`UniformLayout` 让它等宽；
+  默认组名照抄官方的 `"_DefaultResponsiveButtonGroup"`。
+- **方法节点**：树上第一次出现**没有值**的节点（`InspectorPropertyKind.Method`）。
+  路径是「方法名 + `()`」，末端是方法专用绘制器，**不接值绘制器**——后者会画一句
+  「没有 Unity 序列化后端」，那句话没错但答非所问。
+- **调用的语义（本包首次为多选定义写行为）**：实例方法对**每个目标各调一次**，静态方法只调一次；
+  Inspector 路径把目标数组一次记进 Undo（多选下点击一次只产生**一步**撤销），
+  **窗口路径不记**（窗口内编辑不进 Undo 是一贯约定）；方法抛出的异常**捕获后打进 Console**，
+  不打断 Inspector 的绘制。
+- **四类不可调用的情形都给出原因**并把按钮画成禁用：泛型方法、`ref`/`out` 参数、
+  参数类型不在支持集里、目标对象上没有这个方法。**不接受「画了个按钮但点了没反应」。**
+
+### Changed — L5 第一批：条件族放宽到方法
+
+- **条件族（四个条件 + 四个模式 + 三个内嵌环境，共 11 个）的 `AttributeUsage` 加上
+  `AttributeTargets.Method`。** 原先 `Field | Property` 让 `[Button, DisableIf(nameof(alive))]`
+  在**编译期**就被挡下——而 Odin 的按钮示例里这正是最常见的组合之一。
+  判据是**方法会产生属性树节点、普通属性不会**：放宽的只该是真正会生效的那一侧，
+  标在既无 `[Button]` 又不产生节点的普通方法上仍是什么都不做。
+- `[LabelText]`／`[Indent]`／`[GUIColor]` 那几个**没有**跟着放宽——它们作用于值控件与标签，
+  而按钮不是值控件；要改按钮上的字用 `[Button("文本")]`。
+
+### Changed — L5 第一批：按钮位置与判据
+
+- **`XInspectorUsageDetection` 开始扫方法。** 此前只扫类级特性与字段，于是只挂 `[Button]`
+  的类型**不被自动接管、按钮完全不出现、且零告警**——本轮最危险的静默失败。
+  表里的字段循环旁多了一段方法循环（`DeclaredOnly` 逐层上溯，含静态）。
+- **`PropertyTree` 增 `Targets` / `UndoEnabled`，节点增 `Owner`。** 树在**处理器之前**构造
+  （原先在 `Build` 末尾）：需要目标对象的处理器只能经 `Owner` 拿到它。
+  `Owner` 有两个回填点——树构造时递归回填（此刻子树只含根与成员），
+  分组装配期挂进来的节点靠 `AddChild` 传播。
+- **`SerializedMemberResolver.FindSerializedObject` 先走 `Owner`。** 方法节点既无值入口
+  也无子节点，只靠向下找会一路 null，症状是「按钮上的条件静默失效」。
+- **`PropertyAttribute.Size` 增 `SizeHasValue`**：赋值即置真，用来区分「显式给了中号」
+  与「没给」——两者取值相同，却决定按钮组上的默认高度要不要生效。
+
+### Docs — L5 第一批：按钮族
+
+- `Pipeline.md` §八：第五批签名核对（4 个按钮特性 + 6 个回调特性 + 3 个枚举）。
+  三条推翻先前假设的发现：两个分组特性的默认组名官方有明文（照抄，不自造）；
+  `[Button]` 是 `Inherited = false`；`[OnValueChanged]`／`[OnStateUpdate]`／`[CustomContextMenu]`
+  三个**只有 resolved string 形态**——它们此前判「不做」的理由是「归 L5 性质」，
+  即卡在「没有按名调方法的能力」，本轮把这条能力做出来之后它们便可落地。
+  另记按核对结果改掉的一处设计：`ButtonStyle.CompactBox` 的官方描述表明它是**带参方法的默认**，
+  故参数区做成折叠，而不是把参数平铺出来。
+- `Pipeline.md` 同日补记一条**实测推翻的设计**：「按声明顺序把按钮插回字段之间」做不到。
+  字段令牌与方法令牌分属元数据的两张表（`0x04`/`0x06`）各自编号，跨表比大小没有意义；
+  `GetMembers` 也按种类分组返回而非按声明。三条测量都有用例钉着（`MethodNodeTests`），
+  Unity 哪天换了行为那几条会先红。位置不理想是小事，把按钮插到随机位置才是大事。
+- 包 README：特性数更新到 62；「已知限制」删掉「没有 `[Button]`」，补上按钮的六条边界
+  （位置、只对根对象生效、多选语义、参数支持集、`[InlineButton]` 只标字段、异常处理）。
+- 展示台新增「按钮」一节（含带参、行内、两种分组）；沙盒新增 `Demo 5 - Button Takeover`
+  ——只挂 `[Button]` 方法、一个字段特性都不带，盯的是自动接管判据的方法侧端到端。
+
 ### Docs — L1b 收尾：内嵌编辑器一族
 
 - `OdinGap.md`：`[InlineEditor]` 与 `[ShowIn/HideIn/DisableInInlineEditors]` 四项转「已实现」，

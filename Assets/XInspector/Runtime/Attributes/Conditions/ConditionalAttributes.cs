@@ -19,6 +19,12 @@ namespace XInspector
     /// <para>
     /// 条件**每帧重新求值**，所以被条件的字段可以随时跟着切换，不必重新构建属性树。
     /// </para>
+    /// <para>
+    /// <b>本文件四个特性都允许标在方法上</b>（与 <see cref="ButtonAttribute"/> 配合用），
+    /// 这是本包少见的「放宽到方法」——判据在于方法**会**产生属性树节点，
+    /// 而普通属性不会。标在既无 <see cref="ButtonAttribute"/> 又不产生节点的普通方法上，
+    /// 它仍然什么都不做。
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>
@@ -26,9 +32,15 @@ namespace XInspector
     ///
     /// [ShowIf(nameof(isAlive))]
     /// public int health = 100;
+    ///
+    /// [Button, DisableIf(nameof(isAlive))]
+    /// private void Finish() { }
     /// </code>
     /// </example>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(
+        AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method,
+        AllowMultiple = false,
+        Inherited = true)]
     public sealed class ShowIfAttribute : Attribute
     {
         /// <summary>
@@ -55,7 +67,10 @@ namespace XInspector
     /// <summary>
     /// 按另一个成员的值决定本成员**是否隐藏**。见 <see cref="ShowIfAttribute"/> 的完整说明。
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(
+        AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method,
+        AllowMultiple = false,
+        Inherited = true)]
     public sealed class HideIfAttribute : Attribute
     {
         /// <summary>
@@ -87,7 +102,10 @@ namespace XInspector
     /// 与 <see cref="ShowIfAttribute"/> 的差别在于「隐藏」与「禁用」：
     /// 禁用保留了「这个字段存在、只是现在不能改」的信息，通常比直接藏掉更有用。
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(
+        AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method,
+        AllowMultiple = false,
+        Inherited = true)]
     public sealed class EnableIfAttribute : Attribute
     {
         /// <summary>
@@ -114,7 +132,10 @@ namespace XInspector
     /// <summary>
     /// 按另一个成员的值决定本成员**是否被禁用**。见 <see cref="EnableIfAttribute"/>。
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(
+        AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method,
+        AllowMultiple = false,
+        Inherited = true)]
     public sealed class DisableIfAttribute : Attribute
     {
         /// <summary>

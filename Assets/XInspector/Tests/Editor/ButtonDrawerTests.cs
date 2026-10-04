@@ -202,6 +202,37 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 与条件族配合
+
+        /// <summary>
+        /// <c>[HideIf]</c> / <c>[DisableIf]</c> 标在按钮上照样生效——方法节点走的是同一条链，
+        /// 条件族装的是状态求值器，与节点有没有值无关。
+        /// </summary>
+        [Test]
+        public void 条件族可以标在按钮上()
+        {
+            _target.gate = true;
+
+            using (var tree = Build())
+            {
+                Assert.That(Find(tree, "Hidden()").IsVisible, Is.False, "[HideIf] 该让按钮不画。");
+                Assert.That(Find(tree, "Disabled()").State.IsReadOnly, Is.True, "[DisableIf] 该让按钮变灰。");
+            }
+        }
+
+        /// <summary>条件不成立时按钮照常出现——「不成立」不等于「不画」。</summary>
+        [Test]
+        public void 条件不成立时按钮照常可点()
+        {
+            using (var tree = Build())
+            {
+                Assert.That(Find(tree, "Hidden()").IsVisible, Is.True);
+                Assert.That(Find(tree, "Disabled()").State.IsReadOnly, Is.False);
+            }
+        }
+
+        #endregion
+
         #region 高度
 
         /// <summary>按钮自己没表态时，按钮组的高度说了算。</summary>
@@ -301,9 +332,26 @@ namespace XInspector.Tests.Editor
     /// <summary>按钮绘制器测试用的资产：每个特性各来一份。</summary>
     internal sealed class ButtonFixture : ScriptableObject
     {
+        /// <summary>条件开关。</summary>
+        public bool gate;
+
         /// <summary>普通按钮。</summary>
         [Button]
         private void Plain()
+        {
+        }
+
+        /// <summary>条件成立时隐藏。</summary>
+        [Button]
+        [HideIf(nameof(gate))]
+        private void Hidden()
+        {
+        }
+
+        /// <summary>条件成立时变灰。</summary>
+        [Button]
+        [DisableIf(nameof(gate))]
+        private void Disabled()
         {
         }
 

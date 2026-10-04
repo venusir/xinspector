@@ -51,6 +51,10 @@ namespace XInspector.Sandbox.EditorTools
         /// 故顺带验证它本身画得对），Demo 3 靠宏自动接管。
         /// </para>
         /// <para>
+        /// Demo 5 盯的是自动接管判据的**方法侧**：它只有 <c>[Button]</c> 方法、一个字段特性都不带，
+        /// 判据漏扫方法时它会静默地退回原生外观（按钮不见、无告警）。
+        /// </para>
+        /// <para>
         /// 演示对象的名字被 <c>OdinGap.md</c> 等文档按名引用，**改名会打断那些验证步骤**。
         /// 顶层组件与场景的一一对应由 <c>Tools/check-docs.ps1</c> 守卫。
         /// </para>
@@ -63,6 +67,7 @@ namespace XInspector.Sandbox.EditorTools
             AddDemo<OverviewComponent>("Demo 2 - Explicit Editor");
             AddDemo<AutoTakeoverDemo>("Demo 3 - Auto Takeover");
             AddDemo<NativeDecoratorDemo>("Demo 4 - Native Decorators (L0)");
+            AddDemo<ButtonTakeoverDemo>("Demo 5 - Button Takeover");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);

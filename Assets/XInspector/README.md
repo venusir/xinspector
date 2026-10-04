@@ -2,8 +2,8 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 已实现 **58 个特性**（分组与条件、状态与门控、标签与外观、
-> 值绘制、校验与钳制，另有自建分组的基类与编辑器窗口基类）。
+> **状态：** `0.1.0-preview.1` — 已实现 **62 个特性**（分组与条件、状态与门控、标签与外观、
+> 值绘制、校验与钳制、按钮，另有自建分组的基类与编辑器窗口基类）。
 > API 尚未稳定，可能随时变更。
 
 ## 设计哲学
@@ -129,7 +129,22 @@ public class PlayerProfileEditor : XInspectorEditor
 - **没有数组 / 列表展开。** 数组整个交给 Unity 的 `PropertyField(includeChildren: true)`，
   因而**本包的特性作用不到数组元素上**。也正因如此，本轮的值绘制器
   （`[FilePath]` `[ValueDropdown]` `[AssetSelector]` `[PreviewField]` 等）
-  **一律只作用于单个成员值**，数组形态不支持。没有 `[Button]` / `[OnValueChanged]` 这几种。
+  **一律只作用于单个成员值**，数组形态不支持。
+- **按钮族有几处边界，都是查证后写死的，不是还没做：**
+  - **按钮一律排在字段之后**，不像 Odin 那样紧跟相关字段。字段顺序来自 `SerializedObject`，
+    方法顺序只能靠反射，而两者的元数据令牌分属两张表（字段 `0x04`、方法 `0x06`）各自编号，
+    跨表比大小没有意义；`GetMembers` 也不按声明顺序返回——**拿不到「声明在哪两个字段之间」**。
+  - **只对正在检视的那个对象生效**（含继承链）。嵌套 `[Serializable]` 类型里的 `[Button]` 不生效。
+  - **多选时对每个目标各调用一次**，参数值所有目标共用；静态方法只调一次。Inspector 里会把所有目标
+    记进一步 Undo；**窗口路径下不记**（窗口内编辑不进 Undo 是本包对窗口的一贯约定）。
+  - **带参方法的参数只支持** `bool`／`int`／`float`／`double`／`string`／枚举／`UnityEngine.Object`
+    派生／`Vector2-4`／`Color`／`Rect`；`ref`／`out`／数组／泛型方法**给出原因并把按钮画成禁用**，
+    不会静默什么都不发生。参数区固定为 Odin 的 `CompactBox` 形态（按钮与折叠箭头同一行）。
+  - **`[InlineButton]` 只标在字段上**，方法必须无参；解析失败时按钮禁用并把原因挂在 Tooltip 上，
+    **字段本身照常绘制**。
+  - 方法抛出的异常被**捕获后打进 Console**，不打断 Inspector 的绘制。
+- **还没有回调族。** 没有 `[OnValueChanged]` `[OnInspectorGUI]` `[OnInspectorInit]`
+  `[OnInspectorDispose]` `[OnStateUpdate]` `[CustomContextMenu]`。
 - **成员引用的参数只认序列化成员名。** `[ValueDropdown("options")]` 的 `options`、
   `[MinMaxSlider("range")]` 的 `range`、`[FilePath(ParentFolder = …)]` 的插值，
   在 Odin 那边都是「resolved string」（支持 `@` 表达式、`$` 成员引用与方法调用）；

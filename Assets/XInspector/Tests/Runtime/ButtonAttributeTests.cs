@@ -112,6 +112,36 @@ namespace XInspector.Tests
                 "成员名取自官方，改动是破坏性变更。");
         }
 
+        /// <summary>
+        /// 条件族（四个条件 + 四个模式 + 三个内嵌环境）都允许标在**方法**上。
+        /// </summary>
+        /// <remarks>
+        /// 放宽的直接理由就是按钮：<c>[Button, DisableIf(nameof(alive))]</c> 是最常见的用法之一，
+        /// 而原先 <c>Field | Property</c> 的用法声明让它在**编译期**就被挡下。
+        /// 判据是方法**会**产生属性树节点，普通属性不会——放宽的只该是会生效的那一侧。
+        /// </remarks>
+        [Test]
+        public void 条件族可标在方法上()
+        {
+            var types = new[]
+            {
+                typeof(ShowIfAttribute), typeof(HideIfAttribute),
+                typeof(EnableIfAttribute), typeof(DisableIfAttribute),
+                typeof(HideInEditorModeAttribute), typeof(HideInPlayModeAttribute),
+                typeof(DisableInEditorModeAttribute), typeof(DisableInPlayModeAttribute),
+                typeof(ShowInInlineEditorsAttribute), typeof(HideInInlineEditorsAttribute),
+                typeof(DisableInInlineEditorsAttribute),
+            };
+
+            foreach (var type in types)
+            {
+                Assert.That(
+                    UsageOf(type).ValidOn.HasFlag(AttributeTargets.Method),
+                    Is.True,
+                    $"{type.Name} 该允许标在方法上，否则 [Button] 配条件族会编译不过。");
+            }
+        }
+
         #endregion
 
         #region 按钮分组

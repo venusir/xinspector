@@ -411,6 +411,97 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 按钮
+
+        /// <summary>最简形态：按钮文本就是方法名。点一下，上面的分数回到 42。</summary>
+        [Button]
+        private void ResetScore()
+        {
+            computedScore = 42;
+        }
+
+        /// <summary>自定义文本 + 大号按钮。</summary>
+        [Button("随机生命", ButtonSizes.Large)]
+        private void RandomizeHealth()
+        {
+            health = UnityEngine.Random.Range(1, 100);
+        }
+
+        /// <summary>带参数：按钮左侧的箭头展开后填参数，再点按钮执行。</summary>
+        [Button("把生命设为")]
+        private void SetHealth(int value, bool alsoResetScore)
+        {
+            health = value;
+
+            if (alsoResetScore)
+            {
+                computedScore = value;
+            }
+        }
+
+        /// <summary>行内按钮：按钮在该字段右侧，同一个字段可以挂多个，各调各的方法。</summary>
+        [InlineButton("RandomizeSpeed", "随机")]
+        [InlineButton("ZeroSpeed", "归零")]
+        public float speed = 1f;
+
+        /// <summary>默认按钮组之一——裸用 <c>[ButtonGroup]</c> 的按钮并排成一行、等分宽度。</summary>
+        [ButtonGroup]
+        [Button]
+        private void Walk()
+        {
+            speed = 1f;
+        }
+
+        /// <summary>默认按钮组之二。</summary>
+        [ButtonGroup]
+        [Button]
+        private void Run()
+        {
+            speed = 5f;
+        }
+
+        /// <summary>响应式按钮带之一——组内按钮按标签宽度排布，面板窄了会自动折行。</summary>
+        [ResponsiveButtonGroup("响应式示例", UniformLayout = true)]
+        [Button(ButtonSizes.Small)]
+        private void Short()
+        {
+        }
+
+        /// <summary>响应式按钮带之二：名字长一点，折行时看得更清楚。</summary>
+        [ResponsiveButtonGroup("响应式示例")]
+        [Button(ButtonSizes.Small)]
+        private void AConsiderablyLongerButtonName()
+        {
+        }
+
+        /// <summary>响应式按钮带之三。</summary>
+        [ResponsiveButtonGroup("响应式示例")]
+        [Button(ButtonSizes.Small)]
+        private void Mid()
+        {
+        }
+
+        /// <summary>响应式按钮带之四——把 Inspector 面板拉窄再拉宽，看它换行。</summary>
+        [ResponsiveButtonGroup("响应式示例")]
+        [Button(ButtonSizes.Small)]
+        private void AnotherOne()
+        {
+        }
+
+        /// <summary>挪一下速度值。</summary>
+        private void RandomizeSpeed()
+        {
+            speed = UnityEngine.Random.Range(-10f, 10f);
+        }
+
+        /// <summary>把速度归零。</summary>
+        private void ZeroSpeed()
+        {
+            speed = 0f;
+        }
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
