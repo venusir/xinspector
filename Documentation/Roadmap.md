@@ -85,6 +85,15 @@ Odin 官方签名后（[Pipeline.md](Modules/Pipeline.md) §六），原先那�
 路径选择器 `[FilePath]` `[FolderPath]`、`[MinMaxSlider]` `[PreviewField]`
 `[ValueDropdown]` `[AssetSelector]`——各自是独立工作量，没有「加个类」那么便宜。
 
+> **2026-10-04 收尾：** 上表里除 `[InlineEditor]` 一家外的六项**已全部落地**
+> （路径选择器、`[MinMaxSlider]`、`[PreviewField]`、`[ValueDropdown]`、`[AssetSelector]`）。
+> **L1b 至此只剩 `[InlineEditor]` 一族**——它是本层唯一的重型件
+> （内嵌 `Editor` + 预览宿主 + 递归深度控制），刻意留作独立一轮。
+> 这一轮另有一处结论值得留在本文件：**`[ValueDropdown]` 与 `[AssetSelector]` 的
+> 「选项」表面被刻意收窄成「只声明有真行为的那些」**——Odin 的其余选项要么只对列表有意义
+> （本包不支持数组形态），要么依赖它自建的弹出层（搜索框、图标、多选、标题、尺寸）。
+> 声明成静默 no-op 正是本包最想避免的现象，**编译不过才是响的**。
+
 **一条贯穿全轮的边界：只作用于单个成员值。** Odin 的这些绘制器都能挂数组
 （`[FilePath] string[]`、`[ValueDropdown] List<T>` + `IsUniqueList`），本包做不到——
 数组整个交给 `PropertyField(includeChildren: true)`，按元素画就要自己接管数组绘制（L6）。

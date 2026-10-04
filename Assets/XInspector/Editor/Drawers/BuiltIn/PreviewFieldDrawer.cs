@@ -243,8 +243,7 @@ namespace XInspector.Editor
                 return null;
             }
 
-            var instanceId = target.GetInstanceID();
-            if (state.CachedFor == instanceId && state.Cached != null)
+            if (state.CachedFor == target && state.Cached != null)
             {
                 return state.Cached;
             }
@@ -253,7 +252,7 @@ namespace XInspector.Editor
             if (preview != null)
             {
                 state.Cached = preview;
-                state.CachedFor = instanceId;
+                state.CachedFor = target;
                 return preview;
             }
 
@@ -273,14 +272,22 @@ namespace XInspector.Editor
         /// <summary>缓存下来的真预览贴图。</summary>
         public Texture Cached;
 
-        /// <summary>缓存对应的对象实例 ID。</summary>
-        public int CachedFor;
+        /// <summary>
+        /// 缓存对应的对象。
+        /// </summary>
+        /// <remarks>
+        /// 存**引用**而不是 <c>GetInstanceID()</c>：后者在 Unity 6.4 已标记弃用
+        /// （提示改用 <c>GetEntityId()</c>），而 <c>GetEntityId()</c> 在 6000.3 上还不存在，
+        /// 用了会撞破本包声明的最低版本。存引用两者都不欠，比较走 Unity 的 <c>==</c>
+        /// （它会把已销毁的对象当 null，正合此处语义）。
+        /// </remarks>
+        public Object CachedFor;
 
         /// <summary>清空缓存（对象被清空时调）。</summary>
         public void Clear()
         {
             Cached = null;
-            CachedFor = 0;
+            CachedFor = null;
         }
     }
 }

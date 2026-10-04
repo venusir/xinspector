@@ -254,6 +254,11 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 | `$` 表达式与 getter 字符串 | `GUIColor(string)`、`MinValue`/`MaxValue(string)`、`ProgressBar` 的三个 getter 形都属此类。**做半个（只认单个成员名）比不做更糟**，要做就连同 Odin 的整套表达式语言一起做。签名已在「L1a 签名核对」一节抄好 |
 | `SdfIconType` 与图标重载 | ~1536 个成员的 Sirenix 自有枚举，是独立大件：要么生成全部并自绘图标，要么裁一个子集并接受与 Odin 不兼容。`[LabelText]` `[InfoBox]` `[SuffixLabel]` 的图标重载都卡在这 |
 | `[DisplayAsString]` 的 `fontSize` / `enableRichText` 重载 | 签名已确认且不依赖 Unity 类型，本轮只做了 `()` 与 `(bool overflow)`。补它是纯加法，缺的只是一个使用它的理由 |
+| `[ValueDropdown]` 的选项缓存 | 现在**每帧重建选项表**（选项随来源的值变化才算对）。来源很大时这是每帧 O(n) 的分配——要缓存就得定「什么时候失效」，而那正是「显示陈旧选项」的来源。先正确、后优化 |
+| 带标签的选项（`ValueDropdownItem<T>`） | 见「落地时的三处收窄」第 2 条。缺的是「这些类型在 Unity 下到底能不能序列化」的核实，不是设计 |
+| `[PreviewField]` 的拖拽交互 | Odin 的 Ctrl+点击清空、Ctrl+拖拽替换要自绘对象字段的拖拽与点击处理。落点若要做，是 `ProgressBarDrawer` 那套手工事件处理的路子 |
+| `[AssetSelector]` 弹出层的搜索框 | 现在是编辑器自带菜单，没有搜索框/图标/多选。要做得自建弹出窗口——那是 `[InlineEditor]` 那一档的工作量 |
+| `[ColorPalette]` 的调色板来源 | 卡在设计而非实现：得先定「命名调色板存在哪、谁来编辑、怎么进版本控制」。做完这层，特性本身只有几十行 |
 
 ---
 
@@ -466,7 +471,35 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 | `[TypeDrawerSettings]` | 它是「Type Drawer」的选项（`BaseType`、`Filter` 取 `TypeInclusionFilter` 位标志），样例一律挂在 `[ShowInInspector]` 的 `System.Type` 字段上。**Unity 不序列化 `System.Type`**，没有反射后端它根本不进树。移 L3 |
 | `[AssetList]` | 官方原文：「**替换默认的列表绘制器**」「对列表与单个元素都有效，但**行为不同**」，且有 `AutoPopulate`、`Tags`、`LayerNames`、`AssetNamePrefix`、`Path`、`CustomFilterMethod`（方法名）。它是列表绘制器（增删/Undo 属 L6），且只做单元素那半会得到一个语义随目标类型而变的半成品。移 L6 |
 | `[ColorPalette]` | 构造 `()` 与 `(string paletteName)` 都是字面量，**边界没挡住它**——缺的是数据：官方原文让人去 **Tools > Odin > Inspector > Preferences > Drawers > Color Palettes** 里编辑调色板，那是 Odin 自己的设置存储。本包没有「命名调色板存在哪、谁来编辑」这一层，凭空造一个形状比不做更糟。**先做一个调色板来源的设计**，再谈特性 |
-| `[AssetSelector]` | 构造 `()`、字段 `Paths`/`Filter`/`FlattenTreeView` 等**都过得了边界**，它是被**工作量**挡住的：默认是项目文件夹的**树视图**弹出层，且一半字段是列表元素行为（L6）。它的降级版（按钮 + 扁平 `GenericMenu`）能做，但偏离 Odin 默认形态比 `[ValueDropdown]` 更明显。推迟到 `[InlineEditor]` 那一轮 |
+| `[AssetSelector]` | 构造 `()`、字段 `Paths`/`Filter`/`FlattenTreeView` 等**都过得了边界**，起初是被**工作量**挡住的（默认是项目文件夹的树视图弹出层）。**后来做了**，见下 |
+
+### 落地时的三处收窄（比上表更细，都写进了特性的类注释）
+
+上表只写到「实现哪几组重载」。真正落地时又收了三处，理由同源——**不猜、不造表面**：
+
+1. **只声明有真行为的选项。** `[ValueDropdown]` 与 `[AssetSelector]` 各有一批 Odin 选项
+   （`DropdownTitle`、`DropdownHeight`、`DropdownWidth`、`ExpandAllMenuItems`、
+   `NumberOfItemsBeforeEnablingSearch`、`CopyValues`、`DoubleClickToConfirm` 等，以及四个
+   只对列表有意义的），本包**一个都不声明**。它们的共同点是：在编辑器自带菜单上**没有对应物**，
+   声明了只能是静默 no-op——而本包最忌讳的就是「编译得过但什么都不发生」。
+   两条守卫测试（`只声明支持的选项`）把这个约定钉住。
+2. **不引入 `ValueDropdownItem` / `ValueDropdownItem<T>` / `ValueDropdownList<T>`。**
+   它们是 Odin Serializer 时代的「标签/值对」类型。本包承诺的边界是「**序列化数组/List**
+   作数据源」，纯值数组已经够用；加它们等于新增一组「不确定 Unity 能不能序列化」的公开类型。
+   **代价是真的**：Odin 代码里用 `ValueDropdownList<T>` 的写法在本包编译不过。
+3. **`[FilePath]` 不声明 `IncludeFileExtension`。** 官方只给了它一句话
+   （"If true the file path will include the file's extension."），**默认值与确切语义都没核对到**。
+   一个「设了也不产生行为」的开关，宁可让它编译不过。
+
+**这三处的共同判据**：`[PropertyRange].MinGetter` 那种「只读的残留成员」是**形式**的残留
+（不可设，恒为 null），而上面这些是**可设的旋钮**——旋钮不生效才是骗人的。
+
+### 两处数值由本包自定（与 `InfoMessageType`/`TitleAlignments` 同款）
+
+- `ObjectFieldAlignment` 的成员**顺序**（文档站按字母序排，数值未核实）→ 按
+  `Left`/`Center`/`Right` 从 0 起排，并有守卫测试钉住（改顺序是破坏性变更）。
+- `[PreviewField]` 的**默认高度（64）与默认对齐（`Left`）**——Odin 的默认值存在它的偏好设置里，
+  官网核不到。两条都写进了包 README 的已知限制，不藏在行为里。
 
 ---
 

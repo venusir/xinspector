@@ -2,7 +2,9 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 只有骨架与一条垂直切片。API 尚未稳定，可能随时变更。
+> **状态：** `0.1.0-preview.1` — 已实现 **54 个特性**（分组与条件、状态与门控、标签与外观、
+> 值绘制、校验与钳制，另有自建分组的基类与编辑器窗口基类）。
+> API 尚未稳定，可能随时变更。
 
 ## 设计哲学
 
@@ -124,10 +126,20 @@ public class PlayerProfileEditor : XInspectorEditor
 - **编辑器窗口只做了「画自身序列化字段」这一种形态。** 有基类 `XInspectorEditorWindow`
   （继承后声明字段即可，见 `Editor/README.md`），但**没有** Odin 那种检视任意对象的浮空
   Inspector、字段拖拽重排、窗口内 Undo（窗口里的编辑不可撤销，用「重置」补偿）。
-- **没有数组 / 列表展开**，没有 `[Button]` / `[OnValueChanged]` / `[InlineEditor]`
-  / `[PreviewField]` / `[FilePath]` 这类重型绘制器。条件族已做（见下一条），
-  分组族（`[BoxGroup]` `[FoldoutGroup]` `[TabGroup]` `[TitleGroup]` `[HorizontalGroup]`
-  `[VerticalGroup]` `[ToggleGroup]`）已做。
+- **没有数组 / 列表展开。** 数组整个交给 Unity 的 `PropertyField(includeChildren: true)`，
+  因而**本包的特性作用不到数组元素上**。也正因如此，本轮的值绘制器
+  （`[FilePath]` `[ValueDropdown]` `[AssetSelector]` `[PreviewField]` 等）
+  **一律只作用于单个成员值**，数组形态不支持。没有 `[Button]` / `[OnValueChanged]` /
+  `[InlineEditor]` 这几种。
+- **成员引用的参数只认序列化成员名。** `[ValueDropdown("options")]` 的 `options`、
+  `[MinMaxSlider("range")]` 的 `range`、`[FilePath(ParentFolder = …)]` 的插值，
+  在 Odin 那边都是「resolved string」（支持 `@` 表达式、`$` 成员引用与方法调用）；
+  本包**只认字面量与序列化字段名**，`$`/`@`/方法一律不做。
+- **`[ValueDropdown]` 与 `[AssetSelector]` 的弹出层是编辑器自带菜单**，没有搜索框、
+  图标与多选；**只声明有真行为的选项**——Odin 的其余选项要么只对列表有意义，
+  要么依赖它自建的弹出层，写了会**编译不过**（而不是静默失效）。
+- **`[PreviewField]` 的方块是预览、不是控件。** 可编辑的是旁边那个对象字段；
+  Odin 的 Ctrl+点击清空、Ctrl+拖拽替换不做。默认高度（64）与默认对齐（Left）由本包定。
 - **没有 `[SerializeReference]` 类型切换。**
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。

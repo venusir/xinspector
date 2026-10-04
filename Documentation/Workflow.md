@@ -43,7 +43,7 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
 ### 第 2 条：离线测试
 
 `Tests.Native/` 是脱离 Unity 的 .NET NUnit 工程，覆盖 Runtime 侧全部逻辑
-（47 例，约 20 毫秒）。它把「Runtime 零 Unity 依赖」这条契约变成**编译期强制**——
+（约 180 例，几十毫秒——**别把例数写死在这里**，它每轮都在涨）。它把「Runtime 零 Unity 依赖」这条契约变成**编译期强制**——
 往 Runtime 里写 `using UnityEngine;` 会让它直接编译失败。
 
 **不覆盖** Editor 侧：属性树、绘制器链、分组装配、标题绘制全部依赖

@@ -169,11 +169,11 @@ namespace XInspector.Tests.Editor
         [Test]
         public void 清空对象时清缓存()
         {
-            var state = new PreviewFieldState { CachedFor = 12345 };
+            var state = new PreviewFieldState { CachedFor = _target };
 
             Assert.That(PreviewFieldContent.ResolveTexture(null, state), Is.Null);
             Assert.That(state.Cached, Is.Null);
-            Assert.That(state.CachedFor, Is.EqualTo(0));
+            Assert.That(state.CachedFor, Is.Null);
         }
 
         #endregion

@@ -86,14 +86,14 @@
 | 特性 | 状态 | 层 |
 |---|---|---|
 | `[AssetList]` | ❌ 缺 | **L6**（替换列表绘制器；2026-10-04 由 L1b 改判） |
-| `[AssetSelector]` | ❌ 缺 | L1b（**推迟**到 `[InlineEditor]` 那一轮：默认是项目文件夹的树视图弹出层） |
+| `[AssetSelector]` | ✅ 已实现 | 透传型：小按钮 + 编辑器自带菜单（无搜索框/图标/多选，见 Pipeline §六） |
 | `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
 | `[ColorPalette]` | ❌ 缺 | L1b（**卡在设计**：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
 | `[DisplayAsString]` | ✅ 已实现 | — |
 | `[EnumPaging]` | ✅ 已实现 | — |
 | `[EnumToggleButtons]` | ✅ 已实现 | — |
-| `[FilePath]` | ❌ 缺 | L1b（另见 Validation） |
-| `[FolderPath]` | ❌ 缺 | L1b（另见 Validation） |
+| `[FilePath]` | ✅ 已实现 | 只作用单个 `string`；`$` 成员引用不做（另见 Validation） |
+| `[FolderPath]` | ✅ 已实现 | 与 `[FilePath]` 同形（另见 Validation） |
 | `[HideInInlineEditors]` | ❌ 缺 | 依赖 `[InlineEditor]` |
 | `[HideInTables]` | ❌ 缺 | 依赖 `[TableList]` |
 | `[HideMonoScript]` | ✅ 已实现 | — |
@@ -101,7 +101,7 @@
 | `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
 | `[InlineEditor]` | ❌ 缺 | L1b |
 | `[MultiLineProperty]` | ✅ 已实现 | — |
-| `[PreviewField]` | ❌ 缺 | L1b |
+| `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
 | `[TypeDrawerSettings]` | ❌ 缺 | **L3**（样例一律挂在 `[ShowInInspector]` 的 `System.Type` 字段上；2026-10-04 由 L1b 改判） |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
@@ -110,7 +110,8 @@
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 9 / 缺 14 / 不做 1**
+**小计：已实现 13 / 缺 10 / 不做 1**（2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
+`[PreviewField]` 四项转已实现）
 
 ### Essentials（19）
 
@@ -134,9 +135,10 @@
 | `[TypeFilter]` | ⛔ 不做 | 唯一构造是 resolved string（样例里是方法），且被标注字段是抽象/接口类型——还需 L7 的类型切换。2026-10-04 核过签名后判定 |
 | `[TypeInfoBox]` | ✅ 已实现 | — |
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
-| `[ValueDropdown]` | ❌ 缺 | L1b（另见 Collections） |
+| `[ValueDropdown]` | ✅ 已实现 | 数据源只收序列化数组/List；只声明有真行为的选项（另见 Collections） |
 
-**小计：已实现 11 / 缺 4 / 不做 4**（`[TypeFilter]` 于 2026-10-04 由「缺」改判「不做」）
+**小计：已实现 12 / 缺 3 / 不做 4**（2026-10-04：`[ValueDropdown]` 转已实现；
+`[TypeFilter]` 由「缺」改判「不做」）
 
 ### Validation（15）
 
@@ -146,13 +148,13 @@
 |---|---|---|
 | `[DisallowModificationsIn]` | ⛔ 不做 | 同 `[RequiredIn]`：共用一块尚不存在的预制体探测基础设施 |
 | `[MaxValue]` | ✅ 已实现 | — |
-| `[MinMaxSlider]` | ❌ 缺 | L1b（另见 Numbers） |
+| `[MinMaxSlider]` | ✅ 已实现 | 只作用 `Vector2`；边界可取自序列化成员名（另见 Numbers） |
 | `[MinValue]` | ✅ 已实现 | — |
 | `[PropertyRange]` | ✅ 已实现 | — |
 | `[Range]` | ➖ 不需要 | Unity 自己的（另见 Unity） |
 | `[RequiredListLength]` | ❌ 缺 | L6 |
 
-**小计：已实现 3 / 缺 2 / 不做 1 / 不需要 1**
+**小计：已实现 4 / 缺 1 / 不做 1 / 不需要 1**（2026-10-04：`[MinMaxSlider]` 转已实现）
 
 ### Groups（12）
 
@@ -290,10 +292,10 @@
 ### 总账
 
 ```
-108 个不重复特性 = 48 已实现 + 46 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 54 已实现 + 40 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 48 个：
+已实现的 54 个：
 
 - **分组与条件**（16）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -302,8 +304,10 @@
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
   `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
-- **值绘制**（9）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
-  `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`
+- **值绘制**（15）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+  `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
+  `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
+  `[FilePath]` `[FolderPath]`
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
 - **调试**（1）：`[ShowDrawerChain]`
@@ -316,9 +320,9 @@
 是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
 `[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
 
-**「缺 46 个」也不等于「46 份工作量」**：其中真正需要新层的集中在
+**「缺 40 个」也不等于「40 份工作量」**：其中真正需要新层的集中在
 L3（反射后端）、L5（回调与按钮）、L6（集合自绘）、L7（Odin 的另一条产品线）——
-L1a、L1b 分组族、以及 L1b 的路径选择器/滑块等值绘制器（2026-10-04）这几块
+L1a、L1b 分组族、以及 L1b 的六个值绘制器（2026-10-04）这几块
 **零新基础设施**的已经清完。
 
 **2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
@@ -483,28 +487,31 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
 ## 推荐顺序
 
 1. ~~**L1a**~~——✅ 已清完（2026-10-04）。
-2. ~~**L1b 的分组族**~~——✅ 已落地（2026-10-04）。剩下的 L1b 起初写成
-   「重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[Searchable]`
-   `[ValueDropdown]` 等）与路径选择器」——**那个「等」字藏了错**：逐个核过签名后，
-   `[Searchable]` `[AssetList]` 是 L6、`[TypeDrawerSettings]` 是 L3、`[TypeFilter]` 判 ⛔、
-   `[ColorPalette]` 卡在设计（见 [Pipeline.md](Modules/Pipeline.md) §六）。
-   真正的 L1b 剩余只有 **`[InlineEditor]` 一族（含三个 `*InInlineEditors`）**、
-   **路径选择器** `[FilePath]` `[FolderPath]`、**`[MinMaxSlider]` `[PreviewField]`
-   `[ValueDropdown]` `[AssetSelector]`** 这几项——2026-10-04 的第三批落地它们
-   （`[InlineEditor]` 与 `[AssetSelector]` 除外，各自独立成轮）。
-3. **L3 反射后端**——它是 L2 剩余项、L5 全部、以及窗口一半能力的前置。**下一块该做它。**
-4. **L5**——`[Button]` 是使用方最常问「为什么没有」的一个；`[CustomValueDrawer]`
-   与 `[ValidateInput]` 也归在这里（它们的唯一形态是方法调用）。
-5. **L4 / L6**——按需。
-6. **L7**——要么不做，要么当成独立产品立项。
+2. ~~**L1b**~~——✅ **整层清完**（2026-10-04）：
+   分组族六个 + 值绘制器六个（`[FilePath]` `[FolderPath]` `[MinMaxSlider]` `[PreviewField]`
+   `[ValueDropdown]` `[AssetSelector]`）。**只剩 `[InlineEditor]` 一族**（见下）。
+3. **`[InlineEditor]` 一族**——L1b 的最后一块，本轮刻意留作独立一轮：
+   内嵌 `Editor` + 预览宿主 + 递归深度控制，失败模式与其余值绘制器不同类，
+   两者混在一轮里会互相掩盖设计问题。
+4. **L5 `[Button]`**——**顺序在本轮被重排到 L3 之前**。原先写「L3 是 L5 全部的前置」
+   是**过头了**：`[Button]` 只需要树持有目标对象列表 + 按名解析方法（构建期反射即可），
+   **不需要反射值后端**——那只对 `[OnValueChanged]` 一类成立。
+   `[Button]` 又是使用方最常问「为什么没有」的一个，且 `[CustomValueDrawer]`
+   与 `[ValidateInput]` 也归这一族（它们的唯一形态是方法调用）。
+5. **L3 反射后端**——L2 剩余项与窗口 `GetTarget()` 的前置；本轮核对后又多一条理由：
+   它还是 `[TypeDrawerSettings]` 的前置。但**它不是 L5 的前置**（见上），故让位给 `[Button]`。
+6. **L4 / L6**——按需。L6 的清单本轮因改判长了三项（`[Searchable]` `[AssetList]`
+   以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
+7. **L7**——要么不做，要么当成独立产品立项。
 
-**判据是「一次投入换来多少个特性」**：L1a 与 L1b 的分组族是高杠杆（架构已就位，纯加法），
-已兑现；L3 是低杠杆但**卡着后面三层**；L7 是另一条产品线。
+**判据是「一次投入换来多少个特性」**：L1a 与 L1b 是高杠杆（架构已就位、纯加法），已兑现；
+L3 是低杠杆但卡着一串东西；L7 是另一条产品线。
 
-**两条经验留给下一轮**：其一，**核对签名之后再动手**——那一轮 26 个特性逐条核过，
-才敢把 9 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**（分组绘制器落在成员与
-根节点上、同路径多类型被静默丢弃），它们是设计评审读源码时发现的，不修的话六个新特性
-会各自把它放大一遍。
+**三条经验留给下一轮**：其一，**核对签名之后再动手**——两轮共核过 37 个特性，
+才敢把 10 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
+（分组绘制器落在成员与根节点上、同路径多类型被静默丢弃），它们是设计评审读源码时发现的，
+不修的话六个新特性会各自把它放大一遍；其三，**分层本身会错**——本轮把五个特性从 L1b
+挪到 L6/L3/⛔，说明「一个「等」字」足以让整层的成本估算失真，**分类也是要核对的结论**。
 
 ---
 

@@ -131,6 +131,38 @@ public bool isAlive = true;
 | `[PropertyRange]` 与钳制族 | 两者是**不同的事**：`[PropertyRange]` 只换控件（用户拖不出范围外的值，但脚本改的值不会被管）；`[MinValue]`/`[MaxValue]` 在绘制后钳制数据。要「连数据一起管」就把两个都写上 |
 | `[Wrap]` 的区间 | 半开 `[min, max)`：等于上限时回到下限（`[Wrap(0,360)]` 下 360 → 0） |
 
+### 重型值绘制特性
+
+```csharp
+[FilePath]                                     public string configPath;   // 路径 + 浏览按钮
+[FilePath(Extensions = "cs, unity")]           public string scriptPath;   // 只过滤对话框
+[FilePath(ParentFolder = "Assets/Resources")]  public string resourcePath;
+[FolderPath]                                   public string outputDir;
+
+[MinMaxSlider(0f, 100f)]                       public Vector2 hpRange;     // 双滑块
+[MinMaxSlider("dynamicRange", true)]           public Vector2 ranged;      // 边界取自成员
+[PreviewField]                                 public Texture2D icon;      // 预览方块
+[PreviewField(80f, ObjectFieldAlignment.Right)] public GameObject model;
+
+[ValueDropdown("options")]                     public string difficulty;   // 选项来自数组
+[ValueDropdown("paths", AppendNextDrawer = true)] public string picked;    // 小按钮 + 普通框
+[AssetSelector]                                public Material anyMaterial; // 资产下拉
+[AssetSelector(Paths = "Assets/Art", Filter = "t:Material")] public Material scoped;
+```
+
+| 行为 | 说明 |
+|---|---|
+| **只作用于单个成员值** | 数组/`List` 形态**一律不支持**——数组整个交给 Unity 展开，按元素画要先接管数组绘制（未做）。`[ValueDropdown]` 与 `[AssetSelector]` 那几个只对列表有意义的选项因此**不声明**（写了编译不过） |
+| **参数只认字面量与序列化成员名** | `[ValueDropdown("x")]` 的 `x`、`[MinMaxSlider("r")]` 的 `r` 必须是**序列化字段**；Odin 的 `$` 成员引用、`@` 表达式、方法调用**都不做**。名字解析失败时**告警并退回普通绘制** |
+| 路径怎么存 | `[FilePath]`/`[FolderPath]` 默认存**工程相对**路径（`Assets/…` 开头）；`ParentFolder` 之下则存相对它的路径；`AbsolutePath = true` 存绝对路径。选中的文件若不在基准目录之下（工程外），存绝对路径而不是悄悄改成别的 |
+| `Extensions` 只过滤对话框 | 不校验手填的值，也不拦已选的值——标错了不该让字段用不了 |
+| `[MinMaxSlider]` 的边界 | 可以是字面量、一个 `Vector2` 成员、两个 `float` 成员或混搭。**只作用 `Vector2`**（`Vector2Int` 不做：值后端不支持它）。边界出现 NaN/无穷时退回普通绘制；动态成员的值被改成倒置时**自动换序** |
+| `[PreviewField]` 的方块 | **方块是预览、不是控件**——可编辑的是旁边那个对象字段（原生控件，拖拽赋值照常）。宽度不够时字段排到下一行。默认高度 64、默认对齐 `Left`，都由本包定 |
+| `[ValueDropdown]` 的树形 | 选项里带 `/` 就**分子菜单**（与 Odin 一致，默认就是树形）；`FlattenTreeView = true` 拍平成一层 |
+| `[ValueDropdown]` 的类型判定 | 源与目标 `propertyType` 必须相同；**枚举还要求成员名与顺序完全一致**——不符则**拒绝这次选择并告警**，绝不按索引硬写 |
+| `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |
+| 只读与多对象 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存。`[MinMaxSlider]` 在多对象值不一致时退回普通绘制（双滑块没有混合值形态） |
+
 ### 校验与钳制特性
 
 ```csharp
