@@ -670,7 +670,8 @@ namespace XInspector.Editor
                 return false;
             }
 
-            IsFlags = enumType.IsDefined(typeof(FlagsAttribute), false);
+            // flags 判定与 EnumPaging 共用一份缓存（EnumSupport），避免两处各判一次。
+            IsFlags = EnumSupport.IsFlags(property);
             Names = names;
             Masks = new long[names.Length];
             Widths = new float[names.Length];

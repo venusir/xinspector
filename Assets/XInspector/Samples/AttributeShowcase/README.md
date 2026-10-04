@@ -44,6 +44,11 @@
 | `[ProgressBar(..., Segmented = true)]` | 四段刻度 + 自定义填充色；数值文本画在条上 |
 | `[EnumToggleButtons]` | 枚举画成一排按钮（单选），替代下拉框 |
 | `[EnumToggleButtons]`（`[Flags]`） | 逐位多选，每按一次翻转一位 |
+| `[MultiLineProperty(5)]` | 5 行文本域；标签画在文本域上方 |
+| `[DelayedProperty]` | 输入过程中不写回，回车或失焦才提交 |
+| `[EnumPaging]` | 枚举下拉框 + 前后翻页按钮（末尾自动绕回开头） |
+| `[PropertyRange(0, 100)]` | 滑块，取值被限制在范围内（只换控件，**不钳数据**） |
+| `[Wrap(0, 360)]` | 初始的 400 在绘制后被绕成 40 |
 
 ### 校验与钳制
 

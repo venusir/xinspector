@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+### Added — L1a：值控件
+
+- **`[MultiLineProperty(int lines = 3)]`**：字符串画成多行文本域。标签画在文本域**上方**——
+  多行控件与标签并排会被挤成半宽。
+- **`[DelayedProperty]`**：值只在回车或失焦时提交。支持 `int`/`float`/`double`/`string`；
+  **`long` 超出 `int` 范围时告警并退回普通绘制**——延迟控件只有 `int` 版本，
+  硬用会把高位悄悄截掉（「看到的值不是真实的值」比不做更糟）。
+- **`[EnumPaging]`**：枚举下拉框 + 前后翻页按钮（末尾绕回开头）。`[Flags]` 位标志没有顺序语义，
+  告警并退回普通绘制。
+- **`[PropertyRange(double min, double max)]`**：数值画成滑块。写入走 `BeginChangeCheck`，
+  只有真的拖动才写回——避免「每帧把 float 精度的值写回 double 字段」这类精度损耗。
+  多对象值不一致时退回普通绘制（滑块没有「混合值」形态，Unity 自己会显示「—」）。
+  官方的三个 getter 形重载属 `$` 表达式族（推迟），`MinGetter`/`MaxGetter` 照保留、恒为 null。
+- **`[Wrap(double min, double max)]`**：绘制后把值**回绕**到 `[min, max)`——等于上限回到下限
+  （`[Wrap(0,360)]` 下 360 → 0，正是角度想要的）。跳过规则与钳制族共用同一份判定
+  （多对象不一致、只读、非数值类型），理由也一样：不悄悄改数据。
+- 回绕数学（含负值的取余归一化）在纯函数 `WrapValues` 里；flags 判定抽成
+  `EnumSupport` 的每属性缓存，与 `[EnumToggleButtons]` 共用一份，避免两处各判一次。
+
 ### Added — L1a：绘制器链自证
 
 - **`[ShowDrawerChain]`**：把该属性的绘制器链画成一张可展开的表——序号、绘制器名、权重、

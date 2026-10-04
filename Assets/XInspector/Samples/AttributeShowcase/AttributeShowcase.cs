@@ -105,6 +105,26 @@ namespace XInspector.Samples
         [EnumToggleButtons]
         public StatusFlags status = StatusFlags.Poisoned;
 
+        /// <summary>5 行文本域（行数可调，标签画在文本域上方）。</summary>
+        [MultiLineProperty(5)]
+        public string notes = "多行文本示例：\n第二行。";
+
+        /// <summary>延迟提交：输入过程中不写回，回车或失焦才提交。</summary>
+        [DelayedProperty]
+        public string searchFilter = "";
+
+        /// <summary>枚举下拉框 + 前后翻页按钮（末尾自动绕回开头）。</summary>
+        [EnumPaging]
+        public DamageType pagedType = DamageType.Physical;
+
+        /// <summary>滑块——只换控件，**不钳数据**（要钳请配 [MinValue]/[MaxValue]）。</summary>
+        [PropertyRange(0, 100)]
+        public float rangedValue = 30f;
+
+        /// <summary>回绕：初始的 400 在绘制后被绕成 40（区间按半开处理）。</summary>
+        [Wrap(0f, 360f)]
+        public float angle = 400f;
+
         #endregion
 
         #region 校验与钳制

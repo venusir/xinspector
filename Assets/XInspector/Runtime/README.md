@@ -125,7 +125,11 @@ public bool isAlive = true;
 | 类型不符 | **告警并退回普通绘制**，字段不会消失。每种特性的支持类型见上表 |
 | `[ProgressBar]` 的越界值 | **不钳制数据**，只把条画到端点。要钳制请配 `[MinValue]`/`[MaxValue]` |
 | `[DisplayAsString]` 的复合类型 | 数组与嵌套结构退回普通绘制——显示成什么形状没有显然的答案 |
-| 多对象编辑 | `[DisplayAsString]` 值不一致时显示 `—`（与 Unity 一致）；`[ProgressBar]` 值不一致时不可拖动 |
+| 多对象编辑 | `[DisplayAsString]` 值不一致时显示 `—`（与 Unity 一致）；`[ProgressBar]` 值不一致时不可拖动；`[PropertyRange]` 值不一致时退回普通绘制（滑块没有「混合值」形态） |
+| `[DelayedProperty]` 的类型面 | 支持 `int`/`float`/`double`/`string`；`long` 仅在值处于 `int` 范围内时可画（延迟控件只有 `int` 版本） |
+| `[EnumPaging]` 与 `[Flags]` | 位标志没有「上一项/下一项」的顺序语义，告警并退回普通绘制 |
+| `[PropertyRange]` 与钳制族 | 两者是**不同的事**：`[PropertyRange]` 只换控件（用户拖不出范围外的值，但脚本改的值不会被管）；`[MinValue]`/`[MaxValue]` 在绘制后钳制数据。要「连数据一起管」就把两个都写上 |
+| `[Wrap]` 的区间 | 半开 `[min, max)`：等于上限时回到下限（`[Wrap(0,360)]` 下 360 → 0） |
 
 ### 校验与钳制特性
 
