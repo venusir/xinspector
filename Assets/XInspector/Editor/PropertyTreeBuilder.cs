@@ -100,6 +100,9 @@ namespace XInspector.Editor
                 members[i].Owner = tree;
             }
 
+            // 生命周期钩子不产生节点（它们不在某个位置上画东西），故走独立通道收集。
+            tree.Lifecycle = TreeLifecycle.Collect(targetType, tree.Targets);
+
             // 处理器必须在**分组装配之前**跑：类级分组特性是处理器注入到成员上的，
             // 而分组装配必须看到它——顺序反过来，类级 [BoxGroup] 会静默地不生效。
             //
@@ -118,6 +121,10 @@ namespace XInspector.Editor
             }
 
             ApplyGrouping(root, members);
+
+            // [OnInspectorInit] 在**整棵树建好之后**才跑：它多半要读字段、甚至读别的节点的状态，
+            // 提前到构造点等于让它在半成品上工作。
+            TreeLifecycle.InvokeAll(tree.Lifecycle?.Init, tree.Targets, "OnInspectorInit");
 
             return tree;
         }

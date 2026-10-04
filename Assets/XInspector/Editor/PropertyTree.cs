@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using UnityEditor;
+using UnityEngine;
 using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
@@ -15,6 +16,13 @@ namespace XInspector.Editor
     /// </summary>
     public sealed class PropertyTree : IDisposable
     {
+        #region Private Fields
+
+        /// <summary>是否已释放。用来让释放整体幂等（含生命周期钩子）。</summary>
+        private bool _disposed;
+
+        #endregion
+
         #region Construction
 
         /// <summary>
@@ -145,6 +153,11 @@ namespace XInspector.Editor
         internal bool UndoEnabled { get; set; } = true;
 
         /// <summary>
+        /// 本树的生命周期钩子（<c>[OnInspectorInit]</c> 一族）。由构建期收集，可为 <c>null</c>。
+        /// </summary>
+        internal TreeLifecycleHooks Lifecycle { get; set; }
+
+        /// <summary>
         /// 绘制整棵树。
         /// </summary>
         /// <remarks>
@@ -153,7 +166,28 @@ namespace XInspector.Editor
         /// </remarks>
         public void Draw()
         {
+            // [OnStateUpdate] 每趟 GUI 布局跑一次。判据取 Layout 趟而不是「每次 Draw」：
+            // 一帧里布局与重绘各 Draw 一次，按 Draw 计数会跑两遍。
+            // 没有 GUI 上下文时（测试、批处理）Event.current 为 null，自然跳过。
+            if (Lifecycle?.Update != null && Event.current != null &&
+                TreeLifecycle.ShouldRunStateUpdate(Event.current.type))
+            {
+                RunStateUpdate();
+            }
+
             Root.Draw();
+        }
+
+        /// <summary>
+        /// 跑一次 <c>[OnStateUpdate]</c> 钩子。
+        /// </summary>
+        /// <remarks>
+        /// 单独开一个入口是为了可测：绘制路径要 GUI 上下文，而「钩子有没有被调用、调了几次」
+        /// 是可无头验证的。
+        /// </remarks>
+        internal void RunStateUpdate()
+        {
+            TreeLifecycle.InvokeAll(Lifecycle?.Update, Targets, "OnStateUpdate");
         }
 
         /// <summary>
@@ -176,6 +210,19 @@ namespace XInspector.Editor
         /// </remarks>
         public void Dispose()
         {
+            // 重复调用是幂等的，钩子也必须跟着幂等——否则「顺手多释放一次」会让
+            // 用户的清理逻辑跑两遍。状态复位本身幂等（袋已清空），钩子得自己把关。
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            // 先跑钩子再复位状态：`[OnInspectorDispose]` 想看一眼自己的状态时，
+            // 那份状态还该在。
+            TreeLifecycle.InvokeAll(Lifecycle?.Dispose, Targets, "OnInspectorDispose");
+
             DisposeNode(Root);
         }
 

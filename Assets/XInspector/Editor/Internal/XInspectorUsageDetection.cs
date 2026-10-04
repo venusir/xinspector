@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using XInspector.Internal;
 
 namespace XInspector.Editor
 {
@@ -93,6 +94,14 @@ namespace XInspector.Editor
                 if (!(attributes[i] is Attribute attribute))
                 {
                     continue;
+                }
+
+                // 生命周期钩子（[OnInspectorInit] 一族）既没有绘制器也没有处理器
+                // ——它们是属性树自己在特定时机调的。漏掉这一类的后果与条件族当年一样：
+                // 类型不被接管，于是特性一次都不生效，且没有任何告警。
+                if (attribute is ITreeLifecycleAttribute)
+                {
+                    return true;
                 }
 
                 var attributeType = attribute.GetType();
