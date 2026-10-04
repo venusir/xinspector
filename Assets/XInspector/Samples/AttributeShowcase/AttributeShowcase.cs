@@ -157,6 +157,16 @@ namespace XInspector.Samples
         public float damage = 10f;
 
         #endregion
+
+        #region 调试
+
+        /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
+        [ShowDrawerChain]
+        [Indent]
+        [DisplayAsString]
+        public int traced = 42;
+
+        #endregion
     }
 
     /// <summary>展示 <c>[EnumToggleButtons]</c> 用的普通枚举。</summary>
