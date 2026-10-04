@@ -247,7 +247,7 @@ namespace XInspector.Editor
         /// <param name="declaringType">成员的声明类型。</param>
         /// <returns>转换表达式。</returns>
         /// <remarks>
-        /// 值类型的声明类型走的是<b>拆箱</b>而不是引用转换，但 <see cref="Expression.Convert(Type)"/>
+        /// 值类型的声明类型走的是<b>拆箱</b>而不是引用转换，但 <see cref="Expression.Convert(Expression, Type)"/>
         /// 两种情况都认，不必分支。声明类型为 <c>null</c> 时退回 <c>object</c>——
         /// 那只会出现在全局字段上，而全局字段必然是静态的，走不到这里。
         /// </remarks>
