@@ -79,7 +79,9 @@
   带装饰器的字段链条照旧把值交给 `PropertyField`——本包既不重复画、也不吞掉它们。
   - 这条推断原先没实测过，而 OdinGap 里标 ➖ 的 4 项全建立在它上面，故在补 L1a 之前先验掉。
   - 结构侧由 `NativeDecoratorTests`（4 例）钉住；**渲染侧不做自动化断言**——按本仓策略不测 IMGUI，
-    改由沙盒的 `NativeDecoratorDemo`（Demo 4）与无特性基线（Demo 1）目视对照。
+    改由开发工程里的 `NativeDecoratorDemo`（Demo 4，**不随包分发**）与无特性基线（Demo 1）目视对照。
+    你若想自己复现：给自己某个带 `[Header]`/`[Range]` 的组件写三行编辑器即可，
+    照 [`Samples/Overview/Editor/`](Samples/Overview/Editor/OverviewComponentEditor.cs) 那样。
 
 ### Added
 
