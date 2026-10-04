@@ -12,6 +12,12 @@ namespace XInspector.Editor
     /// 提到子节点的存在——包裹是链条顺序的自然结果，不是特例代码。
     /// </para>
     /// </summary>
+    /// <remarks>
+    /// 权重 <c>-130</c>：分组带里的中档（标题 <c>-150</c> 在外、竖直/水平容器在内）。
+    /// 显式标注而不是吃默认值——同节点可能有多种分组特性，这族靠权重排序，
+    /// 让 BoxGroup 停在「普通特性默认值」上会误导后来者。
+    /// </remarks>
+    [DrawerPriority(-130d)]
     internal sealed class BoxGroupDrawer : AttributeDrawer<BoxGroupAttribute>
     {
         #region Protected API

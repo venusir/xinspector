@@ -50,6 +50,16 @@ namespace XInspector.Editor
             {
                 var attribute = attributes[i];
 
+                // 分组特性**只在分组节点上**配绘制器。根与成员携带它只是为了「归属」
+                // （ApplyGrouping 读它决定成员搬到哪个节点），特性本身留在原地不删。
+                // 不给这道过滤的后果是：每个分组成员各自再画一个框（双重框 + 重复标题）、
+                // 类级分组继续框住整个 Inspector——两条都有回归守卫
+                // （GroupDrawerPlacementTests），那是先写成红的再修的。
+                if (attribute is PropertyGroupAttribute && property.Kind != InspectorPropertyKind.Group)
+                {
+                    continue;
+                }
+
                 for (var d = 0; d < registered.Length; d++)
                 {
                     var handled = registered[d].HandledAttributeType;
