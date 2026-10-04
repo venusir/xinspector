@@ -196,6 +196,10 @@ namespace XInspector.Samples
         [ChildGameObjectsOnly]
         public GameObject childRef;
 
+        /// <summary>字段前的开关门控它能否编辑：关掉就变灰；开关本身**永远可点**。</summary>
+        [Toggle("Enabled")]
+        public ToggleableSettings toggleable;
+
         #endregion
 
         #region 调试
@@ -207,6 +211,17 @@ namespace XInspector.Samples
         public int traced = 42;
 
         #endregion
+    }
+
+    /// <summary>展示 <c>[Toggle]</c> 用的设置块——开关在值对象内部。</summary>
+    [Serializable]
+    public struct ToggleableSettings
+    {
+        /// <summary>开关本身。</summary>
+        public bool Enabled;
+
+        /// <summary>被门控的值。</summary>
+        public int value;
     }
 
     /// <summary>展示 <c>[EnumToggleButtons]</c> 用的普通枚举。</summary>

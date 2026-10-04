@@ -167,6 +167,9 @@ public bool isAlive = true;
 | `[DrawWithUnity]` | 画完 `PropertyField` 就结束、不调下一个：链上更内侧的绘制器（含 `[Indent]` 这类修饰）都不运行 |
 | `[ChildGameObjectsOnly]` | **只做校验、不提供选择下拉**（与 Odin 的差异）；空引用不算违反——那是 `[Required]` 的职责；多对象编辑以第一个目标的层级为准 |
 | `[HideMonoScript]` | 构建期把 `m_Script` **直接不建节点**；不写它时该槽位照旧保留（与原生渲染一致），两个行为各有用途 |
+| `[Toggle]` | 开关指向**值对象内部**的 bool（相对路径）；**开关永远可点**——否则关掉就开不回来 |
+| `[Toggle]` 的叠加顺序 | 条件族（0）< `[Toggle]`（50）< `[ReadOnly]`（100）< `[EnableGUI]`（110）。与 `[DisableIf]` 并存时开关赢，与 `[ReadOnly]` 并存时后者赢 |
+| `[Toggle]` 解析失败 | 告警一次并**保持可编辑**——拼错的名字不该让字段变得不可用（与条件族「失败即放行」同一规矩） |
 
 ## 自定义分组特性
 

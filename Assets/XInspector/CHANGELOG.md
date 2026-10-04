@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Added — L1a：字段门控（Toggle）
+
+- **`[Toggle("Enabled")]`**：字段前挂一个开关门控它能否编辑（开关在**值对象内部**，相对路径；
+  官方示例 `[Toggle("Enabled")] public MyToggleable t;` 指的是 `t.Enabled`）。
+- 门控走 `PropertyState.ReadOnlyResolver`：**解析在构建期一次**（处理器拿得到成员节点的值入口，
+  `FindPropertyRelative` 在构建期就能做完），求值每帧只剩「读一个 bool」——与条件族同一分工。
+  这是本包第一处**跨成员读写**：特性指向的不是自己，而是值对象里的另一个成员。
+- 三处刻意的取舍：
+  - **开关永远可点**（不在禁用罩里）——否则关掉就再也开不回来，门控成了单向闸门；
+  - 解析失败**告警一次并保持可编辑**——拼错的名字不该让字段变得不可用（条件族同一条规矩）；
+  - 叠加顺序写死为 条件族（0）< `[Toggle]`（50）< `[ReadOnly]`（100）< `[EnableGUI]`（110）：
+    与 `[DisableIf]` 并存时开关赢，与 `[ReadOnly]` 并存时后者赢（恒只读比条件门控更具体）。
+- `CollapseOthersOnExpand` 只留字段、不做行为（跨成员协调没有明确语义）——
+  与 `[DrawWithUnity]` 的 `PreferImGUI`、`[PropertyRange]` 的 getter 字段同一条处置。
+
 ### Added — L1a：结构与门控
 
 - **`[EnableGUI]`**：强制可编辑，处理器显式排在条件族与 `[ReadOnly]` 之后——它叫 Enable，
