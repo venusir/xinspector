@@ -78,6 +78,29 @@ namespace XInspector.Tests.Editor
             Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(PrivateFieldFixture)), Is.True);
         }
 
+        /// <summary>
+        /// **只挂 <c>[Button]</c> 方法的**类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 这是本轮最危险的静默失败：判据此前只扫字段与类级特性，漏掉方法。
+        /// 后果不是「少画了点东西」，而是类型不被自动接管、按钮完全不出现、且一条告警都没有。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂按钮方法的类型为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(ButtonMethodOnlyFixture)),
+                Is.True,
+                "按钮特性只标在方法上；判据不扫方法，这类类型就永远不会被接管。");
+        }
+
+        /// <summary>基类方法上的按钮也让派生类型算数——同样是逐层上溯。</summary>
+        [Test]
+        public void IsUsedBy_基类方法上的按钮也算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ButtonInBaseFixture)), Is.True);
+        }
+
         /// <summary>传 null 不得抛异常。</summary>
         [Test]
         public void IsUsedBy_Null为假()
@@ -192,6 +215,36 @@ namespace XInspector.Tests.Editor
     /// <summary>类上挂分组特性的资产。</summary>
     [BoxGroup("整块")]
     internal sealed class UsageClassGroupFixture : ScriptableObject
+    {
+        /// <summary>普通字段。</summary>
+        public int value = 1;
+    }
+
+    /// <summary>只有方法上挂着按钮特性的资产——一个字段都不带特性。</summary>
+    internal sealed class ButtonMethodOnlyFixture : ScriptableObject
+    {
+        /// <summary>没有特性的普通字段。</summary>
+        public int value = 1;
+
+        /// <summary>唯一的用法。</summary>
+        [Button]
+        private void DoThing()
+        {
+        }
+    }
+
+    /// <summary>按钮方法声明在基类上的资产。</summary>
+    internal class ButtonBaseFixture : ScriptableObject
+    {
+        /// <summary>挂在基类方法上的按钮。</summary>
+        [Button]
+        public void DoThing()
+        {
+        }
+    }
+
+    /// <summary>派生类型自己一个特性都不带。</summary>
+    internal sealed class ButtonInBaseFixture : ButtonBaseFixture
     {
         /// <summary>普通字段。</summary>
         public int value = 1;

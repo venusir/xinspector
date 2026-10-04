@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using NUnit.Framework;
+using XInspector.Internal;
 
 namespace XInspector.Tests
 {
@@ -57,6 +58,44 @@ namespace XInspector.Tests
         public void Button空白文本不报错()
         {
             Assert.That(new ButtonAttribute("  ").Name, Is.EqualTo("  "));
+        }
+
+        /// <summary>
+        /// 「显式设过尺寸」与「没设过」必须能区分：前者取值相同（都是中号），
+        /// 却决定按钮组上的默认档位要不要生效。
+        /// </summary>
+        [Test]
+        public void Button尺寸是否显式设过被记下()
+        {
+            Assert.That(new ButtonAttribute().SizeHasValue, Is.False, "什么都没给。");
+            Assert.That(new ButtonAttribute("执行").SizeHasValue, Is.False, "只给了文本。");
+            Assert.That(new ButtonAttribute(ButtonSizes.Medium).SizeHasValue, Is.True, "显式给了中号也算设过。");
+            Assert.That(new ButtonAttribute(ButtonSizes.Large).Size, Is.EqualTo(ButtonSizes.Large));
+
+            var viaName = new ButtonAttribute { Size = ButtonSizes.Small };
+            Assert.That(viaName.SizeHasValue, Is.True, "具名赋值同样算设过。");
+        }
+
+        /// <summary>
+        /// 档位到像素的换算：递增，且 <c>Gigantic</c> 按其官方描述取 <c>Large</c> 的两倍。
+        /// </summary>
+        /// <remarks>
+        /// 数值是本包自定的，这条用例钉的是**它们之间的关系**——有人「顺手调一下」时，
+        /// 至少会被问一次「Gigantic 还该是两倍吗」。
+        /// </remarks>
+        [Test]
+        public void ButtonSizes高度换算()
+        {
+            var small = ButtonSizeMetrics.HeightOf(ButtonSizes.Small);
+            var medium = ButtonSizeMetrics.HeightOf(ButtonSizes.Medium);
+            var large = ButtonSizeMetrics.HeightOf(ButtonSizes.Large);
+            var gigantic = ButtonSizeMetrics.HeightOf(ButtonSizes.Gigantic);
+
+            Assert.That(small, Is.LessThan(medium));
+            Assert.That(medium, Is.LessThan(large));
+            Assert.That(large, Is.LessThan(gigantic));
+            Assert.That(large, Is.GreaterThan(0f), "高度得是正数，否则按钮画不出来。");
+            Assert.That(gigantic, Is.EqualTo(large * 2f), "官方对 Gigantic 的描述是「两倍于 Large」。");
         }
 
         /// <summary>

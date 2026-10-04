@@ -23,10 +23,14 @@ namespace XInspector.Editor
         #region Public API
 
         /// <summary>
-        /// 判断类型自身或其可序列化字段上，是否有**能被处理**的特性。
+        /// 判断类型自身、其可序列化字段或其方法上，是否有**能被处理**的特性。
         /// </summary>
         /// <param name="type">目标类型。</param>
         /// <returns>用到了 XInspector 返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>方法必须一起扫。</b> <c>[Button]</c> 一族只标在方法上，漏掉的后果不是「少画了点东西」，
+        /// 而是**类型不被接管、按钮完全不出现、且没有任何告警**——判据漏一半是最难归因的形态。
+        /// </remarks>
         public static bool IsUsedBy(Type type)
         {
             if (type == null)
@@ -44,12 +48,23 @@ namespace XInspector.Editor
             const BindingFlags Flags =
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
+            const BindingFlags MethodFlags = Flags | BindingFlags.Static;
+
             for (var current = type; current != null; current = current.BaseType)
             {
                 var fields = current.GetFields(Flags);
                 for (var i = 0; i < fields.Length; i++)
                 {
                     if (HasSupportedAttribute(fields[i].GetCustomAttributes(true)))
+                    {
+                        return true;
+                    }
+                }
+
+                var methods = current.GetMethods(MethodFlags);
+                for (var i = 0; i < methods.Length; i++)
+                {
+                    if (HasSupportedAttribute(methods[i].GetCustomAttributes(true)))
                     {
                         return true;
                     }

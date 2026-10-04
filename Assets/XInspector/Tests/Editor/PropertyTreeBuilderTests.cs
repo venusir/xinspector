@@ -218,7 +218,7 @@ namespace XInspector.Tests.Editor
 
             using (var tree = PropertyTree.Create(serializedObject))
             {
-                Assert.That(tree.Targets.Count, Is.EqualTo(1));
+                Assert.That(tree.Targets.Length, Is.EqualTo(1));
                 Assert.That(tree.Targets[0], Is.SameAs(_target));
             }
         }
@@ -235,7 +235,7 @@ namespace XInspector.Tests.Editor
 
                 using (var tree = PropertyTree.Create(serializedObject))
                 {
-                    Assert.That(tree.Targets.Count, Is.EqualTo(2));
+                    Assert.That(tree.Targets.Length, Is.EqualTo(2));
                     Assert.That(tree.Targets, Has.Member(_target));
                     Assert.That(tree.Targets, Has.Member(second));
                 }

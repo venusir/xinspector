@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using Object = UnityEngine.Object;
@@ -130,8 +129,10 @@ namespace XInspector.Editor
         /// <remarks>
         /// 构造时从 <see cref="UnityEditor.SerializedObject.targetObjects"/> 取一次并缓存：
         /// 目标集合在树的存活期内不会变（选中项一变，编辑器就重建整棵树）。
+        /// 保持数组形态是为了把它原样交给 <c>Undo.RecordObjects</c>——多选下的一次点击
+        /// 只该产生一步撤销，那就得一次传整个数组。
         /// </remarks>
-        internal IReadOnlyList<Object> Targets { get; }
+        internal Object[] Targets { get; }
 
         /// <summary>
         /// 绘制器发起的写操作是否记入 Undo。默认 <c>true</c>；窗口路径由宿主置为 <c>false</c>。

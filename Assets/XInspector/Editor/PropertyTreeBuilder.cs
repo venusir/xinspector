@@ -90,9 +90,15 @@ namespace XInspector.Editor
             // ---- 顺序是契约，动之前先读完这段 ----
             //
             // 树必须在**处理器之前**构造好：需要目标对象的处理器（按钮族按名解析方法、
-            // 条件族定位序列化对象）只能经 node.Owner 拿到树。树此时只含根与成员，
-            // 此后分组装配挂进来的节点由 InspectorProperty.AddChild 传播 Owner。
+            // 条件族定位序列化对象）只能经 node.Owner 拿到树。
             var tree = new PropertyTree(serializedObject, root);
+
+            // 成员此刻还不在树上（要等分组装配才挂上去），故构造期那次递归回填够不着它们。
+            // 这一步补上；此后分组装配挂进来的节点由 AddChild 传播。
+            for (var i = 0; i < members.Count; i++)
+            {
+                members[i].Owner = tree;
+            }
 
             // 处理器必须在**分组装配之前**跑：类级分组特性是处理器注入到成员上的，
             // 而分组装配必须看到它——顺序反过来，类级 [BoxGroup] 会静默地不生效。

@@ -45,6 +45,12 @@ namespace XInspector
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
     public sealed class ButtonAttribute : Attribute
     {
+        #region Private Fields
+
+        private ButtonSizes _size = ButtonSizes.Medium;
+
+        #endregion
+
         #region Public API
 
         /// <summary>
@@ -52,7 +58,7 @@ namespace XInspector
         /// </summary>
         public ButtonAttribute()
         {
-            Size = ButtonSizes.Medium;
+            // 不碰 Size：没表态时按钮组的默认档位才该生效。
         }
 
         /// <summary>
@@ -93,7 +99,28 @@ namespace XInspector
         /// <summary>
         /// 按钮高度档位，默认 <see cref="ButtonSizes.Medium"/>。
         /// </summary>
-        public ButtonSizes Size { get; set; }
+        /// <remarks>
+        /// 赋值会同时把 <see cref="SizeHasValue"/> 置为 <c>true</c>——「显式指定了中号」与
+        /// 「没指定」取值相同，却决定按钮组里的默认档位要不要生效，两者必须能区分。
+        /// </remarks>
+        public ButtonSizes Size
+        {
+            get => _size;
+            set
+            {
+                _size = value;
+                SizeHasValue = true;
+            }
+        }
+
+        /// <summary>
+        /// <see cref="Size"/> 是否被**显式设过**（构造参数或具名赋值都算）。
+        /// </summary>
+        /// <remarks>
+        /// 按钮组（<see cref="ButtonGroupAttribute"/>、<see cref="ResponsiveButtonGroupAttribute"/>）
+        /// 也带高度设定；只有<strong>本按钮没表态</strong>时，组上那个才作数。
+        /// </remarks>
+        public bool SizeHasValue { get; private set; }
 
         #endregion
     }
