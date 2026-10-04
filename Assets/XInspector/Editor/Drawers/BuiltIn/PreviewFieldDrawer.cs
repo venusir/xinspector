@@ -13,7 +13,8 @@ namespace XInspector.Editor
     /// </para>
     /// <para>
     /// 几何全在纯函数 <see cref="PreviewFieldLayout"/> 里，贴图选取在
-    /// <see cref="PreviewFieldContent"/> 里；本类只负责画。
+    /// <see cref="PreviewFieldContent"/> 里，方块的画法在 <see cref="PreviewFieldGUI"/> 里
+    /// （与内嵌编辑器的预览列共用）；本类只负责摆放与调用。
     /// </para>
     /// <para>
     /// 与 Odin 的差异见特性的类注释（方块是预览不是控件、默认高度与对齐由本包定、
@@ -57,7 +58,8 @@ namespace XInspector.Editor
             var content = label != null && label != GUIContent.none ? EditorGUI.PrefixLabel(rowRect, label) : rowRect;
             var previewRect = PreviewFieldLayout.PreviewRect(content, height, attribute.Alignment);
 
-            DrawPreview(property, serializedProperty, previewRect);
+            PreviewFieldGUI.DrawBox(previewRect, serializedProperty.objectReferenceValue,
+                property.State.GetOrCreate<PreviewFieldState>());
 
             var hasRoom = PreviewFieldLayout.FitsBeside(content, height, MinFieldWidth, Gap);
 
@@ -84,25 +86,34 @@ namespace XInspector.Editor
         }
 
         #endregion
+    }
 
-        #region Private Helpers
+    /// <summary>
+    /// 预览方块的画法：有贴图画贴图，没贴图画对象名字。**两处共用**——
+    /// <see cref="PreviewFieldDrawer"/> 与内嵌编辑器的预览列。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 贴图取不到时**不能什么都不画**——一个空白的方块看不出「这里没东西」还是「画挂了」。
+    /// </para>
+    /// <para>
+    /// 不在预览没生成好时主动请求重绘：<c>AssetPreview</c> 生成完会自己让 Inspector 重画，
+    /// 而本包没有「请求重绘」这条现成通路（<see cref="InspectorProperty"/> 上就没有），
+    /// 为此新开一条不值得。代价是那一帧画的是小图标，下一帧换成真预览。
+    /// </para>
+    /// </remarks>
+    internal static class PreviewFieldGUI
+    {
+        #region Public API
 
         /// <summary>
-        /// 画预览方块：有贴图画贴图，没贴图画对象名字。
+        /// 把一个预览方块画进指定矩形。
         /// </summary>
-        /// <remarks>
-        /// 贴图取不到时**不能什么都不画**——一个空白的方块看不出「这里没东西」还是「画挂了」。
-        /// <para>
-        /// 不在预览没生成好时主动请求重绘：<c>AssetPreview</c> 生成完会自己让 Inspector 重画，
-        /// 而本包没有「请求重绘」这条现成通路（<see cref="InspectorProperty"/> 上就没有），
-        /// 为此新开一条不值得。代价是那一帧画的是小图标，下一帧换成真预览。
-        /// </para>
-        /// </remarks>
-        private static void DrawPreview(InspectorProperty property, SerializedProperty serializedProperty, Rect rect)
+        /// <param name="rect">方块区域。</param>
+        /// <param name="target">方块代表的对象；为 <c>null</c> 时只画空框。</param>
+        /// <param name="state">贴图缓存，由调用方提供（缓存归属随调用方）。</param>
+        public static void DrawBox(Rect rect, Object target, PreviewFieldState state)
         {
-            var target = serializedProperty.objectReferenceValue;
-            var state = property.State.GetOrCreate<PreviewFieldState>();
-
             var texture = PreviewFieldContent.ResolveTexture(target, state);
 
             GUI.Box(rect, GUIContent.none);
