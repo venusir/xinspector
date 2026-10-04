@@ -116,19 +116,35 @@ resolved string**（`MinMaxSlider` 的三个 getter、`ValueDropdown.valuesGette
 
 ---
 
-## 四、`[Button]` 与 `[OnValueChanged]` —— L5
+## 四、`[Button]` 与 `[OnValueChanged]` —— L5　✅ 已落地（2026-10-04，两批）
 
-**该不该做：`[Button]` 该做，`[OnValueChanged]` 存疑。**
+**当初的两条判断都兑现了，且各有一处被实测修正。**
 
-`[Button]` 的难点不在绘制而在**调用目标**：它要在一个 `SerializedObject` 之外
-拿到真实对象引用并调用方法。这需要记录「本属性属于哪个目标对象」，
-而那是 `PropertyValueEntry` 之外的信息（值入口只认序列化属性）。
-**边界：不要为此把目标对象塞进值入口**——那会污染「值后端可替换」这条缝。
-倾向做法是让树持有目标对象列表。
+**`[Button]` 该做**——难点确实不在绘制而在**调用目标**，但比预想的更靠前一步：
+树不仅要持有目标对象列表，还要**在处理器之前**就把「节点到树」的引用备好
+（`InspectorProperty.Owner`），否则按名解析方法的处理器全盘落空。
+「不要为此把目标对象塞进值入口」这条边界守住了：值后端仍然只有 `SerializedPropertyValueEntry`
+一个子类，按钮走的是树的 `Targets`。
 
-`[OnValueChanged]` 存疑的理由：它要在「值变了」时回调，而判断「变了」需要每帧比对旧值，
-这与「绘制器不得持有可变字段」的纪律需要调和（旧值该放 `PropertyState`）。
-先想清楚触发时机（每帧比对？`SerializedObject.Update` 前后？），再决定做不做。
+**新增两块基建**（都是动手时才看清的）：
+
+- **方法节点**：树的成员来自 `SerializedObject` 的迭代器，方法根本不在候选集里。
+  于是有了 `InspectorPropertyKind.Method`、一条构建期反射收集通道、以及没有值入口的节点。
+- **分组子节点的折行布局**：`[ResponsiveButtonGroup]` 要按可用宽度折行，而原有的
+  `GroupChildrenLayout` 只表达单行。末端的行作用域是新增的第二种排布模式。
+
+**一处设计被实测推翻**：「按声明顺序把按钮插回字段之间」做不到。字段令牌与方法令牌分属
+元数据的两张表（`0x04`/`0x06`）各自编号，跨表比大小没有意义；`GetMembers` 也不按声明顺序返回。
+故按钮一律排在字段之后——**位置不理想是小事，把按钮插到随机位置才是大事**。
+三条测量都有用例钉着（`MethodNodeTests`），Unity 哪天换了行为那几条会先红。
+
+**`[OnValueChanged]` 存疑的那一点也解掉了**：判据改成「绘制这个字段的那一趟里值前后不一致」，
+于是**不需要跨帧记旧值**（也就没有「第一帧误报」），旧值放哪的难题自然消失；
+取快照走类型化的 `ValueSnapshot`，绘制路径上不装箱。未覆盖的类型**告警一次且不触发**。
+
+**回调族六个一次做完**，三处形状收窄（都写进了包 README）：三个只有 resolved string 形态的
+（`[OnValueChanged]` `[OnStateUpdate]` `[CustomContextMenu]`）只认本类型上的方法名；
+`[OnStateUpdate]` 的时机改成「每趟 GUI 布局」；标在字段上的 `[OnInspectorGUI]` 不做。
 
 ---
 

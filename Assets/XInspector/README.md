@@ -2,8 +2,8 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 已实现 **62 个特性**（分组与条件、状态与门控、标签与外观、
-> 值绘制、校验与钳制、按钮，另有自建分组的基类与编辑器窗口基类）。
+> **状态：** `0.1.0-preview.1` — 已实现 **68 个特性**（分组与条件、状态与门控、标签与外观、
+> 值绘制、校验与钳制、按钮、回调，另有自建分组的基类与编辑器窗口基类）。
 > API 尚未稳定，可能随时变更。
 
 ## 设计哲学
@@ -143,8 +143,20 @@ public class PlayerProfileEditor : XInspectorEditor
   - **`[InlineButton]` 只标在字段上**，方法必须无参；解析失败时按钮禁用并把原因挂在 Tooltip 上，
     **字段本身照常绘制**。
   - 方法抛出的异常被**捕获后打进 Console**，不打断 Inspector 的绘制。
-- **还没有回调族。** 没有 `[OnValueChanged]` `[OnInspectorGUI]` `[OnInspectorInit]`
-  `[OnInspectorDispose]` `[OnStateUpdate]` `[CustomContextMenu]`。
+- **回调族有六条边界：**
+  - **方法名一律只认本类型上的方法名**（含继承链），不认 Odin 的 `$`／`@` 表达式与带参调用。
+  - **`[OnStateUpdate]` 的时机是本包自定的**：每趟 GUI **布局**跑一次。Odin 跑在它自己的
+    state update 循环里，本包没有那个循环。
+  - **`[OnValueChanged]` 只在「用户在这一趟里改动了这个值」时触发**，不监听程序侧或别的对象的
+    改动；参数类型覆盖整型、浮点、布尔、字符串、枚举、对象引用、`Vector2/3/4`、`Color`、`Rect`、
+    `Quaternion`，**其余类型（数组、`Bounds`、动画曲线……）告警一次且不触发**
+    ——本包不肯为它们每帧装箱，也不肯假装检测得到。
+  - **`[CustomContextMenu]` 的菜单出现在字段自己那一行**，不是 Unity 头部的右键菜单
+    （头部由 Unity 掌管，没有公开注入点）；只做标在字段上的形式。
+  - **`[OnInspectorGUI]` 只做标在方法上的无参形式**，且**只画一次、用第一个目标**
+    （多选时按目标各画一遍只会把同一段界面叠 N 次）。
+  - **`[OnInspectorInit]` / `[OnInspectorDispose]` 不是对象生命周期**——它们说的是
+    「这个 Inspector 开始/停止看这个对象了」，与对象本身是否被销毁无关。
 - **成员引用的参数只认序列化成员名。** `[ValueDropdown("options")]` 的 `options`、
   `[MinMaxSlider("range")]` 的 `range`、`[FilePath(ParentFolder = …)]` 的插值，
   在 Odin 那边都是「resolved string」（支持 `@` 表达式、`$` 成员引用与方法调用）；

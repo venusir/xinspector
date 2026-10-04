@@ -263,6 +263,31 @@ public bool isAlive = true;
 > 按钮能配条件族，是因为条件族本轮把用法声明放宽到了 `AttributeTargets.Method`。
 > 判据是**方法会产生属性树节点而普通属性不会**——放宽的只该是真正会生效的那一侧。
 
+### 回调特性
+
+```csharp
+[OnInspectorInit]    private void Prepare() { }        // 每次建树跑一次
+[OnInspectorDispose] private void Cleanup() { }        // 释放时跑一次
+[OnStateUpdate]      private void Refresh() { }        // 每趟 GUI 布局跑一次
+
+[OnInspectorGUI]     private void DrawCustom() { }     // 方法自己画一段界面（占一个位置）
+
+[OnValueChanged(nameof(Clamp))]                 public int health;    // 值变了就调
+[CustomContextMenu("重新随机", nameof(Reroll))]  public int damage;    // 右键菜单多一项
+```
+
+| 行为 | 说明 |
+|---|---|
+| 时机 | Init 在整棵树建好之后；Dispose 在节点状态复位之前；StateUpdate 在**每趟 GUI 布局**（自定语义，Odin 跑在它自己的 state update 循环里） |
+| 生命周期三件不产生节点 | 它们不在某个位置上画东西；混进去会让每次绘制多出几行空白 |
+| 多选 | Init / Dispose / StateUpdate 对每个目标各一次；`[OnInspectorGUI]` **只画一次、用第一个目标**（按目标各画一遍会把同一段界面叠 N 次） |
+| Undo | 生命周期三件不记（它们是通知，不是编辑）；`[OnValueChanged]` 与 `[CustomContextMenu]` 跟随所在树的 `UndoEnabled` |
+| 方法名解析 | 一律只认**本类型上的方法名**（含继承链）；`[OnValueChanged]`／`[CustomContextMenu]`／`[InlineButton]` 共用同一套解析与告警 |
+| `[OnValueChanged]` 的判据 | 「绘制这一趟里值前后不一致」，故不必跨帧记旧值、没有第一帧误报；取快照类型化、不装箱 |
+| 不支持的类型 | 数组、`Bounds` 这类没覆盖到的类型**告警一次且不触发**，不假装监听着 |
+| `[CustomContextMenu]` | 菜单出现在**字段自己那一行**（Unity 头部菜单没有公开注入点）；同一字段挂多项时由第一项负责弹菜单 |
+| 与 Odin 的差异 | 六个都不做 resolved string：方法名就是本类型上的方法名，没有 `$`／`@`／表达式／带参调用 |
+
 ### 其余分组特性
 
 ```csharp

@@ -664,6 +664,33 @@ Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.
 | `[OnStateUpdate]` 的时机 | **每趟 GUI 布局（`EventType.Layout`）调用一次** | 本包没有 Odin 的 state update 循环，只有 IMGUI 的 Layout/Repaint 两趟；取 Layout 恰好每趟一次（取 Repaint 会漏掉纯布局趟）。**这是自定语义，写进包 README** |
 | 参数区的形态 | 固定 `CompactBox` 式（按钮与折叠箭头同行，参数在下方缩进） | 与 Odin 的带参默认一致；不提供 `ButtonStyle` 选项 |
 
+### 落地时的两条实测结论（改动前先读）
+
+**其一：按钮排不到字段之间。** 原计划是「按声明顺序把按钮插回字段之间」，
+实测做不到——三条测量都有用例钉着（`MethodNodeTests.为什么排不到字段之间` 那一节）：
+
+1. 字段令牌在 FieldDef 表（`0x04`）、方法令牌在 MethodDef 表（`0x06`），**两张表各自编号**。
+   实测同一个夹具里字段行号是 94/95、方法行号是 282/283，跨表比大小没有意义。
+2. `Type.GetMembers()` 也**不按声明顺序**返回（实测先方法、再构造函数、后字段）。
+3. 同一张表内行号递增**确实**等于声明顺序——故「按钮之间」的先后仍然正确，只有跨类不行。
+
+结论：按钮一律排在字段之后，并写进包 README 的已知限制。
+**位置不理想是小事，把按钮插到随机位置才是大事。**
+
+**其二：条件族必须放宽到方法，否则按钮配不了条件。** 条件的 `AttributeUsage` 原本是
+`Field | Property`，`[Button, DisableIf(...)]` 会**编译不过**。11 个条件特性（四个条件 +
+四个模式 + 三个内嵌环境）因此加上 `AttributeTargets.Method`。判据是
+**方法会产生属性树节点而普通属性不会**——放宽的只该是真正会生效的那一侧；
+`[LabelText]`／`[Indent]`／`[GUIColor]` 那几个**没有**跟着放宽，它们作用于值控件与标签，
+而按钮不是值控件。
+
+### 落地时新增的两块基建
+
+| 基建 | 为什么非有不可 |
+|---|---|
+| **方法节点**（`InspectorPropertyKind.Method`） | 树的成员来自 `SerializedObject` 的迭代器，**方法根本不在候选集里**。于是有了这条构建期反射通道、没有值入口的节点、以及方法专用末端 |
+| **折行布局**（`GroupChildrenLayout.CellRows` + 末端开关水平作用域） | `[ResponsiveButtonGroup]` 要按可用宽度折行，而原有的策略**只表达单行**。不走这条路而让分组绘制器自己驱动子节点，就会跳过同节点上更内层的绘制器——那正是这个策略对象当初存在的理由 |
+
 ### 本轮不实现（都记在此，别处不再重复）
 
 - `[Button]` 的 `ButtonStyle` / 像素高度 / 布局一族 / 图标一族 / `DrawResult` / `DirtyOnClick`。
@@ -673,6 +700,19 @@ Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.
 - `[CustomContextMenu]` 标在方法上的形式。
 - **嵌套 `[Serializable]` 类型里的按钮**：本轮只对 Inspector 检视的根对象生效
   （拿到嵌套实例需要一条本包没有的「只读反射路径解析」，见 Roadmap 的 L3）。
+
+### 回调族的三处形状收窄（与副作用）
+
+| 特性 | Odin 的形状 | 本包的做法 | 为什么 |
+|---|---|---|---|
+| `[OnStateUpdate]` | `(string action)`，跑在 Odin 自己的 state update 循环里 | 裸标在方法上，**每趟 GUI 布局**跑一次 | 本包没有那个循环；只有 IMGUI 的 Layout/Repaint 两趟，取 Layout 恰好每趟一次（取 Repaint 会漏掉纯布局趟）。方法名也不必再写一遍字符串 |
+| `[OnValueChanged]` | `(string action, bool includeChildren = false)`，比对旧值 | 判据是「绘制这一趟里值前后不一致」 | 不必跨帧记旧值，于是「旧值该放哪」这个难题自然消失；也没有第一帧误报 |
+| `[CustomContextMenu]` | 标在成员上，菜单进 Inspector | 同上，但**菜单在字段自己那一行** | Unity 的头部右键菜单由它自己掌管，没有公开注入点 |
+
+**一处必须记住的副作用：生命周期钩子既无绘制器也无处理器。**
+`XInspectorUsageDetection` 那条判据按「有没有绘制器或处理器」判断，本会漏掉它们——
+后果与条件族当年一样：**类型不被自动接管、特性静默不生效、零告警**。
+故新增 `ITreeLifecycleAttribute` 标记接口，让这两个地方都认得它们。
 
 ---
 

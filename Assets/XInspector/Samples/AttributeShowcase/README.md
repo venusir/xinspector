@@ -210,6 +210,20 @@
 > 分属**两张表**各自编号（字段 0x04、方法 0x06），跨表比大小没有意义；`GetMembers` 也不按声明顺序
 > 返回。位置不理想是小事，把按钮插到随机位置才是大事。
 
+### 回调
+
+| 特性 | 预期看到 |
+|---|---|
+| `[CustomContextMenu("重新随机", …)]` | 在 `damage` 字段上**右键**，菜单里多出一项「重新随机」 |
+| `[OnValueChanged(…)]` | 给 `observedHealth` 输个 500，它会自己弹回 100——回调真的跑了 |
+| `[OnInspectorInit]` | 每次开 Inspector 跑一次（切走再切回来会重跑） |
+| `[OnStateUpdate]` | **每趟 GUI 布局**跑一次；本包没有 Odin 的 state update 循环，这是自定语义 |
+| `[OnInspectorGUI]` | 方法自己画一段界面（给 `health` 划一根进度条）。方法体里的 `UnityEditor` 调用要包在 `#if UNITY_EDITOR` 里 |
+
+> 后四者的时机各不相同，共通点是**都标在方法上、都不产生字段**。
+> `[OnInspectorInit]` / `[OnInspectorDispose]` / `[OnStateUpdate]` 连节点都不产生
+> （它们不在某个位置上画东西），只有 `[OnInspectorGUI]` 拿一个方法节点、占一个位置。
+
 ### 调试
 
 | 特性 | 预期看到 |

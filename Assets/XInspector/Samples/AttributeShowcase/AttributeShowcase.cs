@@ -502,6 +502,63 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 回调
+
+        /// <summary>右键这个字段，「重新随机」会出现在菜单里。</summary>
+        [CustomContextMenu("重新随机", nameof(RerollDamage))]
+        public int damageRoll = 10;
+
+        /// <summary>值一变就把自己夹回 0..100：手动输 500 试试，它会自己弹回来——回调真跑了。</summary>
+        [OnValueChanged(nameof(ClampObservedHealth))]
+        public int observedHealth = 50;
+
+        /// <summary>派生值的出处。**非序列化**字段，故不会把场景标脏。</summary>
+        private int _derivedHealth;
+
+        /// <summary>每次开 Inspector 跑一次。</summary>
+        [OnInspectorInit]
+        private void RefreshOnInit()
+        {
+            _derivedHealth = health;
+        }
+
+        /// <summary>每趟 GUI 布局跑一次——画之前先把派生值跟上。</summary>
+        [OnStateUpdate]
+        private void RefreshDerived()
+        {
+            _derivedHealth = health;
+        }
+
+        /// <summary>
+        /// 自己画一段界面。方法体里的 <c>UnityEditor</c> 调用要包在 <c>#if UNITY_EDITOR</c> 里
+        /// ——展示台落在普通程序集里，玩家构建中它也会被编译。
+        /// </summary>
+        [OnInspectorGUI]
+        private void DrawDerivedHealth()
+        {
+#if UNITY_EDITOR
+            var rect = UnityEditor.EditorGUILayout.GetControlRect();
+            UnityEditor.EditorGUI.ProgressBar(
+                rect,
+                Mathf.Clamp01(_derivedHealth / 100f),
+                $"派生值：{_derivedHealth}（来自 [OnStateUpdate]）");
+#endif
+        }
+
+        /// <summary>菜单项调的方法。</summary>
+        private void RerollDamage()
+        {
+            damageRoll = UnityEngine.Random.Range(1, 20);
+        }
+
+        /// <summary>值变化回调。</summary>
+        private void ClampObservedHealth()
+        {
+            observedHealth = Mathf.Clamp(observedHealth, 0, 100);
+        }
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>

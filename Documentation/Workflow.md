@@ -65,6 +65,11 @@ pwsh -File Tools/run-tests.ps1                             # 门禁：双平台
 这**不是脚本坏了，恰恰是它拒绝给出假的绿色**：没有 csproj 时「0 条告警」毫无意义。
 处置：在 Unity 里打开一次工程，csproj 即生成，之后门禁可跑。
 
+> **2026-10-04 又试过一次，确认这条路不通。** 当时的想法是「`SyncSolution` 是延迟执行的，
+> 那么不配 `-quit`、自己挂 `EditorApplication.update` 轮询等它落盘即可」——
+> 实测等到 30 秒超时，目录里一个 csproj 都没有（`SyncSolution` 调用本身没抛异常）。
+> **别再试了**，代价是每次 30 多秒加一次 Unity 冷启动。
+
 门禁守四件事：包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`、
 沙盒顶层组件与 `Sandbox.unity` 一一对应（见下）。
 它是**独立的一条通道**——Unity 生成的 csproj 没设 `DocumentationFile`，

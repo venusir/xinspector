@@ -15,12 +15,13 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-04）：**
+**本项目的家底（2026-10-04，L5 两批之后）：**
 
-- 公开特性 **58 个**（清单见文末「总账」），分五族：分组与条件、状态与门控、标签与外观、
-  值绘制、校验与钳制，另有调试 1 个
-- 自定义分组的公开基类 `PropertyGroupAttribute`（外加一个自建枚举 `TitleAlignments`）
+- 公开特性 **68 个**（清单见文末「总账」），分七族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制、**按钮**、**回调**，另有调试 1 个
+- 自定义分组的公开基类 `PropertyGroupAttribute`（外加两个自建枚举 `TitleAlignments`、`ButtonSizes`）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
+- **方法节点**：树上第一次出现没有值的节点（`InspectorPropertyKind.Method`）
 - 窗口基类 1 个（`XInspectorEditorWindow`，只画自身序列化字段）
 
 ---
@@ -93,7 +94,7 @@
 | `[AssetList]` | ❌ 缺 | **L6**（替换列表绘制器；2026-10-04 由 L1b 改判） |
 | `[AssetSelector]` | ✅ 已实现 | 透传型：小按钮 + 编辑器自带菜单（无搜索框/图标/多选，见 Pipeline §六） |
 | `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
-| `[ColorPalette]` | ❌ 缺 | L1b（**卡在设计**：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
+| `[ColorPalette]` | ❌ 缺 | **卡在设计**（不再是「缺一层」：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
 | `[DisplayAsString]` | ✅ 已实现 | — |
 | `[EnumPaging]` | ✅ 已实现 | — |
 | `[EnumToggleButtons]` | ✅ 已实现 | — |
@@ -166,19 +167,19 @@
 | 特性 | 状态 | 层 |
 |---|---|---|
 | **`[BoxGroup]`** | **✅ 已实现** | 含类级分发 |
-| `[Button]` | ❌ 缺 | L5（另见 Buttons） |
-| `[ButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
+| `[Button]` | ✅ 已实现 | 参数支持简单类型；参数区固定 CompactBox 形态 |
+| `[ButtonGroup]` | ✅ 已实现 | 一行等分；默认组名照抄官方 |
 | `[FoldoutGroup]` | ✅ 已实现 | — |
 | `[HideIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
 | `[HorizontalGroup]` | ✅ 已实现 | — |
-| `[ResponsiveButtonGroup]` | ❌ 缺 | L5（另见 Buttons） |
+| `[ResponsiveButtonGroup]` | ✅ 已实现 | 按标签宽度折行；本层唯一需要新布局基建的一个 |
 | `[ShowIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
 | `[TabGroup]` | ✅ 已实现 | — |
 | `[TitleGroup]` | ✅ 已实现 | — |
 | `[ToggleGroup]` | ✅ 已实现 | — |
 | `[VerticalGroup]` | ✅ 已实现 | — |
 
-**小计：已实现 7 / 缺 5**
+**小计：已实现 10 / 缺 2**
 
 ### Buttons（6）
 
@@ -186,15 +187,15 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[InlineButton]` | ❌ 缺 | L5 |
+| `[InlineButton]` | ✅ 已实现 | 只标字段；方法必须无参 |
 
-**小计：已实现 0 / 缺 1**
+**小计：已实现 1 / 缺 0**
 
 ### Misc（19）
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[CustomContextMenu]` | ❌ 缺 | L5 |
+| `[CustomContextMenu]` | ✅ 已实现 | 菜单在字段那一行；方法名收窄为本类型上的方法名 |
 | `[DisableContextMenu]` | ⛔ 不做 | 右键菜单由 `PropertyField` 掌管、没有现成开关，需先原型验证可拦截 |
 | `[DrawWithUnity]` | ✅ 已实现 | — |
 | `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
@@ -204,17 +205,17 @@
 | **`[LabelText]`** | **✅ 已实现** | — |
 | **`[LabelWidth]`** | **✅ 已实现** | — |
 | `[OnCollectionChanged]` | ❌ 缺 | L6 |
-| `[OnInspectorDispose]` | ❌ 缺 | L5 |
-| `[OnInspectorGUI]` | ❌ 缺 | L5 |
-| `[OnInspectorInit]` | ❌ 缺 | L5 |
-| `[OnStateUpdate]` | ❌ 缺 | L5 |
-| `[OnValueChanged]` | ❌ 缺 | L5 |
+| `[OnInspectorDispose]` | ✅ 已实现 | 不产生节点 |
+| `[OnInspectorGUI]` | ✅ 已实现 | 只做标在方法上的无参形式 |
+| `[OnInspectorInit]` | ✅ 已实现 | 不产生节点 |
+| `[OnStateUpdate]` | ✅ 已实现 | 时机是本包自定：每趟 GUI 布局 |
+| `[OnValueChanged]` | ✅ 已实现 | 只认本类型上的方法名；不支持的类型告警且不触发 |
 | `[TypeSelectorSettings]` | ❌ 缺 | L7 |
 | `[TypeRegistryItem]` | ❌ 缺 | L7 |
 | **`[PropertyTooltip]`** | **✅ 已实现** | — |
 | **`[SuffixLabel]`** | **✅ 已实现** | — |
 
-**小计：已实现 7 / 缺 11 / 不做 1**
+**小计：已实现 13 / 缺 5 / 不做 1**
 
 ### Collections（6）
 
@@ -297,10 +298,10 @@
 ### 总账
 
 ```
-108 个不重复特性 = 58 已实现 + 36 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 68 已实现 + 26 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 58 个：
+已实现的 68 个：
 
 - **分组与条件**（19）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -316,6 +317,9 @@
   `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
+- **按钮**（4，2026-10-04 L5）：`[Button]` `[InlineButton]` `[ButtonGroup]` `[ResponsiveButtonGroup]`
+- **回调**（6，2026-10-04 L5）：`[OnInspectorInit]` `[OnInspectorDispose]` `[OnStateUpdate]`
+  `[OnInspectorGUI]` `[OnValueChanged]` `[CustomContextMenu]`
 - **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
@@ -326,10 +330,10 @@
 是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
 `[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
 
-**「缺 36 个」也不等于「36 份工作量」**：其中真正需要新层的集中在
-L3（反射后端）、L5（回调与按钮）、L6（集合自绘）、L7（Odin 的另一条产品线）——
-L1a、L1b 分组族、L1b 的六个值绘制器、以及 `[InlineEditor]` 一族（都 2026-10-04）这几块
-**零新基础设施**的已经清完。
+**「缺 26 个」也不等于「26 份工作量」**：其中真正需要新层的集中在
+L3（反射后端）、L6（集合自绘）、L7（Odin 的另一条产品线）——
+L1a、L1b 两族、`[InlineEditor]` 一族、以及 **L5 的按钮与回调两批**（都 2026-10-04）这几块
+已经清完。剩下的缺口里，**L3 是唯一一个卡着一串东西的**（见推荐顺序）。
 
 **2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
 `[AssetList]`→L6、`[TypeDrawerSettings]`→L3、`[TypeFilter]`→⛔、
@@ -385,7 +389,8 @@ L1a、L1b 分组族、L1b 的六个值绘制器、以及 `[InlineEditor]` 一族
 - **分组族**：`[FoldoutGroup]` `[TabGroup]` `[HorizontalGroup]` `[VerticalGroup]` `[TitleGroup]`
   ——享受**架构红利**：继承 `PropertyGroupAttribute` + 写一个 `AttributeDrawer<T>`，
   **构建期一行都不用改**。代价在别处：折叠状态要进 `PropertyState`，分页布局要自己管。
-- **重型值绘制器**：`[MinMaxSlider]` `[ValueDropdown]` `[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[AssetList]`
+- **重型值绘制器**：`[MinMaxSlider]` `[ValueDropdown]` `[InlineEditor]` `[PreviewField]` `[AssetSelector]`
+  （`[AssetList]` 原先记在这里，2026-10-04 改判 **L6**——它要替换列表绘制器）
   ——`[InlineEditor]` 最重：它不止是绘制器，还得先有「内嵌 `Editor` 实例的释放通道」与
   「绘制期深度上下文」两样基建（见 [Pipeline.md](Modules/Pipeline.md) §二.15/16 与 §七）。
 - **路径选择器**：`[FilePath]` `[FolderPath]`——要自己做文件/文件夹选择器。
@@ -415,7 +420,7 @@ L1a、L1b 分组族、L1b 的六个值绘制器、以及 `[InlineEditor]` 一族
 | `[ShowIfGroup]` `[HideIfGroup]` | 同上，分组变体的签名待核 |
 | 条件为**方法**或**普通属性** | 需要 L3 的反射后端；本包的条件对象必须是序列化成员 |
 | 条件写在**别的对象**上（Odin 的 `"@other.field"`） | 同上，且需要跨对象引用解析 |
-| `[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]` | 依赖 L1b 的 `[InlineEditor]`，那东西还不存在 |
+| ~~`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`~~ | ✅ 已随 `[InlineEditor]` 一族落地（2026-10-04）——这张表里只剩上面三行 |
 
 ## L3 · 需要反射值后端
 
@@ -435,21 +440,25 @@ L1a、L1b 分组族、L1b 的六个值绘制器、以及 `[InlineEditor]` 一族
   分组装配之前重排。注意与分组交互：`[PropertyOrder]` 是排成员，`Order` 是排分组。
 - `[InlineProperty]`——把嵌套类型的字段**提到本层**（不画折叠头）。要在建树时展开子成员。
 
-## L5 · 需要拿到目标对象并调用
+## L5 · 需要拿到目标对象并调用　✅ 整层已清完（2026-10-04）
 
 `[Button]` `[ButtonGroup]` `[InlineButton]` `[ResponsiveButtonGroup]`、
 `[OnValueChanged]` `[OnInspectorInit]` `[OnInspectorGUI]` `[OnInspectorDispose]` `[OnStateUpdate]`、
-`[CustomContextMenu]` `[DisableContextMenu]`。
+`[CustomContextMenu]` **十个全部落地**；`[DisableContextMenu]` 仍判 ⛔（理由见第五节）。
 
-难点不在绘制而在**调用目标**：要在一个 `SerializedObject` 之外拿到真实对象引用并调用方法。
-这是 `PropertyValueEntry` 之外的信息（值入口只认序列化属性）。
+当初的判断被两处实测修正，都记在 Pipeline §八：
 
-**边界：不要为此把目标对象塞进值入口**——那会污染「值后端可替换」这条缝。
-倾向做法是让树持有目标对象列表（`PropertyTree` 已经从 `SerializedObject` 拿得到
-`targetObject`，多对象时是 `targetObjects`）。
+- **「树持有目标对象列表」是对的**，而且比预想的更关键：它必须在**处理器之前**就位
+  （`Owner`），否则需要目标对象的处理器全盘落空。节点到树的反向引用原本一条都没有。
+- **「按声明顺序把按钮插回字段之间」做不到**。字段与方法分属元数据的两张表（`0x04`/`0x06`）
+  各自编号，跨表比大小没有意义；`GetMembers` 也不按声明顺序返回。故按钮一律排在字段之后
+  ——**位置不理想是小事，把按钮插到随机位置才是大事**。
 
-`[OnValueChanged]` 另有一处要想清楚：「值变了」需要每帧比对旧值，旧值该放 `PropertyState`；
-而触发时机（绘制前后？`Update` 前后？）未定。
+另外三处形状收窄（都写进了 README 与 Pipeline）：三个「只有 resolved string 形态」的特性
+（`[OnValueChanged]` `[OnStateUpdate]` `[CustomContextMenu]`）**只认本类型上的方法名**；
+`[OnStateUpdate]` 的时机改成「每趟 GUI 布局」（本包没有 Odin 的 state update 循环）；
+`[OnValueChanged]` 的判据改成「绘制这一趟里值前后不一致」，于是不必跨帧记旧值、
+也没有第一帧误报。
 
 ## L6 · 需要集合自绘
 
@@ -502,19 +511,21 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    其一，它确实是本层唯一需要**新基建**的——包内此前一条释放路径都没有（`PropertyTree`
    没有 `IDisposable`、`PropertyState.Reset()` 零调用方），而嵌套 `Editor` 实例必须显式销毁；
    外加一个绘制期的深度上下文。其二，三个依赖它的条件族是「加个类」，那份基建不是。
-4. **L5 `[Button]`**——**下一个**。**顺序在本轮被重排到 L3 之前**。原先写「L3 是 L5 全部的前置」
-   是**过头了**：`[Button]` 只需要树持有目标对象列表 + 按名解析方法（构建期反射即可），
-   **不需要反射值后端**——那只对 `[OnValueChanged]` 一类成立。
-   `[Button]` 又是使用方最常问「为什么没有」的一个，且 `[CustomValueDrawer]`
-   与 `[ValidateInput]` 也归这一族（它们的唯一形态是方法调用）。
-5. **L3 反射后端**——L2 剩余项与窗口 `GetTarget()` 的前置；本轮核对后又多一条理由：
-   它还是 `[TypeDrawerSettings]` 的前置。但**它不是 L5 的前置**（见上），故让位给 `[Button]`。
-6. **L4 / L6**——按需。L6 的清单本轮因改判长了三项（`[Searchable]` `[AssetList]`
+4. ~~**L5 `[Button]`**~~——✅ **整层清完**（2026-10-04，两批）。当初把它排到 L3 之前的那条判断
+   兑现了：`[Button]` 确实**不需要反射值后端**，构建期反射加树持有目标对象就够。
+   两批各付出一块新基建——**方法节点**（树上第一次出现没有值的节点）与
+   **分组子节点的折行布局**（原有策略只表达单行）；其余全是加法。
+   落地的同时修掉两处会静默的缺陷：`IsUsedBy` 漏扫方法（只挂 `[Button]` 的类型不被自动接管，
+   按钮完全不出现且零告警）、`Dispose` 重复调用会重跑生命周期钩子。
+5. **L3 反射后端**——**下一个**。L2 剩余项（`[ShowIn]` 一族、`[ShowIfGroup]`、条件写在方法或
+   普通属性上）与窗口 `GetTarget()` 的前置，也是 `[TypeDrawerSettings]` 的前置。
+   本轮之后它成了**唯一一个卡着一串东西的层**。
+6. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
    以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
 7. **L7**——要么不做，要么当成独立产品立项。
 
-**判据是「一次投入换来多少个特性」**：L1a 与 L1b 是高杠杆（架构已就位、纯加法），已兑现；
-L3 是低杠杆但卡着一串东西；L7 是另一条产品线。
+**判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
+已兑现；L3 是低杠杆但卡着一串东西；L7 是另一条产品线。
 
 **三条经验留给下一轮**：其一，**核对签名之后再动手**——两轮共核过 37 个特性，
 才敢把 10 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
