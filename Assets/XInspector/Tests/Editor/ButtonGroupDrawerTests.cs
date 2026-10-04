@@ -121,6 +121,30 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 类级分组也管得着按钮——方法节点同样是成员，走的是同一条「父级注入」路径。
+        /// </summary>
+        [Test]
+        public void 类级分组分发到按钮()
+        {
+            var grouped = ScriptableObject.CreateInstance<ClassLevelButtonFixture>();
+
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(grouped)))
+                {
+                    var group = GroupNode(tree, "整块");
+
+                    Assert.That(group, Is.Not.Null, "类级 [BoxGroup] 该分发到方法节点上。");
+                    Assert.That(PathsOf(group), Is.EquivalentTo(new[] { "value", "Grouped()" }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(grouped);
+            }
+        }
+
         #endregion
 
         #region 折行
@@ -292,6 +316,20 @@ namespace XInspector.Tests.Editor
         [ResponsiveButtonGroup("等宽组")]
         [Button]
         private void UniformTwo()
+        {
+        }
+    }
+
+    /// <summary>类级分组 + 按钮：验证类级分发认方法节点。</summary>
+    [BoxGroup("整块")]
+    internal sealed class ClassLevelButtonFixture : ScriptableObject
+    {
+        /// <summary>普通字段。</summary>
+        public int value = 1;
+
+        /// <summary>按钮方法。</summary>
+        [Button]
+        private void Grouped()
         {
         }
     }
