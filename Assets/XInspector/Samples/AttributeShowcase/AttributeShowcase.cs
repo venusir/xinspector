@@ -220,6 +220,18 @@ namespace XInspector.Samples
         [HorizontalGroup("一行", 0.3f)]
         public int narrowCell = 30;
 
+        /// <summary>页签组：同组不同页签的成员分别落进各自的页，一次只显示一页。</summary>
+        [TabGroup("页签", "基础")]
+        public int tabHealth = 100;
+
+        /// <summary>第一页的第二个成员。</summary>
+        [TabGroup("页签", "基础")]
+        public int tabMana = 50;
+
+        /// <summary>第二页的成员。</summary>
+        [TabGroup("页签", "高级")]
+        public int tabDebugLevel;
+
         /// <summary>三个未指定宽度的格子：均分整行。</summary>
         [HorizontalGroup("三格")]
         public int cellA = 1;

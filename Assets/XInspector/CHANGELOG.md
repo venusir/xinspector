@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Added — L1b：页签（TabGroup）
+
+- **`[TabGroup("设置", "基础")]`**：把成员分进页签，一次只显示一页。
+  分组路径是 `"设置/基础"`——**点分路径本身就是子分组机制**，构建期一行未改。
+  与 Odin 的**实现**差异（行为等价）：官方靠 `ISubGroupProviderAttribute` 让每个页签派生子分组，
+  本包用点分路径天然表达，没有那条缝（README 里写明）。
+- 容器与页的判定靠一个字段：容器的特性是 `CloneForPath` 改写路径而来，
+  `TabsGroupID` 因 MemberwiseClone 保持原值——`GroupID == TabsGroupID` 即容器。
+  这条判定在 Runtime 侧逐条钉住（`TabGroupAttributeTests`），包括「克隆之后才成为容器」。
+- 选中页存在每棵属性树上（域重载回到第一页，不跨会话持久化）；**越界回退到第一页并告警一次**
+  ——不静默什么都不画。「只画选中页」复用了上一个提交装进末端的那条能力。
+- 档位 -170：页签栏与「选哪一页」必须在页内容的一切装饰之外，否则框会跟着每一页各画一次。
+- `UseFixedHeight` 是**保留参数、不产生行为**（官方的固定高度模式是为滚动内容准备的，
+  本包还没有那套布局）；图标重载、`TextColor` 表达式、`TabLayouting`、`Paddingless`
+  与 `Tabs` 列表不照搬——后两者是 Odin 子分组派生机制的产物，本包不需要。
+
 ### Added — L1b：水平分组（HorizontalGroup）
 
 - **`[HorizontalGroup("一行", 0.7f)]`**：把成员排成一行，每格按宽度分数分配。
