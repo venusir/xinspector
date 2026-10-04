@@ -16,6 +16,8 @@ namespace XInspector.Samples
     /// </para>
     /// </summary>
     [Title("XInspector 特性展示", Subtitle = "逐个特性，按批次分组")]
+    [TypeInfoBox("这条信息框来自类级 [TypeInfoBox]——与 [Title] 同一机制：类级特性落在根节点，根节点的链照样包住子节点。")]
+    [HideMonoScript]
     public class AttributeShowcase : MonoBehaviour
     {
         #region 状态与标签
@@ -175,6 +177,24 @@ namespace XInspector.Samples
         /// <summary>摘要一行，详情折起来。</summary>
         [DetailedInfoBox("伤害计算公式", "基础伤害 × (1 + 力量加成) × 暴击系数", InfoMessageType.None)]
         public float damage = 10f;
+
+        #endregion
+
+        #region 结构与门控
+
+        /// <summary>只读 + 强制可编辑：EnableGUI 排在只读之后，它赢。</summary>
+        [ReadOnly]
+        [EnableGUI]
+        public int forcedEditable = 3;
+
+        /// <summary>交回 Unity 绘制：内侧的 [Indent] **不会运行**（本条更外且不调下一个）。</summary>
+        [DrawWithUnity]
+        [Indent]
+        public int unityDrawn = 7;
+
+        /// <summary>只允许引用本物体之下的子物体——拖别的物体进来会看到警告。</summary>
+        [ChildGameObjectsOnly]
+        public GameObject childRef;
 
         #endregion
 

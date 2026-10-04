@@ -43,6 +43,39 @@ namespace XInspector.Editor
     }
 
     /// <summary>
+    /// <see cref="EnableGUIAttribute"/>：把属性设为**恒可编辑**。
+    /// <para>
+    /// 排在 <see cref="ReadOnlyProcessor"/>（100）**之后**：它叫 Enable，就该能开——
+    /// 与 <c>[ReadOnly]</c> 并存时本特性赢，两者同时出现时语义由「谁更晚生效」决定，
+    /// 而不是由「谁更具体」这种说不清的判断决定。
+    /// </para>
+    /// </summary>
+    internal sealed class EnableGUIProcessor : AttributeProcessor<EnableGUIAttribute>
+    {
+        #region Public API
+
+        /// <summary>
+        /// 排在只读处理器之后，覆盖条件族（0）与 <c>[ReadOnly]</c>（100）。
+        /// </summary>
+        public override float ProcessorPriority => 110f;
+
+        #endregion
+
+        #region Protected API
+
+        /// <inheritdoc/>
+        protected override void ProcessSelf(
+            InspectorProperty property,
+            EnableGUIAttribute attribute,
+            IList<Attribute> attributes)
+        {
+            property.State.SetReadOnly(false);
+        }
+
+        #endregion
+    }
+
+    /// <summary>
     /// <see cref="LabelTextAttribute"/>：把标签文本算好放进
     /// <see cref="PropertyState.LabelOverride"/>。
     /// <para>

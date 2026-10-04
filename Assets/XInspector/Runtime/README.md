@@ -151,6 +151,23 @@ public bool isAlive = true;
 | 整数边界取整 | `[MinValue(2.5)]` 的最小合法整数是 3（向上取整），`[MaxValue(2.5)]` 是 2（向下取整） |
 | 引用判定 | 工程资产 vs 场景对象（预制体**实例**算场景对象）。空引用不算违反——那是 `[Required]` 的职责 |
 
+### 结构与门控特性
+
+```csharp
+[ReadOnly] [EnableGUI]   public int forcedEditable;  // EnableGUI 赢
+[DrawWithUnity]          public MyFancyType value;   // 交回 Unity 绘制
+[ChildGameObjectsOnly]   public Transform muzzle;    // 只允许本物体之下的子物体
+[TypeInfoBox("说明")]    public class Player : MonoBehaviour { }   // 类级信息框
+[HideMonoScript]         public class Player : MonoBehaviour { }   // 隐藏 Script 槽位
+```
+
+| 行为 | 说明 |
+|---|---|
+| `[EnableGUI]` 与只读 | 处理器显式排在 `[ReadOnly]` 与条件族**之后**——它叫 Enable，就该能开 |
+| `[DrawWithUnity]` | 画完 `PropertyField` 就结束、不调下一个：链上更内侧的绘制器（含 `[Indent]` 这类修饰）都不运行 |
+| `[ChildGameObjectsOnly]` | **只做校验、不提供选择下拉**（与 Odin 的差异）；空引用不算违反——那是 `[Required]` 的职责；多对象编辑以第一个目标的层级为准 |
+| `[HideMonoScript]` | 构建期把 `m_Script` **直接不建节点**；不写它时该槽位照旧保留（与原生渲染一致），两个行为各有用途 |
+
 ## 自定义分组特性
 
 继承 `PropertyGroupAttribute` 即可，**构建期不需要改**——分组装配对具体分组类型一无所知：

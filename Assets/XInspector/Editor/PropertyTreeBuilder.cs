@@ -52,7 +52,10 @@ namespace XInspector.Editor
                 InspectorPropertyKind.Root,
                 new PropertyAttributes(CollectTypeAttributes(targetType)));
 
-            var members = CollectMembers(serializedObject, targetType, memberFilter);
+            // 类级 [HideMonoScript]：脚本槽位直接不建节点——它是「Inspector 路径刻意保留
+            // m_Script 以与原生一致」那条默认行为的显式退出，两个行为各有用途。
+            var hideMonoScript = root.Attributes.Has<HideMonoScriptAttribute>();
+            var members = CollectMembers(serializedObject, targetType, memberFilter, hideMonoScript);
 
             // ---- 顺序是契约，动之前先读完这段 ----
             //
@@ -84,11 +87,13 @@ namespace XInspector.Editor
         /// <param name="serializedObject">目标序列化对象。</param>
         /// <param name="targetType">目标对象的运行时类型。</param>
         /// <param name="memberFilter">成员过滤器；<c>null</c> 表示全收。</param>
+        /// <param name="hideMonoScript">是否因类级 <c>[HideMonoScript]</c> 跳过脚本槽位。</param>
         /// <returns>成员节点列表，尚未挂到任何父节点上。</returns>
         private static List<InspectorProperty> CollectMembers(
             SerializedObject serializedObject,
             Type targetType,
-            Func<FieldInfo, bool> memberFilter)
+            Func<FieldInfo, bool> memberFilter,
+            bool hideMonoScript)
         {
             var members = new List<InspectorProperty>();
             var iterator = serializedObject.GetIterator();
@@ -101,6 +106,14 @@ namespace XInspector.Editor
                 {
                     // 字段信息只解析一次，过滤与建节点共用——顺带避免了两处查找结果不一致。
                     var field = FindField(targetType, iterator.propertyPath);
+
+                    // [HideMonoScript]：脚本槽位由 Unity 注入（没有 MemberInfo），路径固定是
+                    // "m_Script"。同样「不建节点」而不是「建了再删」，与 memberFilter 的处置一致。
+                    if (hideMonoScript && field == null &&
+                        string.Equals(iterator.propertyPath, "m_Script", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
 
                     // 被拒的成员**不建节点**，而不是建了再删：少一次分配，
                     // 也不会让链装配看到本不该存在的节点。

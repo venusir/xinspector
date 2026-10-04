@@ -70,6 +70,16 @@
 | `[InfoBox(..., Warning, nameof(showWarning))]` | 勾上 `showWarning` 才出现——**字段本身照常绘制**，条件只作用于信息框 |
 | `[DetailedInfoBox]` | 摘要一行，详情折起来 |
 
+### 结构与门控
+
+| 特性 | 预期看到 |
+|---|---|
+| `[ReadOnly]` + `[EnableGUI]` | 字段仍**可编辑**——EnableGUI 排在只读之后，它赢 |
+| `[DrawWithUnity]` | 该字段由 Unity 原生绘制；叠在它内侧的 `[Indent]` **不生效**（这正是「交给 Unity」的含义） |
+| `[ChildGameObjectsOnly]` | 拖入非子物体时出现警告框（只提示，不拦赋值） |
+| `[TypeInfoBox]`（类级） | Inspector 最顶部一条信息框 |
+| `[HideMonoScript]`（类级） | 脚本槽位（Script 字段）消失 |
+
 ### 调试
 
 | 特性 | 预期看到 |
