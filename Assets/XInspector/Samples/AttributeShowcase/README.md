@@ -95,6 +95,19 @@
 | `[TypeInfoBox]`（类级） | Inspector 最顶部一条信息框 |
 | `[HideMonoScript]`（类级） | 脚本槽位（Script 字段）消失 |
 
+### 预览
+
+| 特性 | 预期看到 |
+|---|---|
+| `[PreviewField]` | 64×64 的预览方块 + 右侧可编辑的对象字段。**拖一个贴图/模型进来**，方块里会变成它的预览（资产预览是异步生成的，可能要一两帧） |
+| `[PreviewField(80f, ObjectFieldAlignment.Right)]` | 方块 80 像素、贴右，对象字段在左 |
+| `[PreviewField(ObjectFieldAlignment.Center)]` | 方块居中；`[PreviewField(对齐)] { Height = 150 }` 这种具名写法也支持（官方样例就这么写） |
+
+> 与 Odin 的三处差异：**方块是预览、不是控件**（可编辑的是旁边那个对象字段；Odin 让方块本身
+> 既是预览又是字段，还带 Ctrl+点击清空、Ctrl+拖拽替换——那些不做）；
+> **默认高度（64）与默认对齐（Left）是本包定的**，Odin 的默认值存在它的偏好设置里、核不到；
+> 含 `UnityEngine.FilterMode` 的两个重载**永久不做**（Runtime 零 Unity 依赖是编译期强制的）。
+
 ### 范围与滑块
 
 | 特性 | 预期看到 |

@@ -294,6 +294,22 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 预览
+
+        /// <summary>预览方块（默认 64 像素）+ 右侧可编辑的对象字段。拖个贴图/模型进来就能看到预览。</summary>
+        [PreviewField]
+        public Texture2D previewTexture;
+
+        /// <summary>指定边长与对齐：方块贴右边，对象字段在左。</summary>
+        [PreviewField(80f, ObjectFieldAlignment.Right)]
+        public GameObject previewModel;
+
+        /// <summary>居中摆放；<c>Height</c> 也可用具名赋值（官方样例就是这么写的）。</summary>
+        [PreviewField(ObjectFieldAlignment.Center)]
+        public Material previewMaterial;
+
+        #endregion
+
         #region 路径选择
 
         /// <summary>路径输入框 + 「浏览…」按钮；默认存**工程相对**路径（以 Assets/ 开头）。</summary>

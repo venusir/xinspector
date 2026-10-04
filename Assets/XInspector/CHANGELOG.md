@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+### Added — L1b：预览框（PreviewField）
+
+- `[PreviewField]`：对象引用画成「预览方块 + 可编辑的对象字段」，四组纯 BCL 重载与官方一致
+  （含官方的 `[PreviewField(对齐, Height = 150)]` 具名写法）。配套自建 `ObjectFieldAlignment`
+  枚举——文档站按字母序排、数值未核实，故按 `Left`/`Center`/`Right` 从 0 起排，
+  与 `InfoMessageType`/`TitleAlignments` 同款处理，并有守卫钉住这个约定。
+- 几何全在纯函数 `PreviewFieldLayout`（方块放哪、字段放哪、放不下时怎么办），
+  贴图选取与缓存在 `PreviewFieldContent`。同行放不下时字段**排到下一行**——
+  把它挤成一条几像素宽的缝等于值改不了。
+- 资产预览是异步生成的，故缓存「上一次拿到的**真预览** + 它是哪个对象」；
+  小图标只是过渡态、**故意不缓存**，缓存住就再也不会升级成真预览。
+- 三处刻意的差异（写进特性注释与展示台 README）：**方块是预览不是控件**（Odin 让方块本身
+  既是预览又是字段，并带 Ctrl+点击清空、Ctrl+拖拽替换——那些需要自绘对象字段的拖拽与点击处理，
+  不做）；**默认高度（64）与默认对齐（Left）由本包定**（Odin 的默认值存在它的偏好设置里，核不到）；
+  含 `UnityEngine.FilterMode` 的两个重载**永久否决**（会把 Unity 类型带进 Runtime，
+  而 Runtime 零 Unity 依赖是编译期强制的）。
+
 ### Added — L1b：双滑块（MinMaxSlider）
 
 - `[MinMaxSlider]`：`Vector2` 画成双滑块（`x` 是下限、`y` 是上限），五组构造与官方一致。
