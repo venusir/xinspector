@@ -90,8 +90,13 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
 4. **绘制器链的排序是「权重升序 + 序号兜底」**（小 = 外层）。序号兜底必不可少：
    `List.Sort` 是不稳定排序，只比权重的话同权重格子的顺序会随元素个数变化。
 5. **分组用点分路径，祖先节点自动合成**。不变量：**分组节点上的分组特性恒满足
-   `GroupID == node.Path`**。节点落在其首个成员出现的位置，故夹在分组字段之间的未分组字段
-   留在原地。同层分组之间按 `Order` 重排，但**只重排分组彼此之间的先后，不动未分组成员的位置**。
+   `GroupID == node.Path`**——多类型并存之后是**每一份**都要满足。节点落在其首个成员出现的
+   位置，故夹在分组字段之间的未分组字段留在原地。同层分组之间按 `Order` 重排，但**只重排
+   分组彼此之间的先后，不动未分组成员的位置**。三条组合规则：同路径上**不同类型**的分组特性
+   并存（各配一格绘制器），同类型才走 `Combine`；成员按**前缀归属**（每个「是目标路径链」的
+   分组特性各贡献自己那段路径）；节点排序取**最小的非零 `Order`**。
+   **分组绘制器只在分组节点上配**——根与成员携带分组特性只是为了归属；让它们也画一遍的症状
+   是双重框与重复标题（`GroupDrawerPlacementTests` 守着这条）。
 6. **每个属性一份独立的特性实例**。成员特性靠反射天然如此（每次调用返回新实例）；
    类级特性分发到成员时**必须显式克隆**（`CloneForPath`），否则一个实例被几十个成员共享、
    改一处串一片——类级分组分发就是这么做的。
@@ -290,8 +295,8 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 ## 明确不在本轮范围
 
 自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
-数组/列表展开、`[FoldoutGroup]` / `[Button]`、`[SerializeReference]` 类型切换、
-折叠状态的跨会话持久化、UI Toolkit。
+数组/列表展开、`[Button]` 家族与回调族、`[InlineEditor]` / `[PreviewField]` / `[FilePath]`
+这类重型绘制器、`[SerializeReference]` 类型切换、折叠状态的跨会话持久化、UI Toolkit。
 
 **特性处理器层已做**（`Editor/Processors/`），条件族做了 `[ShowIf]` `[HideIf]` `[EnableIf]`
 `[DisableIf]` 与四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`
