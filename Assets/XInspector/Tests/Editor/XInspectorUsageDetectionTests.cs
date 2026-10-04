@@ -194,6 +194,26 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 预制体上下文四个条件同样是处理器专有——判据漏了它们，带这些特性的类型就不会被
+        /// 自动接管，症状是「特性静默不生效、零告警」。
+        /// </summary>
+        [Test]
+        public void HasProcessorForAttribute_预制体条件族为真()
+        {
+            Assert.That(AttributeProcessorRegistry.HasProcessorForAttribute(typeof(ShowInAttribute)), Is.True);
+            Assert.That(AttributeProcessorRegistry.HasProcessorForAttribute(typeof(HideInAttribute)), Is.True);
+            Assert.That(AttributeProcessorRegistry.HasProcessorForAttribute(typeof(EnableInAttribute)), Is.True);
+            Assert.That(AttributeProcessorRegistry.HasProcessorForAttribute(typeof(DisableInAttribute)), Is.True);
+        }
+
+        /// <summary>只挂预制体上下文特性的类型必须被判为「用到了本插件」。</summary>
+        [Test]
+        public void IsUsedBy_只挂预制体上下文特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(PrefabConditionOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 只有绘制器的特性不该被处理器注册表认领——两张表的回答各管各的。
         /// </summary>
         [Test]
@@ -238,6 +258,14 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>只有内嵌环境特性，没有绘制器。</summary>
         [HideInInlineEditors]
+        public int value = 1;
+    }
+
+    /// <summary>只挂预制体上下文特性（同样是处理器专有）的资产。</summary>
+    internal sealed class PrefabConditionOnlyFixture : ScriptableObject
+    {
+        /// <summary>只有预制体上下文特性，没有绘制器。</summary>
+        [DisableIn(PrefabKind.PrefabAsset)]
         public int value = 1;
     }
 
