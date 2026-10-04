@@ -43,6 +43,7 @@ namespace XInspector.Editor
         private static readonly Type[] MethodNodeAttributes =
         {
             typeof(ButtonAttribute),
+            typeof(OnInspectorGUIAttribute),
         };
 
         /// <summary>按元数据令牌比较两个方法，用于把声明顺序稳定下来。</summary>
