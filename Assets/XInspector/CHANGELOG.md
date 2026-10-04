@@ -7,6 +7,26 @@
 
 ## [Unreleased]
 
+### Added — L1b：下拉选择（ValueDropdown）
+
+- `[ValueDropdown("成员名")]`：字段画成下拉框，选项来自同一对象上的**序列化数组/List 成员**。
+  默认是树形（选项里带 `/` 就分子菜单），`FlattenTreeView` 拍平、`SortDropdownItems` 排序、
+  `AppendNextDrawer` 改成「小按钮 + 照常画内侧控件」（`DisableGUIInAppendedDrawer` 配套置灰）。
+- 弹出层用 `GenericMenu`，**不自建窗口**；菜单项用 `MenuFunction2` + 下标当 `userData`，
+  不为每个选项建闭包（那样一个菜单就分配 n 个委托）。
+- 来源解析放在构建期的 `ValueDropdownProcessor`，与条件族、`[MinMaxSlider]` 同一条分工，
+  且共用 `SerializedMemberResolver`。
+- **复制值前有两道类型判定**：`propertyType` 必须相同；枚举还要求**成员名与顺序完全一致**。
+  只比 `propertyType` 的话，「两个不同的枚举」会在同一序号上放着完全不同的东西而**静默写错**。
+  判定不通过就什么都不写并告警——`SerializedValueCopier` 是可无头测试的纯逻辑。
+- **只声明有真行为的选项。** Odin 的其余选项要么只对列表有意义（`IsUniqueList`
+  `DrawDropdownForListElements` `ExcludeExistingValuesInList` `DisableListAddButtonBehaviour`，
+  本包不支持数组形态），要么依赖它自建的弹出层（搜索框、双击确认、标题、尺寸）。
+  声明成静默 no-op 正是本包最想避免的现象——**编译不过才是响的**。
+- **`ValueDropdownItem` / `ValueDropdownList<T>` 本包不引入**：它们是 Odin Serializer 时代的
+  标签/值对类型，而本包承诺的边界就是「序列化数组/List 作数据源」，纯值数组已经够用。
+  加它们等于新增一组「不确定 Unity 能不能序列化」的公开类型。
+
 ### Added — L1b：预览框（PreviewField）
 
 - `[PreviewField]`：对象引用画成「预览方块 + 可编辑的对象字段」，四组纯 BCL 重载与官方一致

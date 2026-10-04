@@ -294,6 +294,32 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 下拉选择
+
+        /// <summary>选项来源——改这个数组，上面那两个下拉框的选项跟着变。</summary>
+        public string[] difficultyOptions = { "简单", "普通", "困难", "噩梦" };
+
+        /// <summary>选项里的 "/" 会**分子菜单**（与官方一致，默认就是树形）。</summary>
+        public string[] treeOptions = { "武器/剑", "武器/斧", "防具/盾" };
+
+        /// <summary>下拉框占满整行，显示当前值。</summary>
+        [ValueDropdown("difficultyOptions")]
+        public string difficulty = "普通";
+
+        /// <summary>树形下拉：悬停「武器」会展开子菜单。</summary>
+        [ValueDropdown("treeOptions")]
+        public string equipment;
+
+        /// <summary>排过序的下拉（按名字的序数比较）。</summary>
+        [ValueDropdown("difficultyOptions", SortDropdownItems = true)]
+        public string sortedDifficulty;
+
+        /// <summary>小按钮形态：左边的 ▼ 弹下拉，右边照常是普通输入框（「选 + 填」并存）。</summary>
+        [ValueDropdown("difficultyOptions", AppendNextDrawer = true)]
+        public string appendedDifficulty = "简单";
+
+        #endregion
+
         #region 预览
 
         /// <summary>预览方块（默认 64 像素）+ 右侧可编辑的对象字段。拖个贴图/模型进来就能看到预览。</summary>

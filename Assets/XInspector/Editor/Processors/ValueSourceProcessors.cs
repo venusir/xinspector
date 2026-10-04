@@ -119,6 +119,60 @@ namespace XInspector.Editor
     }
 
     /// <summary>
+    /// <see cref="ValueDropdownAttribute"/>：把「选项来自哪个成员」在**构建期**解析出来。
+    /// </summary>
+    /// <remarks>
+    /// 判定「源与目标类型是否一致」**不在这里做**，而在复制那一刻由
+    /// <c>SerializedValueCopier</c> 做。理由是那需要知道元素的托管类型（反射），
+    /// 而 <see cref="SerializedProperty"/> 只给得出 <c>propertyType</c> 与枚举成员名；
+    /// 「类型对不上就按索引复制」在枚举上会静默写错，用枚举成员名比对即可挡住，
+    /// 且这条判定放在复制处**离得最近**、也能无头测试。
+    /// </remarks>
+    internal sealed class ValueDropdownProcessor : AttributeProcessor<ValueDropdownAttribute>
+    {
+        #region Protected API
+
+        /// <inheritdoc/>
+        protected override void ProcessSelf(
+            InspectorProperty property,
+            ValueDropdownAttribute attribute,
+            IList<Attribute> attributes)
+        {
+            var state = property.State.GetOrCreate<ValueDropdownState>();
+
+            SerializedMemberResolver.TryResolve(
+                property, attribute.ValuesGetter, SerializedMemberScope.Object, SerializedMemberKind.Array,
+                out var source, out var reason);
+
+            if (source == null)
+            {
+                Debug.LogWarning(
+                    $"[XInspector] 属性「{property.Path}」上的 [ValueDropdown] 选项来源「{attribute.ValuesGetter}」" +
+                    $"无法解析：{reason}。该特性已忽略，字段退回普通绘制。" +
+                    "注意来源必须是**序列化**的数组或 List 字段——Odin 的 $/@ 表达式与方法调用本包不做。");
+                return;
+            }
+
+            state.Source = source;
+            state.Resolved = true;
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// <see cref="ValueDropdownAttribute"/> 的解析结果，挂在 <see cref="PropertyState"/> 上。
+    /// </summary>
+    internal sealed class ValueDropdownState
+    {
+        /// <summary>提供选项的数组/List 成员；解析失败为 <c>null</c>。</summary>
+        public SerializedProperty Source;
+
+        /// <summary>来源是否解析成功。</summary>
+        public bool Resolved;
+    }
+
+    /// <summary>
     /// <see cref="MinMaxSliderAttribute"/> 的解析结果，挂在 <see cref="PropertyState"/> 上。
     /// </summary>
     internal sealed class MinMaxSliderState
