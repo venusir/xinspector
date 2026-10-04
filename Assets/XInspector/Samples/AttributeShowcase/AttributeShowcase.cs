@@ -180,6 +180,40 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 分组族
+
+        /// <summary>竖直分组：只有容器与内边距，不画框。</summary>
+        [VerticalGroup("竖列")]
+        public int verticalA = 1;
+
+        /// <summary>同分组的第二个成员——两者合进同一个容器。</summary>
+        [VerticalGroup("竖列")]
+        public int verticalB = 2;
+
+        /// <summary>标题组：加粗标题 + 分隔线 + 副标题。</summary>
+        [TitleGroup("标题组", "副标题画在标题下方")]
+        public int titledValue = 3;
+
+        /// <summary>折叠组：点三角收起；收起时组内内容**不画**（不是变灰）。</summary>
+        [FoldoutGroup("折叠组", true)]
+        public int foldoutValue = 4;
+
+        /// <summary>折叠组的第二个成员（同组）。</summary>
+        [FoldoutGroup("折叠组", true)]
+        public int foldoutValue2 = 5;
+
+        /// <summary>同路径两种分组：折叠在外、框在内——档位不是审美而是功能。</summary>
+        [FoldoutGroup("折叠与框")]
+        [BoxGroup("折叠与框")]
+        public int foldoutOnBox = 6;
+
+        /// <summary>标题组 + 框同路径：标题在框之外。</summary>
+        [TitleGroup("标题与框")]
+        [BoxGroup("标题与框")]
+        public int titleOnBox = 7;
+
+        #endregion
+
         #region 结构与门控
 
         /// <summary>只读 + 强制可编辑：EnableGUI 排在只读之后，它赢。</summary>

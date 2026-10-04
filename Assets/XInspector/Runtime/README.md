@@ -171,6 +171,23 @@ public bool isAlive = true;
 | `[Toggle]` 的叠加顺序 | 条件族（0）< `[Toggle]`（50）< `[ReadOnly]`（100）< `[EnableGUI]`（110）。与 `[DisableIf]` 并存时开关赢，与 `[ReadOnly]` 并存时后者赢 |
 | `[Toggle]` 解析失败 | 告警一次并**保持可编辑**——拼错的名字不该让字段变得不可用（与条件族「失败即放行」同一规矩） |
 
+### 其余分组特性
+
+```csharp
+[VerticalGroup("左列")]           public int a;   // 不画框的竖直容器
+[VerticalGroup]                   public int a2;  // 无参落进默认分组 _DefaultVerticalGroup
+[TitleGroup("战斗属性", "副标题")] public int b;   // 标题即路径，不必另起组名
+[FoldoutGroup("高级", true)]      public int c;   // 可折叠，初值展开
+```
+
+| 行为 | 说明 |
+|---|---|
+| 折叠状态 | 存在**每个属性树**上：域重载、重开 Inspector 都回到特性的初值，**不跨会话持久化** |
+| 折叠时 | 组内内容**不画**（不是变灰）——用「不调下一个绘制器 = 把内侧藏起来」这条既有能力 |
+| 折叠初值 | `[FoldoutGroup("G", true)]` 显式；`[FoldoutGroup("G")]` 收起。同组多次声明时取先出现的**显式**值 |
+| 标题组的标题 | 就是它的分组路径末段（`GroupID`），`Subtitle` 可空 |
+| 档位 | 折叠（最外）→ 标题 → 框 → 竖直容器（最内）。决定内容存在与否的恒最外，决定排布的恒最内 |
+
 ### 分组特性的组合规则
 
 多条分组特性落在一起时的规则。**与具体分组类型无关**——装配对类型一无所知，

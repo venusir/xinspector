@@ -70,6 +70,16 @@
 | `[InfoBox(..., Warning, nameof(showWarning))]` | 勾上 `showWarning` 才出现——**字段本身照常绘制**，条件只作用于信息框 |
 | `[DetailedInfoBox]` | 摘要一行，详情折起来 |
 
+### 分组族
+
+| 特性 | 预期看到 |
+|---|---|
+| `[VerticalGroup("竖列")]` | 两个成员合进一个**不画框**的竖直容器 |
+| `[TitleGroup("标题组", "副标题")]` | 加粗标题 + 分隔线 + 副标题（标题即分组路径） |
+| `[FoldoutGroup("折叠组", true)]` | 可折叠；收起时组内内容**不画**（不是变灰） |
+| `[FoldoutGroup]` + `[BoxGroup]` 同路径 | 两格并存：折叠在外、框在内（档位决定谁包住谁） |
+| `[TitleGroup]` + `[BoxGroup]` 同路径 | 标题在框之外 |
+
 ### 结构与门控
 
 | 特性 | 预期看到 |
