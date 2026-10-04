@@ -376,6 +376,41 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 内嵌编辑器
+
+        /// <summary>
+        /// 默认模式：只画被引用对象自己的 Inspector。
+        /// <para>建一个示例资产拖进来（见 <see cref="InlineEditorSampleTarget"/>）——下面会直接长出它的字段。</para>
+        /// </summary>
+        [InlineEditor]
+        public InlineEditorSampleTarget inlineTarget;
+
+        /// <summary>头 + 界面在左 + 小预览在右，三样都画。</summary>
+        [InlineEditor(InlineEditorModes.FullEditor)]
+        public Material inlineFull;
+
+        /// <summary>只画大预览，不画界面。</summary>
+        [InlineEditor(InlineEditorModes.LargePreview)]
+        public Mesh inlineMesh;
+
+        /// <summary>对象字段收进折叠头里；内嵌区超过 200 像素出滚动条。</summary>
+        [InlineEditor(InlineEditorModes.GUIOnly, InlineEditorObjectFieldModes.Foldout, MaxHeight = 200f)]
+        public GameObject inlineFolded;
+
+        /// <summary>对象字段恒藏——这一格有值，所以整行只剩内嵌内容。</summary>
+        [InlineEditor(InlineEditorObjectFieldModes.CompletelyHidden)]
+        public InlineEditorSampleTarget inlineHidden;
+
+        /// <summary>值为空时的对照：恒藏模式下会留一行灰字提示，而不是一片空白。</summary>
+        [InlineEditor(InlineEditorObjectFieldModes.CompletelyHidden)]
+        public InlineEditorSampleTarget inlineEmpty;
+
+        /// <summary>预览在左（默认在右）；两列并排，谁先谁后由对齐方式定。</summary>
+        [InlineEditor(InlineEditorModes.GUIAndPreview, PreviewAlignment = PreviewAlignment.Left)]
+        public Texture2D inlinePreviewLeft;
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
@@ -396,6 +431,40 @@ namespace XInspector.Samples
 
         /// <summary>被门控的值。</summary>
         public int value;
+    }
+
+    /// <summary>
+    /// <c>[InlineEditor]</c> 的示例目标：它自己带本管线的特性，所以被内嵌画出来时
+    /// 是**一棵 XInspector 树**——递归成立，本包不需要为此做任何事。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 用法：Project 窗口右键 → Create → XInspector → 内嵌编辑器示例，然后把建出来的资产
+    /// 拖进展示台的 <c>[InlineEditor]</c> 字段。
+    /// </para>
+    /// <para>
+    /// <b>想看递归守卫：</b>把 <c>self</c> 拖成它自己（或让两个示例资产互相引用）——
+    /// 控制台出告警、那一层退回普通对象字段，不会无限递归。
+    /// </para>
+    /// </remarks>
+    [CreateAssetMenu(menuName = "XInspector/内嵌编辑器示例", fileName = "InlineEditorSample")]
+    [Title("内嵌编辑器示例目标", Subtitle = "被内嵌时它是一棵 XInspector 树")]
+    [HideMonoScript]
+    public class InlineEditorSampleTarget : ScriptableObject
+    {
+        /// <summary>普通字段——被内嵌时照常可编辑（改动进 Undo）。</summary>
+        [BoxGroup("基础")]
+        public string displayName = "示例";
+
+        /// <summary>带范围条，用来确认内嵌里的特性照样生效。</summary>
+        [BoxGroup("基础")]
+        [PropertyRange(0f, 100f)]
+        public int level = 5;
+
+        /// <summary>指回自己就成环——这是递归守卫的现场。</summary>
+        [BoxGroup("递归守卫")]
+        [InlineEditor]
+        public InlineEditorSampleTarget self;
     }
 
     /// <summary>展示 <c>[EnumToggleButtons]</c> 用的普通枚举。</summary>

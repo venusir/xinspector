@@ -160,6 +160,24 @@
 > 两条刻意的边界：**不支持 `string[]`**（数组要按元素画，属于集合自绘那一层），
 > **参数只认字面量**（Odin 的 `$DynamicParent` 那类成员引用不做）。
 
+### 内嵌编辑器
+
+| 特性 | 预期看到 |
+|---|---|
+| `[InlineEditor]` | 字段下方直接长出被引用对象的 Inspector。先建一个示例资产（Project 窗口右键 → Create → XInspector → 内嵌编辑器示例）拖进来——它自己带本管线的特性，故内嵌出来是**一棵 XInspector 树** |
+| `[InlineEditor(InlineEditorModes.FullEditor)]` | 编辑器头 + 界面在左、小预览在右（材质球有预览） |
+| `[InlineEditor(InlineEditorModes.LargePreview)]` | 只有一张大预览（默认 128 高），没有界面 |
+| `[InlineEditorObjectFieldModes.Foldout]` + `MaxHeight = 200` | 对象字段收进折叠头；展开后内嵌区超过 200 像素时出滚动条 |
+| `[InlineEditorObjectFieldModes.CompletelyHidden]`（有值） | 整行只有内嵌内容，对象字段不出现 |
+| `[InlineEditorObjectFieldModes.CompletelyHidden]`（空值） | 一行灰字提示「隐藏了对象字段」——**本包不接受静默空白**（与 Odin 的一处差异） |
+| `PreviewAlignment = Left` | 预览列在**左**、编辑器界面在右（默认在右） |
+
+> **想看递归守卫**：把示例资产的 `self` 字段拖成它自己。控制台出告警（引用成环），
+> 那一层退回普通对象字段——不会无限递归；对象图很深时由 **4 层**的深度上限兜底（本包自定值）。
+>
+> 三条本包自定的默认值：嵌套上限 4、预览默认尺寸（并排时宽 64、单独时高 64，大预览 128）、
+> 默认预览位置在右。内嵌里的编辑**会进 Undo**（Inspector 路径上外层本来就进）。
+
 ### 调试
 
 | 特性 | 预期看到 |
