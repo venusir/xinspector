@@ -119,7 +119,7 @@ namespace XInspector.Editor
             {
                 state.Methods[i] = targets[i] == null
                     ? null
-                    : FindMethod(targets[i].GetType(), discovery, parameters);
+                    : MethodResolver.BySignature(targets[i].GetType(), discovery);
 
                 if (state.Methods[i] == null)
                 {
@@ -174,68 +174,6 @@ namespace XInspector.Editor
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// 在目标类型上找出与线索**同名同参**的方法。
-        /// </summary>
-        /// <param name="type">目标对象的运行时类型。</param>
-        /// <param name="discovery">收集期记下的那份方法。</param>
-        /// <param name="parameters">线索方法的参数。</param>
-        /// <returns>可调用的方法；找不到时返回 <c>null</c>。</returns>
-        /// <remarks>
-        /// 逐层 <c>DeclaredOnly</c> 上溯：<see cref="Type.GetMethods(BindingFlags)"/> 不带
-        /// <c>DeclaredOnly</c> 时拿不到基类的私有方法，而按钮方法多半就是私有的。
-        /// </remarks>
-        private static MethodInfo FindMethod(Type type, MethodInfo discovery, ParameterInfo[] parameters)
-        {
-            const BindingFlags Flags =
-                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
-                BindingFlags.DeclaredOnly;
-
-            for (var current = type; current != null; current = current.BaseType)
-            {
-                var candidates = current.GetMethods(Flags);
-
-                for (var i = 0; i < candidates.Length; i++)
-                {
-                    if (candidates[i].Name != discovery.Name)
-                    {
-                        continue;
-                    }
-
-                    if (SignatureMatches(candidates[i], parameters))
-                    {
-                        return candidates[i];
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>候选方法的参数表是否与线索方法逐项同型。</summary>
-        /// <param name="candidate">候选方法。</param>
-        /// <param name="parameters">线索方法的参数。</param>
-        /// <returns>同型返回 <c>true</c>。</returns>
-        private static bool SignatureMatches(MethodInfo candidate, ParameterInfo[] parameters)
-        {
-            var candidateParameters = candidate.GetParameters();
-
-            if (candidateParameters.Length != parameters.Length)
-            {
-                return false;
-            }
-
-            for (var i = 0; i < parameters.Length; i++)
-            {
-                if (candidateParameters[i].ParameterType != parameters[i].ParameterType)
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         #endregion
