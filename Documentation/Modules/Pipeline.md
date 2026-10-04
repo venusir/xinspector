@@ -341,7 +341,80 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 
 ---
 
-## 五、审计记忆
+## 五、第二批签名核对（2026-10-04）
+
+补 L1a 第二批与分组族之前，照上一节的办法把 **26 个特性**的 Odin 官方签名逐条抄了下来
+（20 个 L1a + 6 个分组），另取 4 个支撑枚举页（`PrefabKind`、`TitleAlignments`、`TabLayouting`、
+`Units`）。30 个页面全部命中，取法与注意事项同上一节（**别用 `WebFetch`**）。
+
+### 跨特性共性
+
+1. 26 个全在 `Sirenix.OdinInspector`；除 `UnitAttribute` 外都带 `[Conditional("UNITY_EDITOR")]`。
+2. **3 例页面没有 `[AttributeUsage]`**（`ChildGameObjectsOnly`、`Unit`、`ShowPropertyResolver`），
+   与 `[EnumToggleButtons]` 同款。我们照旧**刻意收窄**（类级作用的除外）。
+3. `AllowMultiple = true`：`TypeInfoBox`、`ValidateInput`，以及**全部 6 个分组特性**。
+4. **「含 `UnityEngine` 类型」零命中**——本批没有一个构造签名引用 Unity 类型。
+   Runtime 零 Unity 依赖这条契约不用为它们破例。
+5. `SdfIconType` 只出现一处（`TabGroupAttribute` 的图标重载与 `Icon` 字段），其余 25 个清白。
+6. `$`/resolved string 出现 4 处：`CustomValueDrawer.Action`、`ValidateInput.Condition`、
+   `PropertyRange` 的三个 getter 重载、`TabGroup.TextColor`。
+7. 需要**调用目标对象的方法**：`ValidateInput`（condition 可为方法，另有 `$value` 具名参数）、
+   `CustomValueDrawer`（action 是方法/表达式）。两者都没有纯 BCL 子集。
+
+### 逐条：官方签名 → 本轮决定
+
+| 特性 | 可实现子集（官方原文） | 不实现的部分与理由 |
+|---|---|---|
+| `[ChildGameObjectsOnly]` | `()`；`IncludeInactive`、`IncludeSelf` | — |
+| `[EnumPaging]` | `()` | — |
+| `[HideMonoScript]` | `()`；仅 `Class` 目标 | 需**构建期成员抑制**（小块新机制，见下） |
+| `[MultiLineProperty]` | `(int lines = 3)`；`Lines` | 注意默认是 3 行，不是无参构造 |
+| `[Toggle]` | `(string toggleMemberName)` | 官方示例确认被指的 bool 在**值对象内部**（相对路径，如 `t.Enabled`）；不支持 static；`CollapseOthersOnExpand` **只留字段、不做行为** |
+| `[DelayedProperty]` | `()` | 支持类型集由我们定（Delayed\* 控件覆盖的序列化类型），未支持类型**告警并调下一个** |
+| `[EnableGUI]` | `()` | — |
+| `[TypeInfoBox]` | `(string message)`；`Message` | — |
+| `[PropertyRange]` | `(double min, double max)`；`Min`、`Max` | 三个 getter 形属 `$` 族；`MinGetter`/`MaxGetter` 字段照 Odin 保留（未用时为 null） |
+| `[Wrap]` | `(double min, double max)`；`Min`、`Max` | 官方注明不支持无符号原始类型 |
+| `[DrawWithUnity]` | `()`；`PreferImGUI` | `PreferImGUI` 是 UI Toolkit 时代的开关，IMGUI-only 下只保留字段 |
+| `[VerticalGroup]` | `(float order = 0)`、`(string groupId, float order = 0)`；`PaddingTop`、`PaddingBottom` | 默认组名常量 `_DefaultVerticalGroup` |
+| `[TitleGroup]` | `(string title, string subtitle = null, TitleAlignments alignment = Left, bool horizontalLine = true, bool boldTitle = true, bool indent = false, float order = 0)`；同名属性 | `TitleAlignments` 自建（见下） |
+| `[FoldoutGroup]` | `(string groupName, bool expanded, float order = 0)`、`(string groupName, float order = 0)`；`Expanded`、`HasDefinedExpanded` | 展开态**不跨会话持久化**（既定边界，见「未决项」） |
+| `[HorizontalGroup]` | `(float width = 0, int marginLeft = 0, int marginRight = 0, float order = 0)`、`(string group, …)`；`Width`、`Gap`、`MarginLeft`/`MarginRight`（**字段是 float、ctor 参数是 int**）、`PaddingLeft`/`PaddingRight`、`MinWidth`、`MaxWidth`、`Title`、`LabelWidth`、`DisableAutomaticLabelWidth` | — |
+| `[TabGroup]` | `(string tab, bool useFixedHeight = false, float order = 0)`、`(string group, string tab, bool useFixedHeight = false, float order = 0)`；`TabName`、`UseFixedHeight`、`HideTabGroupIfTabGroupOnlyHasOneTab` | 图标重载与 `TextColor` 表达式不做；`TabLayouting`、`Paddingless` 与 `Tabs` 列表**不照搬**——Odin 靠 `ISubGroupProviderAttribute` 让每个 tab 派生子分组，**我们用点分路径天然表达**（`Tabs/Tab1`），构建期零新增 |
+| `[ToggleGroup]` | `(string toggleMemberName, float order = 0, string groupTitle = null)`、`(string toggleMemberName, string groupTitle)`；`ToggleGroupTitle`、`ToggleMemberName`（只读） | `CollapseOthersOnExpand` 只留字段、不做行为（跨组协调无明确语义） |
+
+### 需要自建的类型
+
+- **`TitleAlignments`**：`TitleGroup` 的 `alignment` 参数用。官方 4 个成员（Centered / Left / Right / Split），
+  文档站按字母序排，**数值未核实**——我们按此顺序从 0 起排。
+- `PrefabKind`（`[Flags]`，10 成员）、`Units`（约 200 成员）、`TabLayouting`——**本轮不做**，见下表。
+
+### 本轮不实现（都记在此，别处不再重复）
+
+| 特性 | 为什么 |
+|---|---|
+| `[CustomValueDrawer]` | 唯一重载就是 `(string action)`——resolved string（方法/表达式调用）。**属 L5 性质**（调用目标对象） |
+| `[ValidateInput]` | `(string condition, string defaultMessage = null, InfoMessageType = Error)`——condition 可为方法，另有 `$value` 具名参数。同样 L5 性质，且需要一个尚不存在的「校验消息层」 |
+| `[Unit]` | 6 个重载里 4 个直接吃 `Units`——约 200 个成员的自有枚举，外加换算/显示引擎与右键换单位菜单。**独立大件**，没有便宜的半成品形态 |
+| `[RequiredIn]` `[DisallowModificationsIn]` | 都要 `PrefabKind`（**数值未核实**）+ 预制体种类探测（`PrefabUtility`）+ 校验消息层。两者共用同一块尚不存在的基础设施，**成对推迟** |
+| `[HideNetworkBehaviourFields]` | 作用于 UNet 的 `NetworkBehaviour`（Network Channel / Send Interval）——该类型在 Unity 6 已不存在，唯一可能的实现是静默 no-op |
+| `[ShowPropertyResolver]` | 本包只有一个值后端，没有「property resolver」这个概念，做出来是编造的调试信息。等反射后端出现再说 |
+| `[SuppressInvalidAttributeError]` | 当前没有「特性用在不该用的类型上」的告警层可抑制，声明它等于静默 no-op |
+| `[DisableContextMenu]` | 成员绘制交给 `EditorGUI.PropertyField`，右键菜单由它内部掌管、没有现成开关——**要先原型验证可拦截**，否则做出来的是假实现 |
+
+### 两处边界与理由
+
+- **`[Toggle]` 与 `[ToggleGroup]` 一起做。** 两者都要写「flag 那个 bool」（跨成员读写）；
+  `[ToggleGroup]` 若只做「读 bool 门控」而不画复选框，是半个特性——观感与语义都对不上 Odin。
+  故先落一个共用的小改动（从成员节点取 `SerializedProperty`；分组节点没有值入口，
+  从**第一个带值入口的后代**取 `serializedObject`），两个特性同轮实现。
+- **`[HideMonoScript]` 需要一小块新机制。** 它要在构建期抑制 `m_Script` 节点，而现有两条路都够不着：
+  调用方的 `memberFilter` 是窗口路径专用（Inspector 路径**刻意保留** `m_Script` 以与原生一致），
+  处理器的「父级注入」钩子又显式跳过没有 `MemberInfo` 的成员。故这是独立的构建期改动，独立成提交。
+
+---
+
+## 六、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 
