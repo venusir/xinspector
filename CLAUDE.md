@@ -21,8 +21,10 @@
   都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
   包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
-- 当前版本 `0.1.0-preview.1`，已实现 **68 个特性**；**L1b 与 L5（按钮族 + 回调族）已清完**，
-  下一个目标是 L3 的反射值后端。API 尚未稳定
+- 当前版本 `0.1.0-preview.1`，已实现 **69 个特性**；**L1b、L5（按钮族 + 回调族）与
+  L3（反射值后端）已清完**，下一个候选是 **L2 剩余的四项**（`[ShowIn]` 一族、
+  `[ShowIfGroup]` / `[HideIfGroup]`、跨对象条件 `"@other.field"`——这四项**全卡在签名未核**）。
+  API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -81,7 +83,10 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
 
 1. **值后端是 `SerializedObject`**（`PropertyValueEntry` 是那条缝）。它买下 Undo/Redo、
    预制体覆盖、场景标脏、多对象编辑、域重载后取值这五件事。代价是只能画 Unity 会序列化的
-   成员。「画普通属性」需要另一套后端，届时新增一个派生类即可。
+   成员。**那套「画普通属性」的后端已经落地**：`ReflectedValueEntry`（`IsUnityBacked` 恒
+   `false`、`SerializedProperty` 恒 `null`、**只读**——`SetValue` 恒抛），配一个节点种类
+   `InspectorPropertyKind.ReflectedMember`。它一件也拿不到那五件事，所以**刻意不给写**：
+   与其做一个改完就丢的控件，不如不给。
 2. **绘制器是无状态共享单例**。每种类型全工程只实例化一个（500 字段的 Inspector 不会因此
    产生两万个对象）。代价是**绘制器里不得有可变字段**，每属性状态一律进 `PropertyState`。
    违反这条的症状是「展开一个、全都展开了」，很难联想到原因。
@@ -111,7 +116,7 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
 ```
 Runtime/                     Venusir.Xinspector
   Attributes/                公开特性（Title、Groups/BoxGroup、Buttons/、Callbacks/…）
-  Internal/                  内部工具（PropertyGroupPath）
+  Internal/                  内部工具（PropertyGroupPath、两个标记接口）
 Editor/                      Venusir.Xinspector.Editor
   PropertyTree.cs            树；绘制入口
   PropertyTreeBuilder.cs     遍历成员 → 分组装配 → 装配链条
@@ -272,7 +277,23 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 - **既无绘制器也无处理器的特性会被自动接管判据漏掉**。生命周期钩子
   （`[OnInspectorInit]` / `[OnInspectorDispose]` / `[OnStateUpdate]`）就是这样一类：
   它们不产生节点、不配绘制器，漏掉的症状是「类型不被接管、特性静默不生效、零告警」。
-  新增这类特性时，让它实现 `XInspector.Internal.ITreeLifecycleAttribute`
+  新增这类特性时，让它实现 `XInspector.Internal.ITreeLifecycleAttribute`；
+  「产生节点但不画也不改别人」的那一类（`[ShowInInspector]`）实现
+  `XInspector.Internal.ITreeMembershipAttribute`。**同时**：`IsUsedBy` 的扫描范围要与
+  成员收集的范围对齐——它漏过一次方法（`[Button]`），又漏过一次属性（`[ShowInInspector]`）
+- **`Object[]` 改 `object[]` 会静默弄丢一条白送的语义**。形参类型一旦是 `object`，
+  裸写 `target != null` 就退化成引用比较，而 Unity 的已销毁对象恰恰是「引用不为 null、
+  按它自己的语义却是空」——以前这是 `Object[]` 白送的（`!= null` 自动走 Unity 的重载）。
+  属性树的目标列表正是这么改型的，故判空一律走 `TargetObjects.IsAlive`。
+  **改型时要问的不只是「哪里编译不过」，还有「哪些语义是那种类型免费给的」**
+- **`Undo.GetCurrentGroupName()` 不能当「记没记 Undo」的判据**。组名只在显式
+  `SetCurrentGroupName` 之后才有，`RecordObjects` 不给它命名——于是
+  「断言 != 我们给的名字」在任何情况下都成立，是个恒真的空断言（本仓曾有一条）。
+  可观测的判据是：先记一步已知可撤销的（撤销栈因此非空、行为确定），再来一步不记的，
+  撤一次看收回的是哪一步
+- **表达式树在本仓的运行环境里能访问私有成员**（11 例 spike 实测过，不必退到
+  `DynamicMethod(skipVisibility: true)`）。故反射成员与反射条件的取值都编译成委托，
+  构建期一次、绘制期只剩委托调用——`MethodInfo.Invoke` 出现在每帧路径上同样是违规的
 
 ## 文档在哪
 
@@ -307,9 +328,9 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 
 ## 明确不在本轮范围
 
-自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
-数组/列表展开、`[SerializeReference]` 类型切换、
-折叠状态的跨会话持久化、UI Toolkit。
+样式/调色板系统、数组/列表展开、`[SerializeReference]` 类型切换、
+折叠状态的跨会话持久化、UI Toolkit、`[TypeDrawerSettings]`（核过签名：它要的是
+`System.Type` 的整套绘制，**不依赖**反射后端，是独立的一批）。
 （`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完；
 **L5 的按钮族与回调族也已做完**——两批，2026-10-04。下一步是 L3。）
 
@@ -323,11 +344,14 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 
 **条件族仍不做**：`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接
 `PrefabKind` 之类的枚举参数，签名未核对到，**猜一个形状写下去比不做更糟**）、
-`[ShowIfGroup]` / `[HideIfGroup]`、条件为方法或普通属性（需反射值后端）、
-以及条件写在别的对象上的 `"@other.field"` 语法。
+`[ShowIfGroup]` / `[HideIfGroup]`、以及条件写在别的对象上的 `"@other.field"` 语法。
+（**条件为方法或普通属性已做**——L3 起按「序列化成员 → 反射字段/属性 → 无参返回 bool
+的方法」三级解析，构建期绑委托、绘制期不反射。）
 
-**编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段）。
-**仍不做**：多 target 检视、字段拖拽重排、窗口内 Undo、`[ShowInInspector]` 那类非序列化成员。
+**编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，默认画窗口自身的序列化
+字段，外加带 `[ShowInInspector]` 的成员）。**`GetTarget()` 已做**（L3）：可返回任意类型
+实例——不必可序列化、不必是 `UnityEngine.Object`，那种目标只收带标记的成员且不可重置。
+**仍不做**：带对象选择器的浮空 Inspector、字段拖拽重排、窗口内 Undo。
 （窗口上的 `[Button]` 方法**能**进树——成员过滤只管字段。）
 
 **按钮族与回调族已做**（`Runtime/Attributes/Buttons/`、`Callbacks/`），共 10 个特性 + 1 个枚举。
