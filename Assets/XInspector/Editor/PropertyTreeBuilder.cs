@@ -269,11 +269,75 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                var groupNode = EnsureGroupChain(root, groups, groupAttribute.GroupID, groupAttribute);
-                groupNode.AddChild(member);
+                EnsureMemberGroupAttributes(root, groups, member, groupAttribute.GroupID);
+                groups[groupAttribute.GroupID].AddChild(member);
             }
 
             SortGroupNodesAtLevel(root);
+        }
+
+        /// <summary>
+        /// 让成员身上「属于目标路径链」的每个分组特性各贡献自己那一段路径。
+        /// </summary>
+        /// <param name="root">根节点。</param>
+        /// <param name="groups">已建分组节点的查找表。</param>
+        /// <param name="member">成员节点。</param>
+        /// <param name="targetPath">成员最终要落的路径（最深那条）。</param>
+        /// <remarks>
+        /// <para>
+        /// 只处理**是目标路径前缀（或相等）**的那些特性：成员只归属最深的一条链，
+        /// 不相关的分组仍被忽略（既有规则不变）。不这么做的话
+        /// <c>[MarkerGroup("H")] [BoxGroup("H/Box")]</c> 里 H 拿不到 Marker 那份特性——
+        /// 行静默不开、分数静默失效，正是本仓最想避免的一类现象。
+        /// </para>
+        /// <para>
+        /// 按路径**由浅到深**处理：每个祖先节点优先由它自己那份声明创建，
+        /// 「呈现设定先声明者优先」才落在正确的来源上。
+        /// </para>
+        /// </remarks>
+        private static void EnsureMemberGroupAttributes(
+            InspectorProperty root,
+            Dictionary<string, InspectorProperty> groups,
+            InspectorProperty member,
+            string targetPath)
+        {
+            var attributes = member.Attributes;
+            var deepestDepth = DepthOf(targetPath);
+
+            for (var depth = 1; depth <= deepestDepth; depth++)
+            {
+                for (var i = 0; i < attributes.Count; i++)
+                {
+                    if (attributes[i] is PropertyGroupAttribute group &&
+                        DepthOf(group.GroupID) == depth &&
+                        IsPrefixOrEqual(group.GroupID, targetPath))
+                    {
+                        EnsureGroupChain(root, groups, group.GroupID, group);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// <paramref name="prefix"/> 是否为 <paramref name="path"/> 的路径前缀（含相等）。
+        /// </summary>
+        /// <param name="prefix">候选前缀。</param>
+        /// <param name="path">完整路径，两者都已规范化。</param>
+        /// <returns>是前缀返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 按**段**判断而不是字符串前缀：<c>"Ab"</c> 是 <c>"Abc"</c> 的字符串前缀，
+        /// 却是两个不相干的分组。
+        /// </remarks>
+        private static bool IsPrefixOrEqual(string prefix, string path)
+        {
+            if (string.Equals(prefix, path, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return path.Length > prefix.Length &&
+                   path[prefix.Length] == PropertyGroupPath.Separator &&
+                   string.CompareOrdinal(path, 0, prefix, 0, prefix.Length) == 0;
         }
 
         /// <summary>
@@ -339,13 +403,7 @@ namespace XInspector.Editor
 
                 if (groups.TryGetValue(current, out var node))
                 {
-                    // 同一个分组的又一次声明：按 Combine 规则并入既有特性，而不是丢弃。
-                    // 不合并的话，「哪个字段先声明」就会悄悄决定分组的标题与排序。
-                    var existing = node.Attributes.Get<PropertyGroupAttribute>();
-                    if (existing != null)
-                    {
-                        existing.Combine(source.CloneForPath(current));
-                    }
+                    MergeGroupAttribute(node, source.CloneForPath(current));
                 }
                 else
                 {
@@ -366,6 +424,44 @@ namespace XInspector.Editor
             }
 
             return parent;
+        }
+
+        /// <summary>
+        /// 把一份分组特性并入既有分组节点：**同类型**走 <see cref="PropertyGroupAttribute.Combine"/>，
+        /// **不同类型**并存。
+        /// </summary>
+        /// <param name="node">分组节点。</param>
+        /// <param name="incoming">要并入的克隆，路径已改写为节点路径。</param>
+        /// <remarks>
+        /// <para>
+        /// 同类型合并的理由是「同一个分组被多个字段各声明一次」——不合并的话，
+        /// 「哪个字段先声明」就会悄悄决定分组的标题与排序。
+        /// </para>
+        /// <para>
+        /// 不同类型并存的理由：两种分组特性落同一路径时**都该有自己的一格绘制器**
+        /// （如「标题在外、框在内」）。此前只留先创建者那份，第二种被静默丢弃——
+        /// 而且祖先节点带哪种类型取决于声明顺序，是典型的静默失效。
+        /// </para>
+        /// <para>
+        /// 新增类型后要**重挂链**：链在装配时按当时的特性列表构建过。此时尚未绘制，
+        /// 重挂是安全的。
+        /// </para>
+        /// </remarks>
+        private static void MergeGroupAttribute(InspectorProperty node, PropertyGroupAttribute incoming)
+        {
+            var attributes = node.Attributes;
+
+            for (var i = 0; i < attributes.Count; i++)
+            {
+                if (attributes[i].GetType() == incoming.GetType())
+                {
+                    ((PropertyGroupAttribute)attributes[i]).Combine(incoming);
+                    return;
+                }
+            }
+
+            attributes.Raw.Add(incoming);
+            AttachChain(node, ChildrenTerminal);
         }
 
         /// <summary>
@@ -432,11 +528,31 @@ namespace XInspector.Editor
 
         /// <summary>取分组节点的排序权重。</summary>
         /// <param name="group">分组节点。</param>
-        /// <returns>权重；节点上没有分组特性时返回 0。</returns>
+        /// <returns>权重；节点上没有分组特性（或其 Order 全是 0）时返回 0。</returns>
+        /// <remarks>
+        /// 节点上可能有多种分组特性，规则取**最小的非零值**：0 表示「未指定」
+        /// （与 <see cref="PropertyGroupAttribute.Combine"/> 的「取先出现的非零值」同一精神），
+        /// 冲突时更靠前的意愿赢；且**与声明顺序无关**——把顺序依赖请回来正是多类型改动要避免的。
+        /// </remarks>
         private static float OrderOf(InspectorProperty group)
         {
-            var attribute = group.Attributes.Get<PropertyGroupAttribute>();
-            return attribute != null ? attribute.Order : 0f;
+            var attributes = group.Attributes;
+            var order = 0f;
+
+            for (var i = 0; i < attributes.Count; i++)
+            {
+                if (!(attributes[i] is PropertyGroupAttribute attribute) || attribute.Order == 0f)
+                {
+                    continue;
+                }
+
+                if (order == 0f || attribute.Order < order)
+                {
+                    order = attribute.Order;
+                }
+            }
+
+            return order;
         }
 
         /// <summary>数路径的层数。</summary>

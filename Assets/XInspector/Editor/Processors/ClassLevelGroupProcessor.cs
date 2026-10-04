@@ -70,6 +70,8 @@ namespace XInspector.Editor
                 return;
             }
 
+            var hasOwnGroup = false;
+
             for (var i = 0; i < attributes.Count; i++)
             {
                 if (!(attributes[i] is PropertyGroupAttribute own))
@@ -80,8 +82,16 @@ namespace XInspector.Editor
                 // 成员自己声明了分组：把类级分组当作它的父路径。
                 // 用 CloneForPath 而不是直接改 GroupID——克隆会一并保留子类字段
                 // （ShowLabel、Label 之类），且不会动到别处共享的那个实例。
+                //
+                // 不加 return：成员身上**每个**分组特性都要加前缀。只加第一个的话，
+                // 第二种会留在类级分组外面，跑出去（多类型改动之后这条才有意义）。
                 attributes[i] = own.CloneForPath(
                     classGroup.GroupID + PropertyGroupPath.Separator + own.GroupID);
+                hasOwnGroup = true;
+            }
+
+            if (hasOwnGroup)
+            {
                 return;
             }
 
