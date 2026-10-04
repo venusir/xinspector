@@ -461,6 +461,21 @@ namespace XInspector.Samples
         [PropertyRange(0f, 100f)]
         public int level = 5;
 
+        /// <summary>只在内嵌编辑器里露面——在外层自己的 Inspector 里它根本不出现。</summary>
+        [BoxGroup("按内嵌环境变化")]
+        [ShowInInlineEditors]
+        public int onlyInside = 1;
+
+        /// <summary>反过来：单独看时在，被内嵌时藏起来。</summary>
+        [BoxGroup("按内嵌环境变化")]
+        [HideInInlineEditors]
+        public int hiddenInside = 2;
+
+        /// <summary>被内嵌时变灰但仍可见；单独看时可编辑。</summary>
+        [BoxGroup("按内嵌环境变化")]
+        [DisableInInlineEditors]
+        public int readonlyInside = 3;
+
         /// <summary>指回自己就成环——这是递归守卫的现场。</summary>
         [BoxGroup("递归守卫")]
         [InlineEditor]

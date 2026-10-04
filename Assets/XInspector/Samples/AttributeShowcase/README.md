@@ -178,6 +178,21 @@
 > 三条本包自定的默认值：嵌套上限 4、预览默认尺寸（并排时宽 64、单独时高 64，大预览 128）、
 > 默认预览位置在右。内嵌里的编辑**会进 Undo**（Inspector 路径上外层本来就进）。
 
+### 内嵌环境条件
+
+示例资产里那三个字段（`onlyInside` / `hiddenInside` / `readonlyInside`）专门演示这一族。
+**要看出差别，得对比两处**：把示例资产单独选中看一次（外层），再把它拖进展示台看一次（内嵌）。
+
+| 特性 | 外层单独看 | 被 `[InlineEditor]` 内嵌时 |
+|---|---|---|
+| `[ShowInInlineEditors]` | 不出现 | 出现 |
+| `[HideInInlineEditors]` | 出现 | 不出现 |
+| `[DisableInInlineEditors]` | 可编辑 | 变灰（仍可见） |
+
+> 判据是**绘制期的嵌套深度**：这三个特性没有绘制器，只有处理器装的求值器，每帧现读。
+> 因此 `[InlineEditor(IncrementInlineEditorDrawerDepth = false)]` 的那一层算「不算内嵌」——
+> 在里面这三个特性一律不生效（用途是「画整个编辑器，但让它们当没看见」）。
+
 ### 调试
 
 | 特性 | 预期看到 |

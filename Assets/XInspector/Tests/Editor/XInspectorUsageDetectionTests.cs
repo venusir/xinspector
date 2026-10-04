@@ -102,6 +102,31 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 内嵌环境三兄弟同样是处理器专有——它们也是「只挂处理器特性」的那一类，
+        /// 同样要能被判据看见，否则带它们的类型不会被自动接管。
+        /// </summary>
+        [Test]
+        public void HasProcessorForAttribute_内嵌环境族为真()
+        {
+            Assert.That(
+                AttributeProcessorRegistry.HasProcessorForAttribute(typeof(ShowInInlineEditorsAttribute)),
+                Is.True);
+            Assert.That(
+                AttributeProcessorRegistry.HasProcessorForAttribute(typeof(HideInInlineEditorsAttribute)),
+                Is.True);
+            Assert.That(
+                AttributeProcessorRegistry.HasProcessorForAttribute(typeof(DisableInInlineEditorsAttribute)),
+                Is.True);
+        }
+
+        /// <summary>只挂内嵌环境特性的类型必须被判为「用到了本插件」。</summary>
+        [Test]
+        public void IsUsedBy_只挂内嵌环境特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(InlineEditorConditionOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 只有绘制器的特性不该被处理器注册表认领——两张表的回答各管各的。
         /// </summary>
         [Test]
@@ -138,6 +163,14 @@ namespace XInspector.Tests.Editor
 
         /// <summary>只有条件特性，没有绘制器。</summary>
         [ShowIf(nameof(flag))]
+        public int value = 1;
+    }
+
+    /// <summary>只挂内嵌环境特性（也是处理器专有）的资产。</summary>
+    internal sealed class InlineEditorConditionOnlyFixture : ScriptableObject
+    {
+        /// <summary>只有内嵌环境特性，没有绘制器。</summary>
+        [HideInInlineEditors]
         public int value = 1;
     }
 
