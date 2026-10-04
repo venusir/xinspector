@@ -18,8 +18,10 @@ namespace XInspector.Editor
     /// 与条件族的用法一致，解析一次就够。
     /// </para>
     /// <para>
-    /// 序列化对象从**第一个带值入口的后代**取，不能假定 <c>Children[0]</c>——
-    /// 页签容器的第一个孩子是页节点，同样是分组、同样没有值入口。
+    /// 解析本身（含「序列化对象从**第一个带值入口的后代**取，不能假定 <c>Children[0]</c>——
+    /// 页签容器的第一个孩子是页节点，同样是分组、同样没有值入口」这条）已收敛进
+    /// <see cref="SerializedMemberResolver"/>，与条件族、<c>[Toggle]</c> 共用一份实现；
+    /// 本处是它唯一的绘制期调用方，告警机制（<see cref="DrawerWarnings.Once"/>）仍是本处独有的。
     /// </para>
     /// </remarks>
     [DrawerPriority(-180d)]
@@ -109,56 +111,12 @@ namespace XInspector.Editor
         /// <returns>开关的序列化属性；失败返回 <c>null</c>。</returns>
         public static SerializedProperty Resolve(InspectorProperty property, string memberName, out string reason)
         {
-            reason = null;
-
-            var serializedObject = FindSerializedObject(property);
-            if (serializedObject == null)
-            {
-                reason = "这个分组下没有任何成员，取不到序列化对象";
-                return null;
-            }
-
-            var flag = serializedObject.FindProperty(memberName);
-            if (flag == null)
-            {
-                reason = "在同一个对象上找不到这个成员（名字拼错，或它不是序列化成员）";
-                return null;
-            }
-
-            if (flag.propertyType != SerializedPropertyType.Boolean)
-            {
-                reason = $"该成员不是 bool（实为 {flag.propertyType}）";
-                return null;
-            }
-
+            // 解析本身（含「分组节点没有值入口、沿后代找」）在 SerializedMemberResolver；
+            // 这里只是它在绘制期的一个调用方。
+            SerializedMemberResolver.TryResolve(
+                property, memberName, SerializedMemberScope.Object, SerializedMemberKind.Boolean,
+                out var flag, out reason);
             return flag;
-        }
-
-        #endregion
-
-        #region Private Helpers
-
-        /// <summary>递归找**第一个带值入口**的节点，取它的序列化对象。</summary>
-        /// <param name="property">起点。</param>
-        /// <returns>序列化对象；整棵子树都没有值入口时返回 <c>null</c>。</returns>
-        private static SerializedObject FindSerializedObject(InspectorProperty property)
-        {
-            var entry = property.ValueEntry;
-            if (entry?.SerializedProperty != null)
-            {
-                return entry.SerializedProperty.serializedObject;
-            }
-
-            for (var i = 0; i < property.Children.Count; i++)
-            {
-                var found = FindSerializedObject(property.Children[i]);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-
-            return null;
         }
 
         #endregion

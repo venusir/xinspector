@@ -63,28 +63,10 @@ namespace XInspector.Editor
         /// <returns>序列化属性；失败返回 <c>null</c>。</returns>
         private static SerializedProperty Resolve(InspectorProperty property, string memberName, out string reason)
         {
-            reason = null;
-
-            var serializedProperty = property.ValueEntry?.SerializedProperty;
-            if (serializedProperty == null)
-            {
-                reason = "该属性没有序列化后端";
-                return null;
-            }
-
-            var toggle = serializedProperty.FindPropertyRelative(memberName);
-            if (toggle == null)
-            {
-                reason = "在值对象内部找不到这个成员（名字拼错，或它不在序列化范围内）";
-                return null;
-            }
-
-            if (toggle.propertyType != SerializedPropertyType.Boolean)
-            {
-                reason = $"该成员不是 bool（实为 {toggle.propertyType}）";
-                return null;
-            }
-
+            // 相对范围：官方示例确认被指的 bool 在**值对象内部**（如 t.Enabled）。
+            SerializedMemberResolver.TryResolve(
+                property, memberName, SerializedMemberScope.Relative, SerializedMemberKind.Boolean,
+                out var toggle, out reason);
             return toggle;
         }
 

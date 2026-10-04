@@ -1,5 +1,4 @@
 using System;
-using UnityEditor;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -81,25 +80,12 @@ namespace XInspector.Editor
         {
             condition = null;
 
-            var serializedProperty = property?.ValueEntry?.SerializedProperty;
-            var serializedObject = serializedProperty?.serializedObject;
-
-            if (serializedObject == null)
+            // 找成员/校类型这一段与 [Toggle]/[ToggleGroup] 共用——见 SerializedMemberResolver。
+            if (!SerializedMemberResolver.TryResolve(
+                    property, conditionName, SerializedMemberScope.Object, SerializedMemberKind.Boolean,
+                    out var conditionProperty, out var reason))
             {
-                Warn(property, conditionName, "该属性没有序列化后端");
-                return false;
-            }
-
-            var conditionProperty = serializedObject.FindProperty(conditionName);
-            if (conditionProperty == null)
-            {
-                Warn(property, conditionName, "找不到该成员");
-                return false;
-            }
-
-            if (conditionProperty.propertyType != SerializedPropertyType.Boolean)
-            {
-                Warn(property, conditionName, $"该成员不是 bool（实为 {conditionProperty.propertyType}）");
+                Warn(property, conditionName, reason);
                 return false;
             }
 
