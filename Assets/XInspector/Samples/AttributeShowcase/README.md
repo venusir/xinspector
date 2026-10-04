@@ -95,6 +95,20 @@
 | `[TypeInfoBox]`（类级） | Inspector 最顶部一条信息框 |
 | `[HideMonoScript]`（类级） | 脚本槽位（Script 字段）消失 |
 
+### 路径选择
+
+| 特性 | 预期看到 |
+|---|---|
+| `[FilePath]` | 路径输入框 + 右侧「浏览…」按钮；默认存**工程相对**路径（以 `Assets/` 开头） |
+| `[FilePath(Extensions = "cs, unity")]` | 「浏览…」的对话框只列这两类文件。**只过滤对话框**——手填别的扩展名照收，不报错 |
+| `[FilePath(ParentFolder = "Assets/Resources")]` | 选中的文件若在 `Assets/Resources` 之下，字段里只存**相对它**的路径 |
+| `[FilePath(AbsolutePath = true)]` | 字段存的是绝对路径（形如 `E:/…`） |
+| `[FilePath(RequireExistingPath = true)]` | 初始值是编的，故字段下方常驻一条红框；手填成一个真存在的路径它立刻消失 |
+| `[FolderPath]` | 与 `[FilePath]` 同形，但「浏览…」打开的是**文件夹**面板，且没有扩展名过滤 |
+
+> 两条刻意的边界：**不支持 `string[]`**（数组要按元素画，属于集合自绘那一层），
+> **参数只认字面量**（Odin 的 `$DynamicParent` 那类成员引用不做）。
+
 ### 调试
 
 | 特性 | 预期看到 |

@@ -279,6 +279,34 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 路径选择
+
+        /// <summary>路径输入框 + 「浏览…」按钮；默认存**工程相对**路径（以 Assets/ 开头）。</summary>
+        [FilePath]
+        public string projectRelativePath = "Assets/XInspector/README.md";
+
+        /// <summary>只允许这两类扩展名（点可选）——只过滤对话框，不拦手填。</summary>
+        [FilePath(Extensions = "cs, unity")]
+        public string scriptPath;
+
+        /// <summary>相对 Assets/Resources 存档；选中的文件在它之下时只存文件名。</summary>
+        [FilePath(ParentFolder = "Assets/Resources")]
+        public string resourcePath;
+
+        /// <summary>存绝对路径。</summary>
+        [FilePath(AbsolutePath = true)]
+        public string absolutePath;
+
+        /// <summary>路径不存在就报错——初始值故意是编的，打开 Inspector 就能看到那条红框。</summary>
+        [FilePath(RequireExistingPath = true)]
+        public string mustExist = "Assets/这个路径不存在.txt";
+
+        /// <summary>目录形态：浏览打开的是文件夹面板，且没有扩展名过滤。</summary>
+        [FolderPath]
+        public string outputFolder = "Assets/Sandbox";
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
