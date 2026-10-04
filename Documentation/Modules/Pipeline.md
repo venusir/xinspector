@@ -595,7 +595,88 @@ Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.
 
 ---
 
-## 八、审计记忆
+## 八、第五批签名核对（2026-10-04）——按钮族与回调族
+
+补 L5 的 `[Button]` 家族与回调族之前，把 4 个按钮特性 + 6 个回调特性 + 3 个支撑枚举的
+**Odin 官方签名**逐条抄了下来。取法同前：`Invoke-WebRequest`，别用 `WebFetch`。
+
+**本次两条取法经验**（上一节那条「文档页仍是服务端渲染」成立，但截取方式要改）：
+
+1. `WebFetch` 会因侧边栏过长而**截断**，正文取不到。正解是抓原始 HTML 后**只抽代码块**：
+
+   ```powershell
+   $html = (Invoke-WebRequest -UseBasicParsing $url).Content
+   [regex]::Matches($html, '(?s)<pre><code class="lang-csharp hljs">(.*?)</code></pre>')
+   ```
+
+   类声明、构造重载、字段/属性全在里面，一次抽干净。
+2. **枚举成员不在代码块里**，藏在 `<h3 id="fields">Values</h3>` 下的
+   `child-header-name` 里（且**按字母序排**——顺序不能当声明顺序用）。每个成员还带一句官方描述，
+   本次正是靠它定下了 `ButtonStyle` 的语义与 `Gigantic` 的比例。
+
+### 跨特性共性
+
+1. `[Button]` 与三个 `[On*]` **继承 `ShowInInspectorAttribute`**，因此官方签名里全是
+   `AttributeTargets.All`（不是 `Method`）。本包照旧**刻意收窄**到实际会生效的目标
+   （`[Button]` 只给 `Method`，`[InlineButton]`/`[OnValueChanged]` 等只给 `Field | Property`），
+   也照旧**不带** `[Conditional("UNITY_EDITOR")]`。
+2. **三个回调只有 resolved string 形态**（见下），这是本批最重要的一条——
+   它们此前被判 ⛔ 的理由是「归 L5 性质」，即卡在「没有按名调方法的能力」；
+   本轮把这套能力做出来之后，它们可以落地，但**收窄为「本类型上的方法名」**。
+3. `[ButtonGroup]`/`[ResponsiveButtonGroup]` 是 `PropertyGroupAttribute` 的子类，
+   且 `AttributeUsage` 是 **`Method`**——基类是 `Field | Property | Class` 且 `AttributeUsage`
+   **会被派生类继承**，所以子类不重声明就**编译不过**（响的失败，比静默好）。
+
+### 逐条：官方签名 → 本包决定
+
+| 特性 | 官方签名（3.3.1.2 原样） | 本包本轮实现 | 不实现的部分与理由 |
+|---|---|---|---|
+| `ButtonAttribute` | `All, AllowMultiple=false, **Inherited=false**`；15 个重载：`()`、`(string name)`、`(ButtonSizes)`、`(int buttonSize)`、`(ButtonStyle)`、`(SdfIconType…)` 与它们的组合 | `()`、`(string name)`、`(ButtonSizes size)`、`(string name, ButtonSizes size)`；`Name`、`Size` | `ButtonStyle`（只管参数区形态，见下）、像素高度重载、`Expanded`/`DisplayParameters`/`DirtyOnClick`/`DrawResult`/`ButtonAlignment`/`Stretch`、`SdfIconType` 一族（第 14 条永久否决） |
+| `ButtonGroupAttribute` | `Method, AllowMultiple=true, Inherited=true`；**`(string group = "_DefaultGroup", float order = 0F)`** | 照抄（含默认组名） | `ButtonAlignment`/`Stretch`/`IconAlignment` |
+| `ResponsiveButtonGroupAttribute` | `Method, AllowMultiple=true, Inherited=true`；**`(string group = "_DefaultResponsiveButtonGroup")`** | 照抄（含默认组名） | 同右列 |
+| `InlineButtonAttribute`（sealed） | `All, AllowMultiple=true, Inherited=true`；`(string action, string label = null)`、`(string action, SdfIconType icon, string label = null)` | `(string methodName)`、`(string methodName, string label = null)`；`MethodName`、`Label` | 图标重载（永久否决）、`ShowIf`/`ButtonColor`/`TextColor`（后两个是颜色解析，本包没有样式系统） |
+| `OnInspectorInitAttribute` | `All, AllowMultiple=true, Inherited=false`；`()`、`(string action)` | 只做**标在方法上**的 `()` | `(string action)` 形式 |
+| `OnInspectorDisposeAttribute` | 同上 | 同上 | 同右列 |
+| `OnInspectorGUIAttribute`（sealed） | `All, AllowMultiple=false, Inherited=true`；`()`、`(string action, bool append = true)`、`(string prepend, string append)` | 只做**标在方法上**的 `()` | `action`/`prepend`/`append` 形式；标在**字段**上的形式（依赖 Odin 的 `OnInspectorGUI`/`Draw*` 命名约定，未核清） |
+| `OnValueChangedAttribute`（sealed） | `All, AllowMultiple=true, Inherited=true`；**`(string action, bool includeChildren = false)`** | `(string methodName)` | `includeChildren`（默认 false，不声明即同默认）、`InvokeOnInitialize`、`InvokeOnUndoRedo` |
+| `OnStateUpdateAttribute`（sealed） | `All, AllowMultiple=true, Inherited=true`；**`(string action)`——没有无参构造** | `(string methodName)` | 无（时机是本包自定，见下） |
+| `CustomContextMenuAttribute`（sealed） | `All, AllowMultiple=true, Inherited=true`；**`(string menuItem, string action)`** | `(string menuItem, string methodName)`，只做**字段**目标 | 标在方法上的形式 |
+| `ButtonSizes` | `Small` `Medium` `Large` `Gigantic`（官方描述：Gigantic「两倍于 Large」） | 自建 + **数值自定** | 数值未核实 |
+| `ButtonStyle` | `Box`「参数外套折叠盒，按钮在盒底」、`CompactBox`「参数外套折叠盒，按钮在**盒头**——**带参方法的默认**」、`FoldoutButton`「按钮 + 展开参数的折叠」 | **不声明该选项**：本包固定按 `CompactBox` 的形态画（参数折叠在按钮同一行的箭头下） | 三个值都只是参数区的三种摆法；本轮只有一种，声明了就是三个里两个不生效——「可设的旋钮不生效才是骗人的」 |
+| `IconAlignment` | `LeftOfText` `RightOfText` `LeftEdge` `RightEdge` | 不做 | 随图标一族永久否决 |
+
+### 三条推翻先前假设的发现
+
+1. **`[ButtonGroup]` 裸用时的默认组名 Odin 有明文**（`"_DefaultGroup"`，
+   `[ResponsiveButtonGroup]` 是 `"_DefaultResponsiveButtonGroup"`）。原先准备「自定一个
+   不冲突的名字」——照抄即可，自造是多余的。
+2. **`[Button]` 是 `Inherited = false`**：覆写方法**不继承**特性。收集器仍要按方法名去重
+   （覆写方自己也标了的情况），但不会因为继承而重复。
+3. **`[OnValueChanged]` `[OnStateUpdate]` `[CustomContextMenu]` 三个只有 resolved string 形态**——
+   本包一贯判 ⛔ 的那种形状。它们能落地，是因为本轮把「按名调方法」这条能力做出来了，
+   而不是因为放宽了判据：**只认本类型上的方法名**，不实现 Odin 的 `$`/`@`/表达式/带参调用。
+
+### 本包自定值
+
+| 值 | 取多少 | 理由 / 落在哪 |
+|---|---|---|
+| `ButtonSizes` 的像素高度 | `Small=20` `Medium=25` `Large=30` `Gigantic=60` | 数值官网核不到；**成员名照抄**，`Gigantic` 按官方描述「两倍于 Large」取 60。落在枚举注释、包 README 与展示台 |
+| `[OnStateUpdate]` 的时机 | **每趟 GUI 布局（`EventType.Layout`）调用一次** | 本包没有 Odin 的 state update 循环，只有 IMGUI 的 Layout/Repaint 两趟；取 Layout 恰好每趟一次（取 Repaint 会漏掉纯布局趟）。**这是自定语义，写进包 README** |
+| 参数区的形态 | 固定 `CompactBox` 式（按钮与折叠箭头同行，参数在下方缩进） | 与 Odin 的带参默认一致；不提供 `ButtonStyle` 选项 |
+
+### 本轮不实现（都记在此，别处不再重复）
+
+- `[Button]` 的 `ButtonStyle` / 像素高度 / 布局一族 / 图标一族 / `DrawResult` / `DirtyOnClick`。
+- `[InlineButton]` 的图标重载与三个颜色/条件字段。
+- 三个回调的 `action` 变体，以及「`[OnInspectorGUI]` 标在字段上」的形式。
+- `[OnValueChanged]` 的 `includeChildren` / `InvokeOnInitialize` / `InvokeOnUndoRedo`。
+- `[CustomContextMenu]` 标在方法上的形式。
+- **嵌套 `[Serializable]` 类型里的按钮**：本轮只对 Inspector 检视的根对象生效
+  （拿到嵌套实例需要一条本包没有的「只读反射路径解析」，见 Roadmap 的 L3）。
+
+---
+
+## 九、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 
