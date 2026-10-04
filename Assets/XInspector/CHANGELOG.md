@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### Added — L1b：水平分组（HorizontalGroup）
+
+- **`[HorizontalGroup("一行", 0.7f)]`**：把成员排成一行，每格按宽度分数分配。
+  分数语义：显式之和 ≤ 1 时未指定者**均分剩余**；之和大于 1 时按总和**等比缩放**；
+  非正/NaN/未写都算「未指定」。可用宽度取**当前布局组的实际内宽**（不是窗口宽度），
+  嵌套在框、缩进里也准；挤不下时整行退化为「不加约束」的自动排布，而不是硬塞。
+- 具名参数：`Gap`、`MarginLeft`/`MarginRight`、`PaddingLeft`/`PaddingRight`、
+  `MinWidth`/`MaxWidth`、`Title`、`LabelWidth`、`DisableAutomaticLabelWidth`。
+  **格内标签宽度会自动按格宽折算**（可覆盖、可关掉）——Inspector 宿主按整页宽设的
+  `labelWidth` 放进 1/3 宽的格子会把值控件挤成一条缝。
+- **没有让分组绘制器去驱动子节点**，而是引入一处分组与末端之间的显式约定：
+  分组绘制器把逐格宽度装进 `GroupChildrenLayout`（存在节点状态上），
+  由末端 `ChildrenDrawer` 消费。理由是那个被否决的做法会跳过同节点上更内层的绘制器
+  （多类型并存之后那是常规场景），还把「末端必画」降级成分支逻辑。
+  决策本身（分数 → 像素）仍是纯函数 `HorizontalGroupWeights`，跑在离线测试通道里。
+- 连带把「只画选中页」的通用能力也放进末端（越界/空选择**回退为画全部**并告警一次）——
+  下一页签要用它。
+
 ### Added — L1b：分组族三件（竖直 / 标题 / 折叠）
 
 - **`[VerticalGroup]`**：不画框的竖直容器（`PaddingTop`/`PaddingBottom`）。无参写法落进

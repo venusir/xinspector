@@ -212,6 +212,26 @@ namespace XInspector.Samples
         [BoxGroup("标题与框")]
         public int titleOnBox = 7;
 
+        /// <summary>水平分组：与下一个字段排成一行，各占 70% / 30%。</summary>
+        [HorizontalGroup("一行", 0.7f)]
+        public int wideCell = 70;
+
+        /// <summary>同一行的第二格。</summary>
+        [HorizontalGroup("一行", 0.3f)]
+        public int narrowCell = 30;
+
+        /// <summary>三个未指定宽度的格子：均分整行。</summary>
+        [HorizontalGroup("三格")]
+        public int cellA = 1;
+
+        /// <summary>三格之一。</summary>
+        [HorizontalGroup("三格")]
+        public int cellB = 2;
+
+        /// <summary>三格之一。</summary>
+        [HorizontalGroup("三格")]
+        public int cellC = 3;
+
         #endregion
 
         #region 结构与门控

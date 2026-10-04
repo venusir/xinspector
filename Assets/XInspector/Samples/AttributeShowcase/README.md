@@ -79,6 +79,8 @@
 | `[FoldoutGroup("折叠组", true)]` | 可折叠；收起时组内内容**不画**（不是变灰） |
 | `[FoldoutGroup]` + `[BoxGroup]` 同路径 | 两格并存：折叠在外、框在内（档位决定谁包住谁） |
 | `[TitleGroup]` + `[BoxGroup]` 同路径 | 标题在框之外 |
+| `[HorizontalGroup("一行", 0.7f)]` | 与下一个字段排成一行，各占 70% / 30% |
+| `[HorizontalGroup("三格")]` × 3 | 未指定宽度的格子**均分**整行 |
 
 ### 结构与门控
 

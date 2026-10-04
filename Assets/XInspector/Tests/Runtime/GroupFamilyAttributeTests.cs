@@ -157,6 +157,52 @@ namespace XInspector.Tests
 
         #endregion
 
+        #region [HorizontalGroup]
+
+        /// <summary>两种构造：默认分组与路径分组；宽度与外边距被保留。</summary>
+        [Test]
+        public void HorizontalGroup_两种构造()
+        {
+            var defaulted = new HorizontalGroupAttribute(0.5f, 2, 3);
+            Assert.That(defaulted.GroupID, Is.EqualTo(HorizontalGroupAttribute.DEFAULT_NAME));
+            Assert.That(defaulted.Width, Is.EqualTo(0.5f));
+            Assert.That(defaulted.MarginLeft, Is.EqualTo(2f), "ctor 参数是 int，字段是 float。");
+            Assert.That(defaulted.MarginRight, Is.EqualTo(3f));
+
+            Assert.That(new HorizontalGroupAttribute("一行", 0.25f).GroupID, Is.EqualTo("一行"));
+        }
+
+        /// <summary>间距默认 4（浏览器式的贴边很难看；官方默认值未核实，这是本包自定的）。</summary>
+        [Test]
+        public void HorizontalGroup_间距默认四像素()
+        {
+            Assert.That(new HorizontalGroupAttribute().Gap, Is.EqualTo(4f));
+        }
+
+        /// <summary>合并时呈现设定取先出现的非零/非空值。</summary>
+        [Test]
+        public void HorizontalGroup_合并先声明者优先()
+        {
+            var first = new HorizontalGroupAttribute("行", 0.6f) { Gap = 8f, Title = "标题" };
+            var second = new HorizontalGroupAttribute("行", 0.2f) { Gap = 2f, Title = "别的", MaxWidth = 50f };
+
+            first.Combine(second);
+
+            Assert.That(first.Width, Is.EqualTo(0.6f), "先声明的宽度不被覆盖。");
+            Assert.That(first.Gap, Is.EqualTo(8f));
+            Assert.That(first.Title, Is.EqualTo("标题"));
+            Assert.That(first.MaxWidth, Is.EqualTo(50f), "先前没设的才接受后者的值。");
+        }
+
+        /// <summary>分组特性可用在类上、可重复。</summary>
+        [Test]
+        public void HorizontalGroup_可用于类且可重复()
+        {
+            AssertGroupUsage(typeof(HorizontalGroupAttribute));
+        }
+
+        #endregion
+
         #region [TitleAlignments]
 
         /// <summary>四个成员按官方文档的顺序从 0 起排（数值未从官网核实，这条钉的是本包的取值）。</summary>
