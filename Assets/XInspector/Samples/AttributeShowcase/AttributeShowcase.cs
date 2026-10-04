@@ -107,6 +107,38 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 校验与钳制
+
+        /// <summary>空串 → 字段上方出现一条错误框（默认文本）。</summary>
+        [Required]
+        public string playerId = "";
+
+        /// <summary>自定义消息与级别。</summary>
+        [Required("必须填一个昵称", InfoMessageType.Warning)]
+        public string nickname = "";
+
+        /// <summary>纯空白串**不算**空——与上一条对比就是那条语义。</summary>
+        [Required]
+        public string spacesOnly = "   ";
+
+        /// <summary>绘制后被抬到 0：初始值故意给了 -5（打开 Inspector 就会看到它被改掉）。</summary>
+        [MinValue(0)]
+        public int level = -5;
+
+        /// <summary>绘制后被压到 100：初始值故意给了 150。</summary>
+        [MaxValue(100f)]
+        public float heat = 150f;
+
+        /// <summary>拖一个**场景**物体进来就会看到警告（这里需要工程资产）。</summary>
+        [AssetsOnly]
+        public GameObject assetRef;
+
+        /// <summary>拖一个**工程资产**进来就会看到警告（这里需要场景对象）。</summary>
+        [SceneObjectsOnly]
+        public GameObject sceneRef;
+
+        #endregion
+
         #region 信息框
 
         /// <summary>恒显示的信息框。</summary>

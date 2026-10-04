@@ -127,6 +127,26 @@ public bool isAlive = true;
 | `[DisplayAsString]` 的复合类型 | 数组与嵌套结构退回普通绘制——显示成什么形状没有显然的答案 |
 | 多对象编辑 | `[DisplayAsString]` 值不一致时显示 `—`（与 Unity 一致）；`[ProgressBar]` 值不一致时不可拖动 |
 
+### 校验与钳制特性
+
+```csharp
+[Required]                     public string playerId;   // 为空 → 错误框（默认文本）
+[Required("必须填", InfoMessageType.Warning)] public string nickname;
+[MinValue(0)]                  public int level;         // 绘制后钳到下限
+[MaxValue(100f)]               public float heat;
+[AssetsOnly]                   public GameObject prefab; // 只提示、不拦赋值
+[SceneObjectsOnly]             public Transform target;
+```
+
+| 行为 | 说明 |
+|---|---|
+| 「空」的判定 | null、空串、空集合算空；**纯空白串按非空**。数值与 bool 恒视为有值（标上会告警一次） |
+| 只提示不拦 | Unity 的序列化层没有「拒绝写入」的位置，硬拦只会变成悄悄改数据；请在业务层校验 |
+| 钳制时机 | **每次绘制之后**——控件里填了越界值，下一次绘制被拉回范围内。官方未说明时机，这条是本包自定的 |
+| 钳制的三种跳过 | 多对象值不一致、字段当前只读（`[ReadOnly]`/`[DisableIf]`）、非数值类型（告警一次）。理由都是「不悄悄改数据」 |
+| 整数边界取整 | `[MinValue(2.5)]` 的最小合法整数是 3（向上取整），`[MaxValue(2.5)]` 是 2（向下取整） |
+| 引用判定 | 工程资产 vs 场景对象（预制体**实例**算场景对象）。空引用不算违反——那是 `[Required]` 的职责 |
+
 ## 自定义分组特性
 
 继承 `PropertyGroupAttribute` 即可，**构建期不需要改**——分组装配对具体分组类型一无所知：

@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+### Added — L1a：校验与钳制
+
+- **`[Required]`**：为空时在字段上方画一条提示框（默认文本「此字段为必填。」，可自定义消息与
+  级别）。「空」的判定是本包自定的——null、空串、空集合算空，**纯空白串按非空**；数值与 bool
+  无从为空，标在它们上会告警一次。**只提示、不拦保存**：Unity 的序列化层没有「拒绝写入」这个位置。
+- **`[MinValue]`** / **`[MaxValue]`**：绘制后把值钳回范围内（官方只确认「钳制」这件事，时机是
+  本包定的）。**三种情形跳过钳制**，理由都是「不悄悄改数据」：多对象值不一致、字段当前只读
+  （只读意味着这个值不归你改，可能正被游戏逻辑持有）、非数值类型（告警一次）。
+  整数边界取整：`[MinValue(2.5)]` 的最小合法整数是 3。
+- **`[AssetsOnly]`** / **`[SceneObjectsOnly]`**：引用类型校验，不符时画警告框。
+  判据是 `EditorUtility.IsPersistent`（预制体**实例**算场景对象）；空引用不算违反——
+  那是 `[Required]` 的职责，两个特性各管一段。
+- 判空、引用判定、钳制算术全在静态纯函数里（`RequiredValidator` / `ObjectReferenceWarning` /
+  `ValueClamper`），绘制器只做「读值 → 画 → 调下一个」。
+- 新增 `DrawerWarnings.Once`：告警按「属性 + 键」只报一次。绘制器每帧跑一遍，
+  不设去重的话一次标错位置会刷出满屏告警，真正当回事的反被淹掉。
+
 ### Added — L1a：值绘制
 
 - **`[DisplayAsString]`**、**`[ToggleLeft]`**、**`[ProgressBar]`**、**`[EnumToggleButtons]`**：
