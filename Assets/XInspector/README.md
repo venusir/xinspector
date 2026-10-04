@@ -187,15 +187,32 @@ public class PlayerProfileEditor : XInspectorEditor
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。
-- **条件族只做了三分之一。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]` 与四个
-  模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`），
-  以及三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`）。
-  **没有** `[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接 `PrefabKind`
-  之类的枚举参数）、也没有 `[ShowIfGroup]` / `[HideIfGroup]`。
+- **条件族还差两族。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、四个模式变体
+  （`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`）、
+  三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`），
+  以及四个**预制体上下文**条件（`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`，接 `PrefabKind`）。
+  **没有** `[ShowIfGroup]` / `[HideIfGroup]`。
+- **预制体上下文族（含 `[RequiredIn]` `[DisallowModificationsIn]`）有几处自定的边界：**
+  - **模型预制体归入 `Regular`。** Odin 的 `PrefabKind` 里没有模型对应的成员；归成「不匹配」
+    会让 `[ShowIn(PrefabKind.PrefabAsset)]` 在模型资产上**静默隐藏**。
+  - **普通 C# 对象与非预制体资产（`ScriptableObject`、材质……）没有上下文**——既不满足
+    `[ShowIn]` 也不满足 `[HideIn]`。`PrefabKind.NonPrefabInstance` 说的是**场景里**不属于
+    任何预制体的组件与 GameObject，不是「什么预制体都不是」的所有东西。
+  - **多选时要求全部目标都匹配**（已销毁的目标不参与判定；一个存活目标都没有时不匹配）。
+    同时选中一个预制体资产与一个场景对象，两边的字段都不会显示——预制体上下文是
+    整个选择的性质，不是某一个目标的事。
+  - **`[RequiredIn]` 的 `ErrorMessage` 只做纯文本**（Odin 支持它的表达式语法，本包不做）；
+    层级固定为错误，没有级别参数（官方就没有）。
+  - **`[DisallowModificationsIn]` 的「已经改过」用 `SerializedProperty.prefabOverride` 判定**，
+    因此**多选时不报**（多选下它反映的是谁，官方未写明），`[ShowInInspector]` 的反射成员
+    也不报（没有值入口，会在 Console 说明一句）。**只读那一半照常生效。**
 - **条件可以指向三类成员**，按这个顺序找：序列化成员（public 字段或 `[SerializeField]`
   私有字段）→ 普通字段 / 属性 → **无参、非泛型、返回 `bool`** 的方法。
   名字不存在、类型不是 `bool`、方法带参数时一律**保持可见并记一条告警**，不会抛异常；
   写在别的对象上的 `"@other.field"` 语法**不支持**。
+- **同一个成员上挂多个条件时，后装入者覆盖前者**（`PropertyState` 只有一个求值器槽）。
+  覆盖次序是确定的（处理器按优先级、同优先级按类型名排），但**不是「全部满足」语义**
+  ——要表达合取请写一个返回 `bool` 的条件成员。
 
 ## 依赖
 

@@ -605,6 +605,51 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 预制体上下文
+
+        /// <summary>
+        /// 这一组的说明行：**不挂条件**，故哪种上下文里都在，便于对照。
+        /// </summary>
+        [InfoBox(
+            "这一组按「被检视对象处在哪种预制体上下文」开关，与字段的值无关。" +
+            "挂在场景里的普通对象上时，只有 sceneOnly 一行满足条件——其余几行不是坏了，是没到它们的地盘。" +
+            "把本组件放进一个预制体再选中它，资产那一组才会出现。",
+            InfoMessageType.Info)]
+        [BoxGroup("预制体上下文")]
+        public string prefabContextHint = "把本组件放进预制体再选中，看资产那一组";
+
+        /// <summary>只在**场景里的非预制体对象**上显示——把组件挂到场景对象上时就该看到这一行。</summary>
+        [ShowIn(PrefabKind.NonPrefabInstance)]
+        [BoxGroup("预制体上下文")]
+        public string sceneOnly = "场景里的普通对象上才有";
+
+        /// <summary>只在**预制体资产**上显示：选中一个 <c>.prefab</c> 资产才看得到。</summary>
+        [ShowIn(PrefabKind.PrefabAsset)]
+        [BoxGroup("预制体上下文")]
+        public string assetOnly = "预制体资产上才有";
+
+        /// <summary>在**预制体实例**里隐藏：把预制体拖进场景，这一行就没了。</summary>
+        [HideIn(PrefabKind.PrefabInstance)]
+        [BoxGroup("预制体上下文")]
+        public string notInInstances = "预制体实例里看不到我";
+
+        /// <summary>只在**预制体实例**里可编辑，其余上下文里变灰。</summary>
+        [EnableIn(PrefabKind.PrefabInstance)]
+        [BoxGroup("预制体上下文")]
+        public float tuning = 1f;
+
+        /// <summary>在**预制体资产**上禁止修改：资产上变灰，实例上照常可调。</summary>
+        [DisallowModificationsIn(PrefabKind.PrefabAsset)]
+        [BoxGroup("预制体上下文")]
+        public float bakedRadius = 5f;
+
+        /// <summary>只在**预制体资产**上必填：资产上留空会画一条错误提示。</summary>
+        [RequiredIn(PrefabKind.PrefabAsset)]
+        [BoxGroup("预制体上下文")]
+        public string iconName;
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>

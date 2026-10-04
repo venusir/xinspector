@@ -248,6 +248,28 @@
 > **集合只显示摘要**（`List<Int32>（3 项）`），不展开；**嵌套 `[Serializable]` 类型里的成员**
 > 也收不到；**标在方法上编译不过**（方法请用 `[Button]`）。
 
+### 预制体上下文
+
+这一组按**被检视对象所处的预制体上下文**开关，与字段的值无关。判据每帧现取，
+所以进出隔离编辑模式、把预制体拖进拖出场景，字段都会立刻跟着变，不必重开 Inspector。
+
+| 特性 | 预期看到 |
+|---|---|
+| `[ShowIn(PrefabKind.NonPrefabInstance)]` | 组件挂在场景里的普通对象上时，只有 `sceneOnly` 一行在 |
+| `[ShowIn(PrefabKind.PrefabAsset)]` | 把组件**放进一个预制体**再选中那个资产，`assetOnly` 一行才出现 |
+| `[HideIn(PrefabKind.PrefabInstance)]` | 把预制体**拖进场景**，`notInInstances` 一行消失 |
+| `[EnableIn(PrefabKind.PrefabInstance)]` | 同一个实例里 `tuning` 可编辑；回到资产或普通对象上它是灰的 |
+| `[DisallowModificationsIn(PrefabKind.PrefabAsset)]` | 资产上 `bakedRadius` 是灰的；若它在加上本特性之前就被改过，还会多一条错误提示 |
+| `[RequiredIn(PrefabKind.PrefabAsset)]` | 资产上 `iconName` 留空会画一条错误提示；场景对象上这一行根本不出现 |
+
+> **要三种视图才看得全，这不是坏了。** 挂在场景对象上时只会看到说明行与 `sceneOnly`
+> ——其余几行的条件都不满足。看全它们请：① 选中一个 `.prefab` 资产；② 把预制体拖进场景；
+> ③ 双击预制体进隔离编辑模式。本示例**刻意不带 `.prefab` 资产**（包内只放脚本与文档），
+> 自己造一个即可：把本组件挂到一个空物体上，再拖进 Project 窗口。
+
+> **多选时要求全部目标都匹配。** 同时选中一个预制体资产与一个场景对象，两边的字段都不满足条件
+> ——预制体上下文是整个选择的性质，不是某一个目标的事。
+
 ### 调试
 
 | 特性 | 预期看到 |

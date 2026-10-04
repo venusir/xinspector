@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+### Added — L2 收尾之一：预制体上下文族（6 个特性）
+
+- **`PrefabKind`**（`[Flags]` 公开枚举）：10 个成员的名字与语义照官方，**数值是本包自定的
+  位分解**——5 个具体位（一次解析恰好命中其中一个）+ 4 个复合成员（具体位的并集）。
+  于是匹配就只是求交集，`PrefabInstance` / `PrefabAsset` / `PrefabInstanceAndNonPrefabInstance`
+  与 `All` 天然可用，`None` 恒不匹配。
+- **四个预制体上下文条件**：`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`。
+  形态与内嵌环境三兄弟逐字同构（处理器装求值器、判据每帧现读），故**构建期一行没动**
+  ——进出隔离编辑模式会自动跟随，不必重建属性树。
+- **两个预制体上下文校验**：`[RequiredIn]`（判空规则整条复用 `RequiredValidator`，
+  「空」的定义只有一份）、`[DisallowModificationsIn]`（禁用由处理器装，
+  「加上本特性之前就已经被改过」由绘制器画，判据是 `SerializedProperty.prefabOverride`）。
+  这两个原先记在「不做」里，理由是「共用一块尚不存在的基础设施，成对推迟」——
+  那块基础设施就是上面这两条。
+- **种类探测拆成两半**：`PrefabKindResolver` 吃纯数据描述子（零 Unity 调用，可无头测试），
+  `PrefabContextProbe` 只负责把对象探成描述子。本仓此前的 Editor 夹具全是内存里的
+  `ScriptableObject`，一个都不碰 `AssetDatabase`，而预制体夹具必须往盘上写资产——
+  拆开之后判定阶梯的全部分支（模型资产、缺资产、隔离编辑模式、预览场景）都不必落盘。
+- **两处与官方的偏差**（都写进了包 README 与展示台）：**模型预制体归 `Regular`**
+  （官方枚举里没有模型对应的成员，归成「不匹配」会让 `[ShowIn(PrefabKind.PrefabAsset)]`
+  在模型资产上静默隐藏）；**普通 C# 对象与非预制体资产解析为「没有上下文」**
+  （官方对 `NonPrefabInstance` 的定义是「场景里的非预制体组件或 GameObject 实例」）。
+- **多选语义**：预制体上下文是**整个选择**的性质，故要求全部目标都匹配。
+
 ### Added — L3：反射值后端与 `[ShowInInspector]`
 
 - **第二套值后端 `ReflectedValueEntry`**：`PropertyValueEntry` 自 v0 起就是为这条缝留的
