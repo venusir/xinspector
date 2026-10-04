@@ -21,8 +21,8 @@
   都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
   包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
-- 当前版本 `0.1.0-preview.1`，已实现 **58 个特性**；**L1b 整层清完**，
-  下一个目标是 L5 的 `[Button]` 家族。API 尚未稳定
+- 当前版本 `0.1.0-preview.1`，已实现 **68 个特性**；**L1b 与 L5（按钮族 + 回调族）已清完**，
+  下一个目标是 L3 的反射值后端。API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -86,7 +86,8 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
    产生两万个对象）。代价是**绘制器里不得有可变字段**，每属性状态一律进 `PropertyState`。
    违反这条的症状是「展开一个、全都展开了」，很难联想到原因。
 3. **链条末端由构建期显式追加，不进注册表**。末端是结构性的（根/分组接 `ChildrenDrawer`、
-   成员接 `UnityFallbackDrawer`）。交给注册表意味着一个写错的匹配条件就能让某属性链为空，
+   成员接 `UnityFallbackDrawer`、方法节点接 `MethodTerminalDrawer`）。
+   交给注册表意味着一个写错的匹配条件就能让某属性链为空，
    症状是「它静默地什么都不画」——最难归因的一类问题。
 4. **绘制器链的排序是「权重升序 + 序号兜底」**（小 = 外层）。序号兜底必不可少：
    `List.Sort` 是不稳定排序，只比权重的话同权重格子的顺序会随元素个数变化。
@@ -109,7 +110,7 @@ Unity 的 Package Manager 只认 `Packages/` 里的内嵌包与 registry/git 来
 
 ```
 Runtime/                     Venusir.Xinspector
-  Attributes/                公开特性（Title、Groups/BoxGroup…）
+  Attributes/                公开特性（Title、Groups/BoxGroup、Buttons/、Callbacks/…）
   Internal/                  内部工具（PropertyGroupPath）
 Editor/                      Venusir.Xinspector.Editor
   PropertyTree.cs            树；绘制入口
@@ -263,6 +264,15 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 - **`m_Script` 这类 Unity 注入成员没有对应的 `MemberInfo`**，因此不参与处理器的
   「父级注入」钩子（守卫在 `PropertyTreeBuilder.RunProcessors` 里）。让它们触发的话，
   处理器拿到 null 极易 NRE，且「对每个成员各触发一次」这条契约会多算一条
+- **元数据令牌的高字节是表号**：字段在 FieldDef（`0x04`）、方法在 MethodDef（`0x06`），
+  两张表**各自编号**，跨表比大小没有意义（实测同一夹具里字段行号 94/95、方法行号 282/283）；
+  `Type.GetMembers()` 也不按声明顺序返回。故「把方法节点插到它声明所在的字段之间」做不到
+  ——按钮一律排在字段之后。想按声明顺序排方法，只能用**同一张表内**的行号（低 24 位）。
+  三条测量都有用例钉着（`MethodNodeTests`），Unity 哪天换了行为会先红
+- **既无绘制器也无处理器的特性会被自动接管判据漏掉**。生命周期钩子
+  （`[OnInspectorInit]` / `[OnInspectorDispose]` / `[OnStateUpdate]`）就是这样一类：
+  它们不产生节点、不配绘制器，漏掉的症状是「类型不被接管、特性静默不生效、零告警」。
+  新增这类特性时，让它实现 `XInspector.Internal.ITreeLifecycleAttribute`
 
 ## 文档在哪
 
@@ -298,14 +308,18 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 ## 明确不在本轮范围
 
 自定义序列化后端与 `[ShowInInspector]`（反射成员）、样式/调色板系统、
-数组/列表展开、`[Button]` 家族与回调族、`[SerializeReference]` 类型切换、
+数组/列表展开、`[SerializeReference]` 类型切换、
 折叠状态的跨会话持久化、UI Toolkit。
-（`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完。）
+（`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完；
+**L5 的按钮族与回调族也已做完**——两批，2026-10-04。下一步是 L3。）
 
 **特性处理器层已做**（`Editor/Processors/`），条件族做了 `[ShowIf]` `[HideIf]` `[EnableIf]`
 `[DisableIf]`、四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`
 `[DisableInPlayMode]`）、三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]`
 `[DisableInInlineEditors]`），外加类级分组分发。
+**这 11 个条件特性的 `AttributeUsage` 含 `AttributeTargets.Method`**——判据是
+「方法会产生属性树节点而普通属性不会」，放宽的只该是真正会生效的那一侧
+（`[Button, DisableIf(nameof(alive))]` 靠它才编译得过）。
 
 **条件族仍不做**：`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接
 `PrefabKind` 之类的枚举参数，签名未核对到，**猜一个形状写下去比不做更糟**）、
@@ -314,3 +328,9 @@ csproj 未设 `DocumentationFile`，**默认编译根本不检查文档注释**�
 
 **编辑器窗口基类已做**（`Editor/Windows/XInspectorEditorWindow`，绘制窗口自身的序列化字段）。
 **仍不做**：多 target 检视、字段拖拽重排、窗口内 Undo、`[ShowInInspector]` 那类非序列化成员。
+（窗口上的 `[Button]` 方法**能**进树——成员过滤只管字段。）
+
+**按钮族与回调族已做**（`Runtime/Attributes/Buttons/`、`Callbacks/`），共 10 个特性 + 1 个枚举。
+**仍不做**：`[Button]` 的 `ButtonStyle`／像素高度／图标一族／布局一族；参数里的 `ref`/`out`、
+数组与泛型方法；嵌套 `[Serializable]` 类型里的按钮（只对根目标对象生效）；
+`[OnInspectorGUI]` 标在字段上的形式；三个回调的 `action` 变体（本包只认本类型上的方法名）。

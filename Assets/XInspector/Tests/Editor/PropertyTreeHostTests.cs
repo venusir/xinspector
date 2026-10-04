@@ -306,6 +306,51 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 窗口路径
+
+        /// <summary>
+        /// 窗口上的 <c>[Button]</c> 方法照样进树——成员过滤只管**字段**
+        /// （它滤的是 <c>EditorWindow</c> 那七个内部字段），方法收不收由特性决定。
+        /// </summary>
+        [Test]
+        public void Attach_窗口上的按钮方法进树()
+        {
+            var window = ScriptableObject.CreateInstance<ButtonWindow>();
+
+            try
+            {
+                var host = new PropertyTreeHost(WindowMemberFilter.For(typeof(XInspectorEditorWindow)));
+
+                try
+                {
+                    Assert.That(host.Attach(window), Is.True);
+
+                    var paths = new List<string>();
+                    foreach (var child in host.Tree.Root.Children)
+                    {
+                        paths.Add(child.Path);
+                    }
+
+                    Assert.That(paths, Does.Contain("DoThing()"), "窗口上的按钮方法该进树。");
+                    Assert.That(paths, Does.Contain("ownField"), "窗口自己的字段该在。");
+                    Assert.That(
+                        paths,
+                        Does.Not.Contain("m_ViewDataDictionary"),
+                        "EditorWindow 的内部字段仍要被过滤掉。");
+                }
+                finally
+                {
+                    host.Dispose();
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        #endregion
+
         #region 释放
 
         /// <summary>
@@ -456,5 +501,23 @@ namespace XInspector.Tests.Editor
         /// <summary>带无效分组路径的成员。</summary>
         [BoxGroup("")]
         public int value;
+    }
+
+    /// <summary>
+    /// 带按钮方法的窗口——用来验证窗口路径的成员过滤不会把方法节点一起滤掉。
+    /// <para>
+    /// 窗口可以无头建出来（<c>CreateInstance</c>），故这条用例不需要真的开一个窗口。
+    /// </para>
+    /// </summary>
+    internal sealed class ButtonWindow : XInspectorEditorWindow
+    {
+        /// <summary>窗口自己的字段。</summary>
+        public int ownField;
+
+        /// <summary>窗口上的按钮。</summary>
+        [Button]
+        private void DoThing()
+        {
+        }
     }
 }

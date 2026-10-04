@@ -185,6 +185,41 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **方法节点不在收集范围内。**
+        /// <para>
+        /// 重置是按路径去 <c>FindProperty</c> 取值的，而 <c>"DoThing()"</c> 根本不是一条序列化路径
+        /// ——收进来只会被静默跳过。真正要守的是那条不变量：**收进来的每条路径都能交给序列化系统**。
+        /// 方法节点之所以单独占一个 <c>Kind</c>（而不是复用 <c>Member</c>），正是为了让这里天然收不到它。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CollectMemberPaths_ExcludesMethodNodes()
+        {
+            var withButton = ScriptableObject.CreateInstance<ButtonHostFixture>();
+
+            try
+            {
+                var tree = BuildTree(withButton);
+
+                // 先确认前提：树里确实有那个方法节点，否则本用例是空转。
+                var rawPaths = new List<string>();
+                foreach (var child in tree.Root.Children)
+                {
+                    rawPaths.Add(child.Path);
+                }
+
+                Assert.That(rawPaths, Does.Contain("DoThing()"), "前提不成立：树里没有方法节点，本用例无意义。");
+
+                Assert.That(PropertyTreeReset.CollectMemberPaths(tree), Does.Not.Contain("DoThing()"));
+                Assert.That(PropertyTreeReset.CollectMemberPaths(tree), Does.Contain("value"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(withButton);
+            }
+        }
+
+        /// <summary>
         /// 被分组包着的成员也要收进来。
         /// <para>
         /// 分组节点不是成员，若只取根的直接子节点，被分组的字段会被静默漏掉——
@@ -294,5 +329,18 @@ namespace XInspector.Tests.Editor
 
         /// <summary>字符串成员。</summary>
         public string text = DefaultText;
+    }
+
+    /// <summary>带按钮方法的夹具——用来钉住「方法节点不进重置范围」。</summary>
+    internal sealed class ButtonHostFixture : ScriptableObject
+    {
+        /// <summary>普通字段，用来确认收集本身没坏。</summary>
+        public int value = 1;
+
+        /// <summary>方法节点。</summary>
+        [Button]
+        private void DoThing()
+        {
+        }
     }
 }
