@@ -84,6 +84,13 @@
   取值时抛异常还是挑一个目标？**不能挑一个冒充**
 - 读写的类型分支是否覆盖了 `SerializedPropertyType` 的常用项？未覆盖的是抛异常
   还是静默返回默认值？（应当抛）
+- **第二套后端**（`ReflectedValueEntry`）的只读契约被守住没有？`SetValue` 必须恒抛；
+  `SerializedProperty` 为 null **当且仅当** `IsUnityBacked` 为 false
+- **反射成员的取值走的是单次读取 API 吗**？「先问 `HasMultipleDifferentValues`
+  再问 `GetValue`」会把用户的 getter 每帧读两轮——那条 API 存在的唯一理由就是这个
+- 目标列表是 `object[]` 而不是 `Object[]` 之后，判空**是否都过了 `TargetObjects.IsAlive`**？
+  裸写 `!= null` 对已销毁的 Unity 对象会返回错误的答案（引用比较），
+  而这条语义以前是 `Object[]` 白送的
 
 ### E. 性能与 GC
 
@@ -91,7 +98,12 @@
   闭包分配、字符串拼接？
 - `GUIContent` 是否被复用？（默认标签缓存在节点上）
 - 绘制器实例是否**共享**而非每属性新建？
-- 反射是否只发生在构建期？绘制路径里出现反射就是问题
+- 反射是否只发生在构建期？绘制路径里出现反射就是问题。
+  **包括取值**：反射成员与反射条件都必须在构建期编译成委托
+  （`ReflectedAccessor`、`TryCreateBooleanReader`、`MethodInfo.CreateDelegate`），
+  绘制期只剩委托调用。`MethodInfo.Invoke` 出现在每帧路径上同样是问题
+- 每帧路径上有没有**装箱**？`ReflectedAccessor.Read` 会装箱（只读展示每帧本来就要拼字符串，
+  可接受）；条件求值那条**不行**，它走的是强类型读取器
 - `PropertyState` 的附加状态袋是否按类型复用（`GetOrCreate`）而不是每帧新建？
 
 ### F. 扩展点契约

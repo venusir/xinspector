@@ -35,11 +35,11 @@ namespace XInspector.Sandbox.EditorTools
         }
 
         /// <summary>
-        /// 创建场景：默认摄像机与平行光，外加四个演示对象。
+        /// 创建场景：默认摄像机与平行光，外加六个演示对象。
         /// </summary>
         /// <remarks>
         /// 供 <c>-executeMethod</c> 调用，故必须是 public static 且无参。
-        /// 四个对象各代表一条集成路径，逐一选中即可对照。
+        /// 六个对象各代表一条集成路径，逐一选中即可对照。
         /// <para>
         /// Demo 1 与 Demo 4 是一组对照：前者**刻意不带任何 XInspector 特性**，
         /// 后者只带 Unity 原生装饰器，两者外观都应与原生 Inspector 一致
@@ -51,8 +51,9 @@ namespace XInspector.Sandbox.EditorTools
         /// 故顺带验证它本身画得对），Demo 3 靠宏自动接管。
         /// </para>
         /// <para>
-        /// Demo 5 盯的是自动接管判据的**方法侧**：它只有 <c>[Button]</c> 方法、一个字段特性都不带，
-        /// 判据漏扫方法时它会静默地退回原生外观（按钮不见、无告警）。
+        /// Demo 5 与 Demo 6 是自动接管判据的两侧对照：Demo 5 只有 <c>[Button]</c> **方法**、
+        /// 一个字段特性都不带，Demo 6 只有 <c>[ShowInInspector]</c> **属性**、同样不带字段特性。
+        /// 判据漏扫哪一侧，对应的那个就会静默地退回原生外观（按钮不见 / 属性不出现、都是零告警）。
         /// </para>
         /// <para>
         /// 演示对象的名字被 <c>OdinGap.md</c> 等文档按名引用，**改名会打断那些验证步骤**。
@@ -68,6 +69,7 @@ namespace XInspector.Sandbox.EditorTools
             AddDemo<AutoTakeoverDemo>("Demo 3 - Auto Takeover");
             AddDemo<NativeDecoratorDemo>("Demo 4 - Native Decorators (L0)");
             AddDemo<ButtonTakeoverDemo>("Demo 5 - Button Takeover");
+            AddDemo<ShowInInspectorTakeoverDemo>("Demo 6 - Reflected Member Takeover");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);

@@ -15,14 +15,18 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-04，L5 两批之后）：**
+**本项目的家底（2026-10-04，L3 之后）：**
 
-- 公开特性 **68 个**（清单见文末「总账」），分七族：分组与条件、状态与门控、标签与外观、
-  值绘制、校验与钳制、**按钮**、**回调**，另有调试 1 个
+- 公开特性 **69 个**（清单见文末「总账」），分八族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制、按钮、回调、**反射成员**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加两个自建枚举 `TitleAlignments`、`ButtonSizes`）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
 - **方法节点**：树上第一次出现没有值的节点（`InspectorPropertyKind.Method`）
-- 窗口基类 1 个（`XInspectorEditorWindow`，只画自身序列化字段）
+- **反射成员节点**：树上第一次出现值不来自 Unity 序列化的节点（`InspectorPropertyKind.ReflectedMember`），
+  配套**第二套值后端** `ReflectedValueEntry`（只读），以及把成员编译成委托的 `ReflectedAccessor`
+- 三个标记接口各司其职：`ITreeLifecycleAttribute`（不产生节点）、`ITreeMembershipAttribute`
+  （产生节点但不画也不改别人）、自定义分组的 `PropertyGroupAttribute`（抽象基类）
+- 窗口基类 1 个（`XInspectorEditorWindow`，默认画自身字段，覆写 `GetTarget()` 可检视任意对象）
 
 ---
 
@@ -49,7 +53,7 @@
 | **L1a** | 21 个十几行的特性 | **零新基础设施** ✅ **已清完**（2026-10-04） |
 | **L1b** | 分组族与重型值绘制器 | **✅ 整层已清完**（2026-10-04）：分组族 6 个、值绘制器 6 个，收尾的 `[InlineEditor]` 一族（含三个内嵌环境条件）也落地了 |
 | **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做 |
-| **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`） |
+| **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持 |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
 | **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 集合自绘 |
@@ -86,6 +90,12 @@
 > （4 个特性）落地，**L1b 整层清完**。本批有两处「第一次」：签名里**第一次没有 resolved string**；
 > 也是第一次出现**本包自定值**（嵌套上限、预览默认尺寸与位置）与**与 Odin 的语义差异**
 > （`CompletelyHidden` 空值时给一行灰字提示而不是留白）。三条自定值都写进了 README 与展示台。
+>
+> **同日的第五、六批**（[Pipeline.md](Modules/Pipeline.md) §八/§九）：L5 按钮与回调两批、
+> 随后是 **L3 反射值后端**（`[ShowInInspector]`、窗口 `GetTarget()`，外加 L2 剩余的
+> 「条件指向普通属性/方法」）。家底 68 → 69，缺口 26 → 25。
+> 三处与 Odin 的差异在这一轮固定下来：反射成员**只读**、静态成员会显示、
+> `[ShowInInspector]` **不标方法**（编译期报错而不是静默）。
 
 ### Type Specifics（24）
 
@@ -109,7 +119,7 @@
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
-| `[TypeDrawerSettings]` | ❌ 缺 | **L3**（样例一律挂在 `[ShowInInspector]` 的 `System.Type` 字段上；2026-10-04 由 L1b 改判） |
+| `[TypeDrawerSettings]` | ❌ 缺 | **独立性已核实**：它**借** `[ShowInInspector]` 的 `System.Type` 字段出场，但依赖的是一整套类型选择器绘制（`BaseType` + `TypeInclusionFilter` 枚举），不是反射后端。L3 落地后它仍在，见 Pipeline §九末 |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ❌ 缺 | L6（另见 Collections） |
 | `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
@@ -136,15 +146,15 @@
 | `[Required]` | ✅ 已实现 | — |
 | `[RequiredIn]` | ⛔ 不做 | 需 `PrefabKind` + 预制体探测 + 校验消息层，与 `[DisallowModificationsIn]` 成对推迟 |
 | `[Searchable]` | ❌ 缺 | **L6**（过滤的是字段/类型的**子成员**，不拥有子绘制权就无从过滤；2026-10-04 由 L1b 改判） |
-| `[ShowInInspector]` | ❌ 缺 | L3 |
+| `[ShowInInspector]` | ✅ 已实现 | 第二套值后端：**只读**展示（`SetValue` 恒抛），标在方法上编译不过 |
 | **`[Title]`** | **✅ 已实现** | — |
 | `[TypeFilter]` | ⛔ 不做 | 唯一构造是 resolved string（样例里是方法），且被标注字段是抽象/接口类型——还需 L7 的类型切换。2026-10-04 核过签名后判定 |
 | `[TypeInfoBox]` | ✅ 已实现 | — |
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ✅ 已实现 | 数据源只收序列化数组/List；只声明有真行为的选项（另见 Collections） |
 
-**小计：已实现 12 / 缺 3 / 不做 4**（2026-10-04：`[ValueDropdown]` 转已实现；
-`[TypeFilter]` 由「缺」改判「不做」）
+**小计：已实现 13 / 缺 2 / 不做 4**（2026-10-04：`[ValueDropdown]` 转已实现、
+`[TypeFilter]` 由「缺」改判「不做」；同日 L3 把 `[ShowInInspector]` 转已实现）
 
 ### Validation（15）
 
@@ -298,10 +308,10 @@
 ### 总账
 
 ```
-108 个不重复特性 = 68 已实现 + 26 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 69 已实现 + 25 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 68 个：
+已实现的 69 个：
 
 - **分组与条件**（19）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -320,6 +330,7 @@
 - **按钮**（4，2026-10-04 L5）：`[Button]` `[InlineButton]` `[ButtonGroup]` `[ResponsiveButtonGroup]`
 - **回调**（6，2026-10-04 L5）：`[OnInspectorInit]` `[OnInspectorDispose]` `[OnStateUpdate]`
   `[OnInspectorGUI]` `[OnValueChanged]` `[CustomContextMenu]`
+- **反射成员**（1，2026-10-04 L3）：`[ShowInInspector]`
 - **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
@@ -344,10 +355,11 @@ L1a、L1b 两族、`[InlineEditor]` 一族、以及 **L5 的按钮与回调两�
 | Odin 的能力 | 状态 | 依赖 |
 |---|---|---|
 | `OdinEditorWindow`：画**字段** | ✅ 已实现（`XInspectorEditorWindow`） | — |
-| 画**属性与方法** | ❌ 缺 | L3 反射后端 |
-| `GetTarget()`：渲染**任意**对象（不必可序列化、不必是 `UnityEngine.Object`） | ❌ 缺 | L3 |
+| 画**属性与方法** | ✅ 已实现（2026-10-04 L3）：`[ShowInInspector]` 收普通属性与非序列化字段、方法节点收 `[Button]` 一族 | — |
+| `GetTarget()`：渲染**任意**对象（不必可序列化、不必是 `UnityEngine.Object`） | ✅ 已实现（2026-10-04 L3）：`protected virtual object GetTarget()` | — |
+| `[OnInspectorGUI]`：混入自定义 IMGUI | ✅（方法上的无参形式，L5 已做） | — |
 | `Initialize()` / `WindowPadding` | ❌ 缺 | 无（轻量） |
-| `[OnInspectorGUI]` / `DrawEditors`：混入自定义 IMGUI | ❌ 缺 | L5 |
+| `DrawEditors`：整段编辑器混入 | ❌ 缺 | 与 `[OnInspectorGUI]` 同源，缺的只是一个理由 |
 | `OdinMenuEditorWindow` + `OdinMenuTree`（`AddAllAssetsAtPath`、图标、多选、菜单样式） | ❌ 缺 | **独立大件** |
 
 **一处刻意的差异，不是缺口：** Odin **不让你覆写 `OnGUI`**（要求覆写 `DrawEditors`
@@ -418,21 +430,30 @@ L1a、L1b 两族、`[InlineEditor]` 一族、以及 **L5 的按钮与回调两�
 |---|---|
 | `[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]` | 它们接的是 `PrefabKind` 之类的枚举参数，**具体签名未从官网核对到**。猜一个形状写下去比不做更糟——它会被当成已有能力 |
 | `[ShowIfGroup]` `[HideIfGroup]` | 同上，分组变体的签名待核 |
-| 条件为**方法**或**普通属性** | 需要 L3 的反射后端；本包的条件对象必须是序列化成员 |
-| 条件写在**别的对象**上（Odin 的 `"@other.field"`） | 同上，且需要跨对象引用解析 |
+| ~~条件为**方法**或**普通属性**~~ | ✅ 已随 L3 落地（2026-10-04）：三级解析「序列化成员 → 反射字段/属性 → 无参返回 bool 的方法」 |
+| 条件写在**别的对象**上（Odin 的 `"@other.field"`） | 需要跨对象引用解析，与本包「条件名只认本对象」的既有边界冲突 |
 | ~~`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`~~ | ✅ 已随 `[InlineEditor]` 一族落地（2026-10-04）——这张表里只剩上面三行 |
 
-## L3 · 需要反射值后端
+## L3 · 需要反射值后端　✅ 已做（2026-10-04）
 
-`[ShowInInspector]`——画**属性、方法、非序列化成员**。它开启的是「画 Unity 不序列化的东西」
-这整类能力。
+`[ShowInInspector]`——画**属性、非序列化字段、静态成员**。它开启的是「画 Unity 不序列化的东西」
+这整类能力。窗口的 `GetTarget()` 同在这一次落地。
 
-做法已经在架构里留了口子：`PropertyValueEntry` 就是那条缝，新增一个反射后端的派生类即可，
-树的其余部分不动。代价是**拿不到** `SerializedObject` 白送的那五件事
-（Undo、预制体覆盖、场景标脏、多对象编辑、域重载后取值）——那五件是 `SerializedObject` 给的，
-反射后端一件也没有。所以它的成员应当**明确只读或明确提示不可撤销**，不假装能撤销。
+**当初那条判断兑现了：**「`PropertyValueEntry` 就是那条缝，新增一个反射后端的派生类即可，
+树的其余部分不动」——`ReflectedValueEntry` 确实只加了一个派生类，
+末端按节点种类选一格（照 `Method` 的先例），树的其余部分真的没动。
 
-窗口的 `GetTarget()`（渲染任意对象，不必可序列化）也依赖这一层。
+**代价也如当初所料：** 那五件事（Undo、预制体覆盖、场景标脏、多对象编辑、域重载后取值）
+一件也拿不到。故本包把「只读」推到底——`SetValue` 恒抛。Odin 是「能改但不保存」，
+本包是「不给改」，理由见 Pipeline §二 第 17 条。
+
+**本轮另外清掉的**：L2 剩余项里的「条件指向普通属性/方法」也一并做了（三级解析）。
+L2 表里还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——它们卡在**签名未核**，
+与反射后端无关。
+
+**没清掉的**：`[TypeDrawerSettings]` 原记在 L3，核过签名后确认它依赖的是
+一整套 `System.Type` 的绘制（类型选择器 + `TypeInclusionFilter` 枚举），
+只是**借** `[ShowInInspector]` 的样例出场。它是独立的一批。
 
 ## L4 · 需要构建期支持
 
@@ -517,21 +538,33 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    **分组子节点的折行布局**（原有策略只表达单行）；其余全是加法。
    落地的同时修掉两处会静默的缺陷：`IsUsedBy` 漏扫方法（只挂 `[Button]` 的类型不被自动接管，
    按钮完全不出现且零告警）、`Dispose` 重复调用会重跑生命周期钩子。
-5. **L3 反射后端**——**下一个**。L2 剩余项（`[ShowIn]` 一族、`[ShowIfGroup]`、条件写在方法或
-   普通属性上）与窗口 `GetTarget()` 的前置，也是 `[TypeDrawerSettings]` 的前置。
-   本轮之后它成了**唯一一个卡着一串东西的层**。
-6. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
+5. ~~**L3 反射后端**~~——✅ **已做**（2026-10-04）。当初把它排在这里的两条判断都兑现了：
+   其一，它确实**只加了一个 `PropertyValueEntry` 派生类**，树的其余部分没动；
+   其二，条件族指向普通属性/方法确实跟着它一起落地。
+   它当初「卡着一串东西」的说法也**部分落空**——`[TypeDrawerSettings]` 核过签名后
+   确认是独立的一批（依赖 `System.Type` 的绘制，不依赖反射后端），
+   这是本表第二次因为「一个『等』字」而估错层（第一次见本轮的经验三）。
+6. **L2 剩余四项**——**下一个候选**。`[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`
+   与 `[ShowIfGroup]` / `[HideIfGroup]` 全卡在**签名未核**：它们接 `PrefabKind` 之类的枚举参数，
+   猜一个形状写下去比不做更糟。跨对象条件 `"@other.field"` 另需一套对象引用解析。
+   这一批的性价比取决于能否核到签名。
+7. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
    以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
-7. **L7**——要么不做，要么当成独立产品立项。
+8. **L7**——要么不做，要么当成独立产品立项。
 
 **判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
-已兑现；L3 是低杠杆但卡着一串东西；L7 是另一条产品线。
+已兑现；L3 是**低杠杆但清掉了一类能力**——它只添了一个特性，却让「画 Unity 不序列化的东西」
+这件事从「做不到」变成「做得到（只读）」，顺带解锁了条件族与窗口。
+L7 是另一条产品线。
 
-**三条经验留给下一轮**：其一，**核对签名之后再动手**——两轮共核过 37 个特性，
+**四条经验留给下一轮**：其一，**核对签名之后再动手**——三轮共核过 41 个特性，
 才敢把 10 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
 （分组绘制器落在成员与根节点上、同路径多类型被静默丢弃），它们是设计评审读源码时发现的，
-不修的话六个新特性会各自把它放大一遍；其三，**分层本身会错**——本轮把五个特性从 L1b
-挪到 L6/L3/⛔，说明「一个「等」字」足以让整层的成本估算失真，**分类也是要核对的结论**。
+不修的话六个新特性会各自把它放大一遍；其三，**分层本身会错**——上一轮把五个特性从 L1b
+挪到 L6/L3/⛔，说明「一个「等」字」足以让整层的成本估算失真，**分类也是要核对的结论**；
+其四，**改一个类型会弄丢一条白送的语义**——目标列表从 `Object[]` 变 `object[]`，
+`!= null` 就从「Unity 的重载」退化成「引用比较」，而没有任何编译器提醒。
+**改型时要问的不只是「哪里编译不过」，还有「哪些语义是那种类型免费给的」**。
 
 ---
 

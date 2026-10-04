@@ -7,6 +7,51 @@
 
 ## [Unreleased]
 
+### Added — L3：反射值后端与 `[ShowInInspector]`
+
+- **第二套值后端 `ReflectedValueEntry`**：`PropertyValueEntry` 自 v0 起就是为这条缝留的
+  （类型注释里写着「届时只需新增一个派生类，树的其余部分不动」），到这里才第一次通电。
+  `IsUnityBacked` 恒 `false`、`SerializedProperty` 恒 `null`、**`SetValue` 恒抛**——
+  反射成员一律只读。至此 `HasMultipleDifferentValues` 第一次有了消费者。
+- **取值走构建期编译的委托**（`ReflectedAccessor`，表达式树）：反射只发生在建树时，
+  绘制路径上是一次委托调用。编译不出来（索引器、只写属性）的成员**跳过并告警**，
+  刻意不设「每帧反射」的兜底。
+- **`[ShowInInspector]`**（字段 / 属性）：把 Unity 不会序列化的成员画出来——普通属性、
+  没有 `[SerializeField]` 的私有字段、静态成员。值每帧现读，多目标不一致显示「—」。
+  已被序列化通道收走的成员**不会重复**；`[HideInInspector]` 的序列化字段反会被收进来。
+  标在方法上**编译不过**（方法请用 `[Button]`）。
+- **`ITreeMembershipAttribute`**（internal 标记接口）：`[ShowInInspector]` 既无绘制器也无处理器
+  ——它的作用发生在**成员收集**那一步，两张注册表都查不到它。没有这个标记，
+  `IsUsedBy` 会漏掉，后果与条件族、生命周期钩子当年一样：类型不被接管、特性静默失效、零告警。
+- **窗口可以检视任意对象**：`XInspectorEditorWindow.GetTarget()`（`protected virtual`，默认返回窗口自身）
+  可返回任意类型实例——不必可序列化，不必是 `UnityEngine.Object`。
+  那种目标只收带 `[ShowInInspector]` 的成员且不可重置（工具栏按钮置灰，空树给一句解释）。
+- **`PropertyTree.CreateReflected(object)`**：没有 `SerializedObject` 的树。
+  名字带 `Reflected` 而不是做成 `Create(object)` 重载——后者会让现有调用 `Create(null)` 撞成二义。
+- **条件族指向普通属性与无参 `bool` 方法**：`[ShowIf("x")]` 的 `x` 按
+  「序列化成员 → 反射字段/属性 → 无参返回 bool 的方法」三级解析。条件的求值仍走
+  构建期编译的**强类型**委托，绘制期不反射也不装箱。
+
+### Changed — L3 收尾
+
+- **属性树的目标列表从 `UnityEngine.Object[]` 变成 `object[]`**（`PropertyTree.Targets`）。
+  改型顺带弄丢了一条白送的语义：形参写成 `object` 之后，裸写 `target != null` 退化成引用比较，
+  而 Unity 的已销毁对象恰恰是「引用不为 null、语义为空」。新增 `TargetObjects.IsAlive`
+  把这层语义收成一处，逐点补回。
+- **`PropertyTree.SerializedObject` 从此可为 `null`**（`CreateReflected` 那条路）。
+- **`MethodInvoker` 用 `targets is Object[]` 守 Undo**：序列化路径传进来的仍是运行时的
+  `Object[]`，判断零分配；POCO 目标上的按钮照常可点，只是不记撤销。
+- **`XInspectorUsageDetection.IsUsedBy` 补上属性扫描与静态字段扫描**：
+  此前只扫字段与方法，而 `[ShowInInspector]` 的主战场正是普通属性。
+- **`DrawerWarnings.TypeMismatch` 学会认后端**：对反射成员不再说「字段退回普通绘制」
+  （它没有字段可退），改成「该特性对反射成员无效，值仍以只读文本显示」。
+- **补两处静默退让**：`[DelayedProperty]` 与 `[OnValueChanged]` 拿不到 `SerializedProperty` 时
+  本是静默返回的，现在会告警一次。
+- **修一条恒真的空断言**：`MethodInvokerTests.不记Undo时撤销栈无此步` 拿
+  `Undo.GetCurrentGroupName()` 当判据，而那个名字只在显式 `SetCurrentGroupName` 之后才有、
+  `RecordObjects` 不给它命名——断言在任何情况下都成立。改成「先记一步已知可撤销的，
+  再来一步不记的，撤一次看收回的是哪一步」。
+
 ### Added — L5 第二批：回调族
 
 - **`[OnInspectorInit]` / `[OnInspectorDispose]`**（仅方法）：建树时 / 释放时各调一次。

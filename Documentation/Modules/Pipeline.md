@@ -261,6 +261,53 @@ destroyed explicitly」），与「状态归 `PropertyState`、清空者负责�
 嵌套的 `XInspectorEditor` 就是其中之一，等于每帧重建一棵属性树。
 缓存进 `PropertyState` 才是对的：目标没换就不重建，换了先销毁再建。
 
+### 17. 反射成员可编辑（第六轮，否决）
+
+这是 L3 最想当然的形状：既然是 `PropertyInfo`/`FieldInfo`，`SetValue` 一行就能写。
+**否决的理由不是做不到，是做不到不骗人。** 这些成员按定义不在 Unity 的序列化里：
+写进去拿不到 Undo、不会标脏、不随存档保存，下次域重载就回来了。
+Odin 自己的文档也写着「`[ShowInInspector]` 不序列化任何东西，改动不会随之保存」
+——他选择照写但提示，本包选择**干脆不给写**。
+
+代价是少了一个「快速调参」的用法。换来的是：这个后端的每一条承诺都是真的，
+`SetValue` 恒抛这件事在源码里只有一处，读的人不会猜。
+
+### 18. 每帧反射取值（第六轮，否决）
+
+最省事的实现是 `PropertyInfo.GetValue(target)` 直接在绘制器里调——反射成员的值每帧都要读。
+但「反射仅限构建期」是本仓的硬规则，而一处例外就足以让整条规则再也说不清。
+
+改法是把成员编译成委托（`ReflectedAccessor`，表达式树 + `Compile()`），建树时一次，
+绘制期只剩委托调用加一次装箱。为此先在 Mono 上实测了「表达式树能不能访问私有成员」
+（能，11 例 spike 全过），**没有**退回 `DynamicMethod(skipVisibility: true)`。
+
+同一条理由也管条件：`[ShowIf("某属性")]` 的求值在**每帧路径**上，
+故它走的是强类型读取器 `TryCreateBooleanReader`（不装箱），方法则绑成委托而**不是每帧 `Invoke`**。
+
+### 19. POCO 目标自动收 public 成员（第六轮，否决）
+
+Odin 的 Static Inspector 会把你给它的对象的成员自动收一批出来。那是建立在他的
+Serializer 类型系统上的：他有一套「什么算可序列化」的定义。**本包没有那套东西**，
+照搬只能退化成「凡 public 就收」——于是同一个类型在 Inspector 里靠序列化、在窗口里靠可见性，
+两套语义并存，而它们对同一个字段的答案可以不同。
+
+改成显式：非 Unity 对象的目标**只收带 `[ShowInInspector]` 的成员**，空树时画一句解释
+而不是一片空白。想让它出现，就标上。
+
+### 20. `XInspectorDrawer.NeedsUnityBackend` 虚属性（第六轮，否决）
+
+问题是真的：`[ShowInInspector, PropertyRange]` 是本轮最现实的组合（Odin 官方样例就这么写），
+而 `[PropertyRange]` 对反射成员无效——本包不能接受「标了没反应」。
+
+草图是给绘制器基类加一个 `internal virtual bool NeedsUnityBackend`，由需要序列化属性的绘制器覆写，
+末端据此画一条行内提示。**清点之后否决**：真正**静默**的只有两处
+（`[DelayedProperty]`、`[OnValueChanged]`），其余十几个经 `DrawerWarnings.Once` 早在 Console 有告警。
+为一个「行内 vs Console」的差别，加 25 处与绘制器代码重复的声明，还多一类「新绘制器忘了覆写」
+的新静默面——不值。
+
+落地的形状是：**补上那两处静默点的告警 + 让 `DrawerWarnings.TypeMismatch` 认后端**
+（对反射成员不再说「字段退回普通绘制」——它没有字段可退，措辞错了比不说更糟）。
+
 ---
 
 ## 三、未决项
@@ -270,8 +317,11 @@ destroyed explicitly」），与「状态归 `PropertyState`、清空者负责�
 | 问题 | 卡在哪 |
 |---|---|
 | 类级 `[BoxGroup]` 分发到成员 | 需要处理器层。且要想清楚：类级分组与成员自己声明的分组**冲突**时谁赢？ |
-| 多对象编辑下 `[ShowIf]` 的语义 | 各目标条件值不同时「显示还是不显示」没有显然答案。倾向「任一满足即显示」，与自动编辑器的取舍一致 |
-| 反射后端如何标脏与撤销 | `[ShowInInspector]` 那类走反射写入，拿不到 `SerializedObject` 的 Undo/标脏。倾向「明确只读或明确提示不可撤销」，不假装能撤销 |
+| 多对象编辑下 `[ShowIf]` 的语义 | 各目标条件值不同时「显示还是不显示」没有显然答案。**第六轮部分落地**：反射条件取**第一个目标**，与序列化条件（`SerializedProperty.boolValue` 读的同样是主目标）保持一致——语义是「不扩大」，不是「解决了」 |
+| ~~反射后端如何标脏与撤销~~ | **已结案（第六轮）**：只读。理由与三类否决见 §二 第 17 条 |
+| 嵌套 `[Serializable]` 类型里的反射成员 | 拿到嵌套实例需要一条「只读反射路径解析」（`[Button]` 对嵌套类型的老限制同源）。它一旦有了，`[ShowInInspector]` 与 `[Button]` 会同时受益——这正是它值得单独一轮的原因 |
+| `[ToggleGroup]` 一族在反射树上的解析 | 它们按序列化路径找「开关字段」，POCO 树上找不到。现状是告警失效；要与条件族那样三级解析，得先把「按名找成员」这件事整个收成一层 |
+| 反射成员的值每帧读一次 | 只读展示每帧现读是刻意的（缓存会「该变不变」），但用户 getter 有副作用或开销时没有退路。要不要给一个「手动刷新」的开关，等真有抱怨再说 |
 | 折叠状态的持久化落点 | `EditorPrefs`（跨项目共享）、`SessionState`（不跨会话）、序列化进场景（污染资产）三者各有问题。等 `[FoldoutGroup]` 来了再定 |
 | `[OnValueChanged]` 的触发时机 | 判断「值变了」要每帧比对旧值，旧值该放 `PropertyState`；但触发时机（绘制前后？`Update` 前后？）未定 |
 | 数组展开的边界 | 全自己做就要自己处理增删/拖拽/多选/Undo。倾向先只做「只读展示 + 元素级特性」 |
@@ -716,7 +766,59 @@ Invoke-WebRequest https://odininspector.com/documentation/sirenix.odininspector.
 
 ---
 
-## 九、审计记忆
+## 九、第六批签名核对（2026-10-04）——L3 反射值后端
+
+L3 只有两个新面孔，但两个都得核——它们各自的形状直接决定整层怎么做。
+
+### 逐条：官方原文 → 本包决定
+
+| 项 | 官方事实 | 本包决定 |
+|---|---|---|
+| `[ShowInInspector]` | 「used on any member, and shows the value in the inspector」；**无构造参数**（样例一律裸写）；可写性**由成员自己决定**（get-only 就只读、有 setter 就能写）；**静态成员也在样例里** | 收；`AttributeUsage` 收窄到 `Field \| Property`，**不含 Method**（见下） |
+| `[ShowInInspector]` 的序列化语义 | 官方原文：「will not serialize anything; meaning that any changes you make will not be saved」 | **照做，但推到底**：既然改动不保存，本包干脆不给写（§二 第 17 条）。Odin 是「能改但不保存」，本包是「不给改」——这条差异写进了 README |
+| `GetTarget()` | `protected override object GetTarget()`；「give it any instance of any type to render」，**不必可序列化、不必是 Unity 对象** | 收，`protected virtual object GetTarget() => this` |
+
+### 两处收窄
+
+**其一，`[ShowInInspector]` 不标方法。** Odin 的特性页**没有**记录方法用法——它样例里的方法
+用的是 `[Button]` 与 `[OnInspectorInit]`。而本包已有 `[Button]`，「显示一个方法的返回值」
+没有既定语义。于是 `AttributeUsage` 不含 `Method`：标错**编译期就报错**（响的），
+而不是标了没反应。哪天核到官方语义，放宽 `AttributeUsage` 是纯加法。
+
+**其二，`GetTarget()` 不接收「浮空 Inspector」那整套。** 目标可以是任意对象，但**没有**
+对象选择器、没有 target 槽位的工具栏 UI——那是第四轮就否决过的另一种产品形态
+（§二 第 12 条），本轮的 `GetTarget()` 只解决「检视谁由子类说了算」。
+
+### 落地时的三条实测结论（改动前先读）
+
+**一、表达式树在本仓环境里能访问私有成员。** 这是整层最大的未知数：编译期委托要读
+`private` 字段与属性，而 .NET 的 `LambdaCompiler` 在某些信任级别下会拒绝。
+先写了 11 例 spike（私有字段、私有属性、值类型、静态成员各覆盖），全过——
+**没有**退回 `DynamicMethod(skipVisibility: true)`。那条退路仍写在代码注释里。
+
+**二、`Object[]` 变 `object[]` 会静默弄丢一条语义。** 形参类型一旦写成 `object`，
+裸写 `target != null` 就退化成引用比较，而 Unity 的已销毁对象恰恰是「引用不为 null、
+语义为空」。以前这是白送的（数组是 `Object[]`，`!= null` 自动走 Unity 的重载）。
+**改型时顺手新增 `TargetObjects.IsAlive` 把这层语义收成一处**，逐点补回——
+不补的症状是「多选里混了已销毁对象时按钮对它照调不误」，不致命，但是静默的行为退化。
+
+**三、`Undo.GetCurrentGroupName()` 不能当「记没记 Undo」的判据。** 组名只在显式
+`SetCurrentGroupName` 之后才有，`RecordObjects` 不给它命名——于是 `断言 != 我们给的名字`
+在任何情况下都成立。本仓有一条这样的断言活了很久（`不记Undo时撤销栈无此步`），
+本轮顺带修掉。可观测的判据是：**先记一步已知可撤销的**（撤销栈因此非空、行为确定），
+再来一步不记的，撤一次看收回的是哪一步。
+
+### 分类也要核对（第三次）
+
+第五轮记过「分层本身会错」。本轮又验证了一次，只是方向相反：
+`[TypeDrawerSettings]` 挂在 L3 下，本轮**没有做**——因为核过签名之后发现它要的不是反射后端，
+而是一整套 `System.Type` 的绘制（`TypeDrawerSettings(BaseType = typeof(...), Filter = TypeInclusionFilter.IncludeAll)`，
+靠一个名为 `TypeInclusionFilter` 的枚举 + 类型选择器）。它**借** `[ShowInInspector]` 的样例出场，
+但那只是示范场所，不是依赖。L3 因此在这一轮**没有全部清完**，而这是核对出来的，不是漏掉的。
+
+---
+
+## 十、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 

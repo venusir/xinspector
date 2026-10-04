@@ -156,6 +156,22 @@ internal sealed class MyWindow : XInspectorEditorWindow
 }
 ```
 
+默认画的是**窗口自身的字段**（外加 `[ShowInInspector]` 的成员）。想检视别的对象，
+覆写 `GetTarget()`：
+
+```csharp
+protected override object GetTarget() => Selection.activeObject;
+```
+
+它返回的对象**不必可序列化，甚至不必是 `UnityEngine.Object`**。三条界要记住：
+
+1. **它每帧都会被调用，必须返回稳定引用。** 每次返回一个新对象会让宿主每帧重建整棵树。
+2. **目标不是 Unity 对象时只收带 `[ShowInInspector]` 的成员**，且不可重置——那种目标没有序列化
+   后端，写进去也无处保存。工具栏的「重置」按钮会置灰，空树会有一句解释而不是一片空白。
+3. **成员过滤器按目标切换**：目标是窗口自身时才用 `WindowMemberFilter`。它要求「字段声明在
+   窗口基类及其派生类型上」，套到别的目标上会把目标的字段**全部拒掉**——症状不是画错，
+   是几乎什么都不画。
+
 但如果你要在**自己的容器**里嵌一块属性树（窗口里的一个面板、一个自定义 Editor 的某一段），
 下面几条契约得自己守。它们就是 `PropertyTreeHost` 在替你做的事。
 
@@ -260,12 +276,27 @@ finally
 
 ## 值的读写
 
-`PropertyValueEntry` 是树与序列化之间的那条缝，当前唯一实现是
-`SerializedPropertyValueEntry`（`SerializedObject` 后端）。这个选择买下了
-Undo/Redo、预制体覆盖、场景标脏、多对象编辑、域重载后取值这五件事。
-代价是只能画 Unity 会序列化的成员——「画普通属性」需要另一套后端，
-届时新增一个 `PropertyValueEntry` 派生类即可，树的其余部分不动。
+`PropertyValueEntry` 是树与值来源之间的那条缝，**现在有两个实现**：
 
-绝大多数绘制器**不需要**碰值入口：把 `property.ValueEntry.SerializedProperty`
-交给 `EditorGUILayout.PropertyField` 即可，那条路不经过装箱。
-`GetValue`/`SetValue` 会装箱，只服务于少数「要先读到值再决定怎么画」的绘制器。
+| 后端 | 谁在用 | `IsUnityBacked` | `SerializedProperty` |
+|---|---|---|---|
+| `SerializedPropertyValueEntry` | `public` 字段与 `[SerializeField]` 私有字段 | `true` | 有 |
+| `ReflectedValueEntry` | `[ShowInInspector]` 标的普通属性 / 非序列化字段 / 静态成员 | `false` | **`null`** |
+
+序列化那个买下了 Undo/Redo、预制体覆盖、场景标脏、多对象编辑、域重载后取值这五件事；
+反射那个一件也没有，因此它**只读**——`SetValue` 恒抛 `NotSupportedException`。
+
+**契约（写绘制器时按这个来）：**
+
+- `SerializedProperty` 为 `null` **当且仅当** `IsUnityBacked` 为 `false`。
+- 绝大多数绘制器**不需要**碰值入口：把 `property.ValueEntry.SerializedProperty`
+  交给 `EditorGUILayout.PropertyField` 即可，那条路不经过装箱。
+  `GetValue`/`SetValue` 会装箱，只服务于少数「要先读到值再决定怎么画」的绘制器。
+- **依赖 `SerializedProperty` 的绘制器必须优雅退让**（`?.` + 空则 `CallNextDrawer`）：
+  反射成员上会挂同一个特性，而它拿不到序列化属性。退让时**要告警**
+  （`DrawerWarnings.TypeMismatch` 会按后端挑措辞），别静默——静默的后果是
+  「标了没反应」，正是本包最忌讳的现象。
+- **值后端不是第三方扩展点。** 装入口的唯一位置在构建期（`PropertyTreeBuilder`），
+  路径语义与节点种类都跟着它走；开放它是一批独立工作。
+- 反射成员的**取值只走 `ReflectedValueEntry.TryGetDisplayValue`**（一次调用把该读的读完），
+  别「先问 `HasMultipleDifferentValues` 再问 `GetValue`」——那会把用户的 getter 每帧读两轮。

@@ -2,8 +2,8 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 已实现 **68 个特性**（分组与条件、状态与门控、标签与外观、
-> 值绘制、校验与钳制、按钮、回调，另有自建分组的基类与编辑器窗口基类）。
+> **状态：** `0.1.0-preview.1` — 已实现 **69 个特性**（分组与条件、状态与门控、标签与外观、
+> 值绘制、校验与钳制、按钮、回调、反射成员，另有自建分组的基类与编辑器窗口基类）。
 > API 尚未稳定，可能随时变更。
 
 ## 设计哲学
@@ -119,13 +119,25 @@ public class PlayerProfileEditor : XInspectorEditor
 
 本轮（`0.1.0-preview.1`）刻意不包含，**不要假设它们可用**：
 
-- **没有自定义序列化后端。** 值后端是 `SerializedObject`，因此只画 Unity 会序列化的东西
-  （public 字段 + `[SerializeField]`），画不了任意属性。`[ShowInInspector]` 那类反射成员
-  需要一套独立的值后端，尚未实现。
+- **两套值后端，反射那套是只读的。** 主后端是 `SerializedObject`（只画 Unity 会序列化的东西）；
+  另有 `[ShowInInspector]` 那条反射通道，把普通属性、非序列化私有字段、静态成员也画出来。
+  反射成员**一律只读**：它们按定义不在 Unity 的序列化里，写进去既不可撤销，也不会随存档保存。
+  仍然画不了的：嵌套 `[Serializable]` 类型里的成员、`[SerializeReference]` 的多态引用。
+  反射成员的其余边界见下一条。
 - **没有样式系统。** 一律用 `EditorStyles` 与 `GUI.skin.box` 的默认外观，没有 Odin 那样的配色与图标。
-- **编辑器窗口只做了「画自身序列化字段」这一种形态。** 有基类 `XInspectorEditorWindow`
-  （继承后声明字段即可，见 `Editor/README.md`），但**没有** Odin 那种检视任意对象的浮空
-  Inspector、字段拖拽重排、窗口内 Undo（窗口里的编辑不可撤销，用「重置」补偿）。
+- **`[ShowInInspector]` 有四条边界，都是刻意的：**
+  - **只读。** 见上一条。值照常每帧现读，但没有任何可编辑控件。
+  - **多选时各目标值不一致就显示「—」**；成员在一部分目标上不存在时同样按「—」处理
+    ——给不出值就不拿其中一个目标的值冒充。
+  - **集合只显示摘要**（形如 `List<Int32>（3 项）`），不展开。
+  - **标在方法上编译不过**——方法请用 `[Button]`。它与 `[ShowInInspector]` 一起用时，
+    需要序列化后端的特性（如 `[PropertyRange]`）**对它无效并会在 Console 说明一句**，
+    不会静默失效。
+- **编辑器窗口可以检视任意对象了。** 基类 `XInspectorEditorWindow` 默认画窗口自身的字段，
+  覆写 `protected virtual object GetTarget()` 就能检视别的对象——不必可序列化，
+  甚至不必是 `UnityEngine.Object`（那种目标只收带 `[ShowInInspector]` 的成员，且不可重置）。
+  **仍然没有** Odin 那种带对象选择器的浮空 Inspector、字段拖拽重排、窗口内 Undo
+  （窗口里的编辑不可撤销，用「重置」补偿，目标不是 Unity 对象时该按钮置灰）。
 - **没有数组 / 列表展开。** 数组整个交给 Unity 的 `PropertyField(includeChildren: true)`，
   因而**本包的特性作用不到数组元素上**。也正因如此，本轮的值绘制器
   （`[FilePath]` `[ValueDropdown]` `[AssetSelector]` `[PreviewField]` 等）
@@ -180,9 +192,10 @@ public class PlayerProfileEditor : XInspectorEditor
   以及三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`）。
   **没有** `[ShowIn]` / `[HideIn]` / `[EnableIn]` / `[DisableIn]`（它们接 `PrefabKind`
   之类的枚举参数）、也没有 `[ShowIfGroup]` / `[HideIfGroup]`。
-- **条件只能指向序列化成员。** `[ShowIf("x")]` 的 `x` 必须是 public 字段或
-  `[SerializeField]` 私有字段；普通属性、方法、以及写在别的对象上的 `"@other.field"` 语法
-  都不支持。条件名不存在时**保持可见并记一条告警**，不会抛异常。
+- **条件可以指向三类成员**，按这个顺序找：序列化成员（public 字段或 `[SerializeField]`
+  私有字段）→ 普通字段 / 属性 → **无参、非泛型、返回 `bool`** 的方法。
+  名字不存在、类型不是 `bool`、方法带参数时一律**保持可见并记一条告警**，不会抛异常；
+  写在别的对象上的 `"@other.field"` 语法**不支持**。
 
 ## 依赖
 

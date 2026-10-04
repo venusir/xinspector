@@ -98,14 +98,54 @@ public bool isAlive = true;
 
 | 行为 | 说明 |
 |---|---|
-| 条件对象 | **必须是序列化成员**（public 字段或 `[SerializeField]` 私有字段），且为 `bool`。名字可以是 `a/b` 这样的嵌套路径 |
+| 条件对象 | 按这个顺序找：**序列化成员**（public 字段或 `[SerializeField]` 私有字段）→ 普通字段 / 属性 → **无参、非泛型、返回 `bool`** 的方法。序列化成员的名字可以是 `a/b` 这样的嵌套路径 |
 | 求值时机 | **每帧重新求值**，所以被条件的字段可以随时跟着切换，不需要重建属性树 |
-| 条件名不存在 / 类型不对 | **保持可见并记一条告警**，不抛异常。一个拼错的名字不该让整个 Inspector 白屏 |
+| 条件名不存在 / 类型不对 / 方法带参数 | **保持可见并记一条告警**，不抛异常。一个拼错的名字不该让整个 Inspector 白屏 |
 | 隐藏 vs 禁用 | 禁用（变灰但仍可见）保留了「这个字段存在、只是现在不能改」的信息，通常比直接藏掉更有用 |
+| 多选 | 条件值取**第一个目标**（与序列化成员那条路一致） |
 
-**不支持的**：条件为方法或普通属性（那需要一套反射值后端）、条件写在别的对象上
-（Odin 的 `"@other.field"` 语法）、`[ShowIn]` / `[HideIn]` 那类接 `PrefabKind` 的枚举参数、
-以及 `[ShowIfGroup]` / `[HideIfGroup]`。
+```csharp
+public bool IsHealthy => health > 0;      // 普通属性也能当条件——不必序列化，也不必标 [ShowInInspector]
+public bool HasAmmo() => ammo > 0;        // 无参、返回 bool 的方法同样可以
+
+[ShowIf(nameof(IsHealthy))] public int regen;
+[ShowIf(nameof(HasAmmo))]   public int reloadButton;
+```
+
+**不支持的**：条件写在别的对象上（Odin 的 `"@other.field"` 语法）、`[ShowIn]` / `[HideIn]`
+那类接 `PrefabKind` 的枚举参数、以及 `[ShowIfGroup]` / `[HideIfGroup]`。
+
+### `[ShowInInspector]`
+
+把 Unity **不会序列化**的成员也画进 Inspector——普通属性、没有 `[SerializeField]` 的私有字段、
+静态成员。它打开的是「画 Unity 不序列化的东西」那整类能力。
+
+```csharp
+private int _hidden = 7;                       // 没有 [SerializeField]：Unity 不画它
+
+[ShowInInspector]
+public int Computed => _hidden * 3;            // 普通属性：以只读文本出现
+
+[ShowInInspector]
+public static string BuildTag = "静态成员也可以标";
+```
+
+| 行为 | 说明 |
+|---|---|
+| 可写性 | **只读。** 这些成员按定义不在 Unity 的序列化里，写进去既不可撤销，也不会随存档保存 |
+| 时机 | 值**每帧现读**——改它读的那个字段，显示会立刻跟着变 |
+| 已被序列化的成员 | **不会重复**。`[ShowInInspector]` 标在 public 字段上什么也不多画（那个字段本来就画着，而且可编辑）。反过来，`[HideInInspector] public int x` 会被收进来——它被序列化却不在 Inspector 里 |
+| 多选 | 各目标值不一致时显示「—」；成员在一部分目标上不存在时同样显示「—」 |
+| 集合 | 只显示摘要（`List<Int32>（3 项）`），不展开 |
+| 拿不到值的成员 | 索引器、只写属性：**跳过该成员并在 Console 说明原因**，不建一个画不出值的节点 |
+| 方法 | **标不上**——`AttributeUsage` 里没有 `Method`，写了编译不过。方法请用 `[Button]` |
+
+**不支持的**：嵌套 `[Serializable]` 类型里的成员（拿到嵌套实例需要一条本包还没有的
+「只读反射路径解析」）；可编辑的反射成员（见上，只读是刻意的）。
+
+> **`[ShowInInspector]` 配需要序列化后端的特性**（如 `[PropertyRange]`、`[DelayedProperty]`、
+> `[OnValueChanged]`）时，那条特性不起作用，但**值照常以只读文本显示**，
+> 同时 Console 里有一条说明。本包不做「标了没反应」。
 
 ### 值绘制特性
 

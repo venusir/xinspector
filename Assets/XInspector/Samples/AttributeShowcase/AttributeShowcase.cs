@@ -559,6 +559,52 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 反射成员
+
+        /// <summary>Unity 不会序列化的私有字段——加了标记才进 Inspector，且只读。</summary>
+        [ShowInInspector]
+        [BoxGroup("反射成员")]
+        private int _notSerialized = 7;
+
+        /// <summary>
+        /// 普通属性：以只读文本出现，且**每帧现读**——改上面的字段它会立刻跟着变。
+        /// <para>
+        /// 它只读不是偷懒：这些成员不在 Unity 的序列化里，写进去下次域重载或存档时就没了，
+        /// 也拿不到 Undo。本包宁可「不给写」，也不做一个看起来能改、改完就丢的控件。
+        /// </para>
+        /// </summary>
+        [ShowInInspector]
+        [BoxGroup("反射成员")]
+        public int ComputedScore => _notSerialized * 3;
+
+        /// <summary>静态成员也可以标——显示的是全局值，不随实例走。</summary>
+        [ShowInInspector]
+        [BoxGroup("反射成员")]
+        public static string BuildTag = "静态成员也可以标";
+
+        /// <summary>
+        /// 条件可以指向**普通属性**，不必是序列化成员——方法（无参、返回 bool）同理。
+        /// 把 <c>health</c> 调到 0 以下，这一行就消失。
+        /// </summary>
+        [ShowIf(nameof(IsHealthy))]
+        [BoxGroup("反射成员")]
+        public int onlyWhenHealthy = 100;
+
+        /// <summary><see cref="onlyWhenHealthy"/> 的条件来源——它没有 <c>[ShowInInspector]</c>，故自己不出现。</summary>
+        public bool IsHealthy => health > 0;
+
+        /// <summary>
+        /// <b>这一条会在 Console 里留下一条告警，是故意的。</b>
+        /// 需要序列化后端的特性对反射成员无效（这里 <c>[PropertyRange]</c> 画不出滑块），
+        /// 本包不让它静默失败：值照常以只读文本显示，同时明说了一句。
+        /// </summary>
+        [ShowInInspector]
+        [PropertyRange(0f, 1f)]
+        [BoxGroup("反射成员")]
+        public float reflectedRatio => _notSerialized / 10f;
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
