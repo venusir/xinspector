@@ -67,9 +67,33 @@
 两处都已修（先写红的测试再修）。**教训：说「纯加法」之前先确认既有基座没有洞**——
 六个新特性会各自把同一个洞放大一遍。
 
-**剩下的 L1b 不是分组**：重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]`
-`[Searchable]` `[ValueDropdown]`）与路径选择器（`[FilePath]` `[FolderPath]`）——
-它们各自是独立工作量，没有「加个类」那么便宜。
+**剩下的 L1b 不是分组**，但究竟是哪几项，这里原先列错了。2026-10-04 逐个核过
+Odin 官方签名后（[Pipeline.md](Modules/Pipeline.md) §六），原先那句
+「重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[Searchable]`
+`[ValueDropdown]`）与路径选择器」里的 **`[Searchable]` `[AssetSelector]`
+两个词是错的归类**。改判如下：
+
+| 项 | 实际归属 | 判据 |
+|---|---|---|
+| `[Searchable]` | **L6** | 它过滤的是字段/类型的**子成员**；本包把子成员整个交给 `PropertyField(includeChildren: true)`，不拥有子绘制权就无从过滤 |
+| `[AssetList]` | **L6** | 官方原文「替换默认的列表绘制器」，且明说对列表与单元素**行为不同**——只做单元素那半会得到一个语义随目标类型而变的半成品 |
+| `[TypeDrawerSettings]` | **L3** | 它是 Type Drawer 的选项，而 Type Drawer 画的是 `System.Type`——Unity 不序列化它，没有反射后端根本不进树 |
+| `[TypeFilter]` | **⛔ 不做** | 唯一构造是 resolved string（样例里是方法）；被标注字段还是抽象/接口类型，另需 L7 的类型切换 |
+| `[ColorPalette]` | **卡在设计** | 构造参数都过得了边界，缺的是数据：Odin 的调色板存在它自己的偏好设置里。得先定「命名调色板存在哪、谁来编辑」 |
+
+**真正的 L1b 剩余**：`[InlineEditor]` 一族（含依赖它的 `[ShowIn/HideIn/DisableInInlineEditors]`）、
+路径选择器 `[FilePath]` `[FolderPath]`、`[MinMaxSlider]` `[PreviewField]`
+`[ValueDropdown]` `[AssetSelector]`——各自是独立工作量，没有「加个类」那么便宜。
+
+**一条贯穿全轮的边界：只作用于单个成员值。** Odin 的这些绘制器都能挂数组
+（`[FilePath] string[]`、`[ValueDropdown] List<T>` + `IsUniqueList`），本包做不到——
+数组整个交给 `PropertyField(includeChildren: true)`，按元素画就要自己接管数组绘制（L6）。
+故本轮一律只支持单值成员，数组形态写进包 README 的已知限制。
+
+**另一条边界：字符串参数只认序列化成员名。** 本批特性的字符串参数在 Odin 那边**全是
+resolved string**（`MinMaxSlider` 的三个 getter、`ValueDropdown.valuesGetter`、
+`FilePath.ParentFolder` 的 `$` 引用）。收窄的口径与条件族完全同款——只认序列化成员名，
+`$`/`@`/方法一律不做。不这么做就会得到「签名对了、主要用法用不了」的假象。
 
 ---
 

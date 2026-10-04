@@ -1,13 +1,19 @@
 # 与 Odin 的缺口
 
 **对照口径：** Odin 官网 [attributes 页](https://odininspector.com/attributes)
-（12 个分类、**109 个不重复特性**）与
+（12 个分类、**108 个不重复特性**）与
 [editor-windows 页](https://odininspector.com/editor-windows)，
 抓取日期 **2026-10-03**。Odin 会变，这份对照至少每半年该重核一次。
 
 > 页面上的分类条目数是 110+，但**多处重复计数**（`[Required]` 同时在 Essentials 与
 > Validation 下，`[TableList]` 同时在 Type Specifics 与 Collections 下）。
-> 下面所有数字都用**去重后**的 109。
+> 下面所有数字都用**去重后**的 108。
+>
+> **2026-10-04 复核：** 这两处原写 109，去重后实际是 **108**——本轮把官网 attributes 页的
+> 特性链接去重后逐个与下面 12 张表比对，**108 对 108，一个不多一个不少**（唯一的两处字符串
+> 差异是 Odin 自己的 URL 拼写：`enable-guiattribute`、`on-inspector-guiattribute` 各少一个连字符，
+> 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
+> 下面的表一直是对的。
 
 **本项目的家底（2026-10-04）：**
 
@@ -68,16 +74,21 @@
 > L1a 剩余 21 个 + 分组族 6 个）。
 > 标 ⛔ 的 9 项是那一轮**核对签名后决定不做**的，理由逐条记在
 > [Modules/Pipeline.md](Modules/Pipeline.md) 第五节——「不做」也是结论，不写下来
-> 就会被下一轮重新猜一遍。
+>就会被下一轮重新猜一遍。
+>
+> **同日晚些的第三批核对**（[Pipeline.md](Modules/Pipeline.md) §六）逐条核了 L1b 剩余的
+> 值绘制器，结果：`[Searchable]` `[AssetList]` 实为 **L6**、`[TypeDrawerSettings]` 实为 **L3**、
+> `[TypeFilter]` 实为 **⛔**（resolved string + 抽象类型字段）、
+> `[ColorPalette]` **卡在「调色板从哪来」的设计上**。这 5 项原先记在 L1b 下，是**层判错了**。
 
 ### Type Specifics（24）
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[AssetList]` | ❌ 缺 | L1b |
-| `[AssetSelector]` | ❌ 缺 | L1b |
+| `[AssetList]` | ❌ 缺 | **L6**（替换列表绘制器；2026-10-04 由 L1b 改判） |
+| `[AssetSelector]` | ❌ 缺 | L1b（**推迟**到 `[InlineEditor]` 那一轮：默认是项目文件夹的树视图弹出层） |
 | `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
-| `[ColorPalette]` | ❌ 缺 | L1b |
+| `[ColorPalette]` | ❌ 缺 | L1b（**卡在设计**：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
 | `[DisplayAsString]` | ✅ 已实现 | — |
 | `[EnumPaging]` | ✅ 已实现 | — |
 | `[EnumToggleButtons]` | ✅ 已实现 | — |
@@ -92,7 +103,7 @@
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ❌ 缺 | L1b |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
-| `[TypeDrawerSettings]` | ❌ 缺 | L1b |
+| `[TypeDrawerSettings]` | ❌ 缺 | **L3**（样例一律挂在 `[ShowInInspector]` 的 `System.Type` 字段上；2026-10-04 由 L1b 改判） |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ❌ 缺 | L6（另见 Collections） |
 | `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
@@ -117,15 +128,15 @@
 | **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ✅ 已实现 | — |
 | `[RequiredIn]` | ⛔ 不做 | 需 `PrefabKind` + 预制体探测 + 校验消息层，与 `[DisallowModificationsIn]` 成对推迟 |
-| `[Searchable]` | ❌ 缺 | L1b |
+| `[Searchable]` | ❌ 缺 | **L6**（过滤的是字段/类型的**子成员**，不拥有子绘制权就无从过滤；2026-10-04 由 L1b 改判） |
 | `[ShowInInspector]` | ❌ 缺 | L3 |
 | **`[Title]`** | **✅ 已实现** | — |
-| `[TypeFilter]` | ❌ 缺 | L1b |
+| `[TypeFilter]` | ⛔ 不做 | 唯一构造是 resolved string（样例里是方法），且被标注字段是抽象/接口类型——还需 L7 的类型切换。2026-10-04 核过签名后判定 |
 | `[TypeInfoBox]` | ✅ 已实现 | — |
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ❌ 缺 | L1b（另见 Collections） |
 
-**小计：已实现 11 / 缺 5 / 不做 3**
+**小计：已实现 11 / 缺 4 / 不做 4**（`[TypeFilter]` 于 2026-10-04 由「缺」改判「不做」）
 
 ### Validation（15）
 
@@ -279,7 +290,7 @@
 ### 总账
 
 ```
-108 个不重复特性 = 48 已实现 + 47 缺 + 9 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 48 已实现 + 46 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
 已实现的 48 个：
@@ -299,15 +310,20 @@
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
 
-**标 ⛔ 的 9 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]` `[RequiredIn]`
+**标 ⛔ 的 10 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]` `[RequiredIn]`
 `[DisallowModificationsIn]` `[HideNetworkBehaviourFields]` `[ShowPropertyResolver]`
-`[SuppressInvalidAttributeError]` `[DisableContextMenu]`）**不是「还没做」，是「核对过签名、
-评估后不做」**——逐条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节。
-它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
+`[SuppressInvalidAttributeError]` `[DisableContextMenu]` `[TypeFilter]`）**不是「还没做」，
+是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
+`[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
 
-**「缺 47 个」也不等于「47 份工作量」**：其中真正需要新层的集中在
+**「缺 46 个」也不等于「46 份工作量」**：其中真正需要新层的集中在
 L3（反射后端）、L5（回调与按钮）、L6（集合自绘）、L7（Odin 的另一条产品线）——
-L1a 与 L1b 分组族这两块**零新基础设施**的已经清完。
+L1a、L1b 分组族、以及 L1b 的路径选择器/滑块等值绘制器（2026-10-04）这几块
+**零新基础设施**的已经清完。
+
+**2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
+`[AssetList]`→L6、`[TypeDrawerSettings]`→L3、`[TypeFilter]`→⛔、
+`[ColorPalette]`→卡在设计。它们原先都记在 L1b 下，是**层判错了**，不是「还没排到」。
 
 ### 窗口的 1:1
 
@@ -467,9 +483,15 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
 ## 推荐顺序
 
 1. ~~**L1a**~~——✅ 已清完（2026-10-04）。
-2. ~~**L1b 的分组族**~~——✅ 已落地（2026-10-04）。剩下的 L1b 是重型值绘制器
-   （`[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[Searchable]` `[ValueDropdown]` 等）
-   与路径选择器（`[FilePath]` `[FolderPath]`）——它们不是「加个类」，各自是独立工作量。
+2. ~~**L1b 的分组族**~~——✅ 已落地（2026-10-04）。剩下的 L1b 起初写成
+   「重型值绘制器（`[InlineEditor]` `[PreviewField]` `[AssetSelector]` `[Searchable]`
+   `[ValueDropdown]` 等）与路径选择器」——**那个「等」字藏了错**：逐个核过签名后，
+   `[Searchable]` `[AssetList]` 是 L6、`[TypeDrawerSettings]` 是 L3、`[TypeFilter]` 判 ⛔、
+   `[ColorPalette]` 卡在设计（见 [Pipeline.md](Modules/Pipeline.md) §六）。
+   真正的 L1b 剩余只有 **`[InlineEditor]` 一族（含三个 `*InInlineEditors`）**、
+   **路径选择器** `[FilePath]` `[FolderPath]`、**`[MinMaxSlider]` `[PreviewField]`
+   `[ValueDropdown]` `[AssetSelector]`** 这几项——2026-10-04 的第三批落地它们
+   （`[InlineEditor]` 与 `[AssetSelector]` 除外，各自独立成轮）。
 3. **L3 反射后端**——它是 L2 剩余项、L5 全部、以及窗口一半能力的前置。**下一块该做它。**
 4. **L5**——`[Button]` 是使用方最常问「为什么没有」的一个；`[CustomValueDrawer]`
    与 `[ValidateInput]` 也归在这里（它们的唯一形态是方法调用）。

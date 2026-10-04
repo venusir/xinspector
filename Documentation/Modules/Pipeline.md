@@ -414,7 +414,63 @@ MonoBehaviour 的 `m_Script` 一起跳掉，而 Inspector 路径**刻意留着**
 
 ---
 
-## 六、审计记忆
+## 六、第三批签名核对（2026-10-04）——L1b 剩余值绘制器
+
+补 L1b 剩余值绘制器之前，把候选的 **11 个特性 + 1 个支撑枚举**的 Odin 官方签名逐条抄了下来。
+**不做的也一并核**——否则「不做」的理由只是印象，下一轮会重新猜一遍。取法同前两节：
+**`Invoke-WebRequest`，别用 `WebFetch`**（后者抓这个站会截断成只剩导航，本轮又踩了一次）。
+
+**新增一条取法经验：** API 页的左侧导航极长，正文在**最后一个 `Version 3.3.1.2` 标记之后**。
+按这个锚点截取比按类名查找可靠——类名在导航里会先出现一次，`IndexOf` 会停在错误的位置。
+
+### 跨特性共性
+
+1. 11 个全在 `Sirenix.OdinInspector`（`ObjectFieldAlignment` 是同一命名空间下的枚举）。
+2. `AllowMultiple = false, Inherited = true`：`MinMaxSlider`、`FilePath`、`FolderPath`、
+   `PreviewField`、`ValueDropdown`、`TypeFilter`、`AssetList`、`ColorPalette`。
+   **2 例没有 `[AttributeUsage]`**（`AssetSelector`、`Searchable`）——与前两批的
+   `EnumToggleButtons`/`ChildGameObjectsOnly`/`Unit`/`ShowPropertyResolver` 同款；
+   `TypeDrawerSettings` 有但未声明这两项。我们照旧**刻意收窄**。
+3. 除 `TypeDrawerSettings` 外都带 `[Conditional("UNITY_EDITOR")]`（与第二轮的 `UnitAttribute` 同款例外）。
+4. **本批第一次出现「`UnityEngine` 类型进了构造签名」**：`PreviewFieldAttribute` 的两个
+   `FilterMode` 重载。按「已否决的形状」第 14 条**永久否决**，不是推迟。
+5. **字符串参数一律是 Odin 的 resolved string——这是本批最要紧的一条。**
+   `MinMaxSlider` 的三个 getter、`ValueDropdown.valuesGetter`、`TypeFilter.filterGetter`
+   官方原文都是 "A resolved string that should evaluate to…"；`FilePath`/`FolderPath` 的
+   `ParentFolder`/`Extensions` 标注 "Supports member referencing with `$`"。
+   **本包对它们的收窄与条件族完全同款**（「已否决的形状」第 13 条）：只认**序列化成员名**，
+   `$`/`@`/方法一律不做。不这么做就会得到「签名对了、主要用法用不了」的假象。
+
+### 逐条：官方签名 → 本轮决定
+
+| 特性 | 官方构造重载 | 本轮实现 | 不实现的部分与理由 |
+|---|---|---|---|
+| `[FilePath]` | `()`；字段 `AbsolutePath`、`Extensions`、`IncludeFileExtension`、`ParentFolder`、`RequireExistingPath`、`UseBackslashes` | 全部 | `$` 成员引用不做（共性 5）。**只作用 `string`**，数组形不做（要自管数组绘制，属 L6） |
+| `[FolderPath]` | `()`；字段 `AbsolutePath`、`ParentFolder`、`RequireExistingPath`、`UseBackslashes` | 全部 | 同上 |
+| `[MinMaxSlider]` | 5 组：`(float minValue, float maxValue, bool showFields = false)`、`(float, string maxValueGetter, bool)`、`(string minValueGetter, float, bool)`、`(string, string, bool)`、`(string minMaxValueGetter, bool)`；字段 `MinValue`/`MinValueGetter`/`MaxValue`/`MaxValueGetter`/`MinMaxValueGetter`/`ShowFields` | 五组全做 | 三个 getter 收窄为**序列化成员名**：`MinMaxValueGetter` 指向序列化 `Vector2`，`MinValueGetter`/`MaxValueGetter` 指向序列化 `float`。**只作用 `Vector2`**（`Vector2Int` 见下） |
+| `[PreviewField]` | `()`、`(ObjectFieldAlignment alignment)`、`(float height)`、`(float height, ObjectFieldAlignment)`、`(string previewGetter, ObjectFieldAlignment, FilterMode)`、`(string, float, ObjectFieldAlignment, FilterMode)` | 前四个 | 后两个含 `UnityEngine.FilterMode`，**永久否决**（第 14 条）。`previewGetter` 本身也是 resolved string |
+| `[ValueDropdown]` | `(string valuesGetter)`；字段 18 个：`AppendNextDrawer`、`CopyValues`、`DisableGUIInAppendedDrawer`、`DisableListAddButtonBehaviour`、`DoubleClickToConfirm`、`DrawDropdownForListElements`、`DropdownHeight`、`DropdownTitle`、`DropdownWidth`、`ExcludeExistingValuesInList`、`ExpandAllMenuItems`、`FlattenTreeView`、`HideChildProperties`、`IsUniqueList`、`NumberOfItemsBeforeEnablingSearch`、`OnlyChangeValueOnConfirm`、`SortDropdownItems`、`ValuesGetter` | `valuesGetter` + 展示类选项 | 数据源收窄为**序列化数组/List 成员**（`valuesGetter` 官方语义就是「可赋给 `IList` 的值」）。四个**只对列表有意义**的选项（`IsUniqueList`、`DrawDropdownForListElements`、`ExcludeExistingValuesInList`、`DisableListAddButtonBehaviour`）**不声明**——本包不支持数组形态，声明了只能是静默 no-op。`ValueDropdownItem<T>`/`ValueDropdownList<T>` 是 Odin Serializer 的类型，本包不引入 |
+| **`ObjectFieldAlignment`**（枚举） | `Center`/`Left`/`Right` | 自建 | 文档站按字母序排，**数值未核实**——我们按 `Left`/`Center`/`Right` 从 0 起排并写进 README（与 `InfoMessageType`/`TitleAlignments` 同款处理） |
+
+**`[MinMaxSlider]` 只做 `Vector2`，不做 `Vector2Int`**：`SerializedPropertyValueEntry`
+支持的类型里没有 `Vector2Int`（只有 `Vector2/3/4`），走值入口会抛 `NotSupportedException`。
+绕开值入口直读 `SP.vector2IntValue` 是可行的，但那会让本特性成为「唯一一个不走值后端的值绘制器」，
+为半个类型破一条架构缝不值得。记进 README 已知限制。
+
+### 本轮不实现（都记在此，别处不再重复）
+
+| 特性 | 为什么不 |
+|---|---|
+| `[Searchable]` | 官方原文：加的是「搜索**该字段或类型的子成员**」的过滤器（另有 `Recursive`、`FilterOptions`、`ISearchFilterable`）。本包把嵌套与集合的子成员整个交给 `PropertyField(includeChildren: true)`——**不拥有子绘制权就无从过滤**。移 L6 |
+| `[TypeFilter]` | 唯一构造是 `(string filterGetter)`，官方原文同样是 resolved string（要解析成可赋给 `IList` 的值），Odin 样例里它是个**方法**。且被标注的字段是抽象/接口类型——原生 Unity 不配 `[SerializeReference]` 切换根本序列化不了（L7）。与 `[CustomValueDrawer]`/`[ValidateInput]` 同类 |
+| `[TypeDrawerSettings]` | 它是「Type Drawer」的选项（`BaseType`、`Filter` 取 `TypeInclusionFilter` 位标志），样例一律挂在 `[ShowInInspector]` 的 `System.Type` 字段上。**Unity 不序列化 `System.Type`**，没有反射后端它根本不进树。移 L3 |
+| `[AssetList]` | 官方原文：「**替换默认的列表绘制器**」「对列表与单个元素都有效，但**行为不同**」，且有 `AutoPopulate`、`Tags`、`LayerNames`、`AssetNamePrefix`、`Path`、`CustomFilterMethod`（方法名）。它是列表绘制器（增删/Undo 属 L6），且只做单元素那半会得到一个语义随目标类型而变的半成品。移 L6 |
+| `[ColorPalette]` | 构造 `()` 与 `(string paletteName)` 都是字面量，**边界没挡住它**——缺的是数据：官方原文让人去 **Tools > Odin > Inspector > Preferences > Drawers > Color Palettes** 里编辑调色板，那是 Odin 自己的设置存储。本包没有「命名调色板存在哪、谁来编辑」这一层，凭空造一个形状比不做更糟。**先做一个调色板来源的设计**，再谈特性 |
+| `[AssetSelector]` | 构造 `()`、字段 `Paths`/`Filter`/`FlattenTreeView` 等**都过得了边界**，它是被**工作量**挡住的：默认是项目文件夹的**树视图**弹出层，且一半字段是列表元素行为（L6）。它的降级版（按钮 + 扁平 `GenericMenu`）能做，但偏离 Odin 默认形态比 `[ValueDropdown]` 更明显。推迟到 `[InlineEditor]` 那一轮 |
+
+---
+
+## 七、审计记忆
 
 **2026-10-03（第二轮）**：结构对齐期间顺带核对了几件事，结论如下——
 
