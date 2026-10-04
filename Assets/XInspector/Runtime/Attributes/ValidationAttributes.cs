@@ -98,6 +98,107 @@ namespace XInspector
     }
 
     /// <summary>
+    /// 校验成员「不为空」——但**只在指定的预制体上下文里**。判空规则与
+    /// <see cref="RequiredAttribute"/> 完全一致（同一个校验器），它只是多了一层上下文门槛。
+    /// </summary>
+    /// <remarks>
+    /// 典型的用法是「预制体资产上必须填，实例上可以留空」：
+    /// <c>[RequiredIn(PrefabKind.PrefabAsset)]</c>。
+    /// <para>
+    /// 与 <see cref="RequiredAttribute"/> 一样**只画提示、不拦保存**。
+    /// 层级固定为错误（官方这个特性没有级别参数，本包不发明）。
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// [RequiredIn(PrefabKind.PrefabAsset, ErrorMessage = "预制体资产上必须指定图标。")]
+    /// public Sprite icon;
+    /// </code>
+    /// </example>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    public sealed class RequiredInAttribute : Attribute
+    {
+        /// <summary>自定义消息；为 <c>null</c> 时用默认文本。</summary>
+        private string _errorMessage;
+
+        /// <summary>
+        /// 以预制体上下文构造，消息用本包的默认文本。
+        /// </summary>
+        /// <param name="kind">要求非空的上下文。</param>
+        public RequiredInAttribute(PrefabKind kind)
+        {
+            PrefabKind = kind;
+        }
+
+        /// <summary>
+        /// 要求非空的预制体上下文。
+        /// </summary>
+        public PrefabKind PrefabKind { get; }
+
+        /// <summary>
+        /// 自定义消息；为 <c>null</c> 时使用本包的默认文本（「此字段在当前的预制体上下文里为必填。」）。
+        /// </summary>
+        /// <exception cref="ArgumentException">赋了空白串（判为笔误，想用默认文本请传 <c>null</c>）。</exception>
+        /// <remarks>
+        /// 官方这个特性把消息做成属性（构造只收上下文），故校验落在赋值时——
+        /// <c>ErrorMessage = " "</c> 这种笔误当场就抛，不会拖到绘制期。
+        /// </remarks>
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set
+            {
+                if (value != null && string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ArgumentException(
+                        "错误消息不能是空白串；想使用默认文本请传 null。", nameof(value));
+                }
+
+                _errorMessage = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 在指定的预制体上下文里**禁止修改**本成员：变灰不可编辑，且若它在加上本特性之前
+    /// **就已经被改过**（相对预制体的覆盖），在字段上方画一条错误提示。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 两件事分给两侧做：**禁用**由处理器装只读解析器（每帧求值，进出预制体隔离编辑模式自动跟随）；
+    /// **「已经改过」的提示**由绘制器画（处理器不得绘制）。判据是
+    /// <c>SerializedProperty.prefabOverride</c>——它只在预制体实例上才有意义。
+    /// </para>
+    /// <para>
+    /// 反射成员（<see cref="ShowInInspectorAttribute"/>）没有序列化属性，无从谈「覆盖」，
+    /// 该提示对它们不生效（禁用那一半照常）。
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// [DisallowModificationsIn(PrefabKind.PrefabAsset)]
+    /// public float bakedRadius;
+    /// </code>
+    /// </example>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    public sealed class DisallowModificationsInAttribute : Attribute
+    {
+        /// <summary>
+        /// 以预制体上下文构造。
+        /// </summary>
+        /// <param name="kind">禁止修改的上下文。</param>
+        public DisallowModificationsInAttribute(PrefabKind kind)
+        {
+            PrefabKind = kind;
+        }
+
+        /// <summary>
+        /// 禁止修改的预制体上下文。
+        /// </summary>
+        public PrefabKind PrefabKind { get; }
+    }
+
+    /// <summary>
     /// 把数值**钳制**到不小于给定值。
     /// <para>
     /// 钳制发生在**每次绘制之后**：控件里填了越界值，下一帧就会被拉回范围内。
