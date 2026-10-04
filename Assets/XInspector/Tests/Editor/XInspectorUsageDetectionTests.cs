@@ -101,6 +101,50 @@ namespace XInspector.Tests.Editor
             Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ButtonInBaseFixture)), Is.True);
         }
 
+        /// <summary>
+        /// **只挂 <c>[ShowInInspector]</c> 属性的**类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 与按钮那次是同一类漏洞：判据此前只扫字段与方法，而
+        /// <c>[ShowInInspector]</c> 的主战场恰恰是普通属性——<c>GetFields</c> 看不见它们。
+        /// 后果同样是类型不被接管、特性一次都不生效、且没有任何告警。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂反射属性的类型为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(ShowInInspectorPropertyFixture)),
+                Is.True,
+                "反射属性只标在属性上；判据不扫属性，这类类型就永远不会被接管。");
+        }
+
+        /// <summary>只有 <c>[ShowInInspector]</c> 私有字段的类型同样为真。</summary>
+        [Test]
+        public void IsUsedBy_只挂反射字段的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ShowInInspectorFieldFixture)), Is.True);
+        }
+
+        /// <summary>静态成员上的 <c>[ShowInInspector]</c> 也算。</summary>
+        [Test]
+        public void IsUsedBy_静态反射成员也算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ShowInInspectorStaticFixture)), Is.True);
+        }
+
+        /// <summary>
+        /// 控制项：属性上挂着一个**别人家的**特性时为假。
+        /// <para>
+        /// 没有这一条，上面三条无法区分「认得 <c>[ShowInInspector]</c>」与
+        /// 「见到属性就返回真」。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_属性上挂无关特性为假()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(UnrelatedPropertyAttributeFixture)), Is.False);
+        }
+
         /// <summary>传 null 不得抛异常。</summary>
         [Test]
         public void IsUsedBy_Null为假()
@@ -248,6 +292,44 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>普通字段。</summary>
         public int value = 1;
+    }
+
+    /// <summary>只在**属性**上挂着 <c>[ShowInInspector]</c> 的资产。</summary>
+    internal sealed class ShowInInspectorPropertyFixture : ScriptableObject
+    {
+        /// <summary>没有特性的普通字段。</summary>
+        public int value = 1;
+
+        /// <summary>唯一的用法。</summary>
+        [ShowInInspector]
+        public int Reflected => value * 2;
+    }
+
+    /// <summary>只在私有非序列化字段上挂着 <c>[ShowInInspector]</c> 的资产。</summary>
+    internal sealed class ShowInInspectorFieldFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法——这个字段 Unity 不会序列化。</summary>
+        [ShowInInspector]
+        private int _reflected = 1;
+
+        /// <summary>读一下私有字段，避免 CS0414 告警。</summary>
+        public int Value => _reflected;
+    }
+
+    /// <summary>只在**静态**成员上挂着 <c>[ShowInInspector]</c> 的资产。</summary>
+    internal sealed class ShowInInspectorStaticFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法。</summary>
+        [ShowInInspector]
+        public static int Reflected = 1;
+    }
+
+    /// <summary>属性上挂着一个别人家的特性的资产——不该被判为用到了本插件。</summary>
+    internal sealed class UnrelatedPropertyAttributeFixture : ScriptableObject
+    {
+        /// <summary>无关属性。</summary>
+        [System.Obsolete("只是为了让属性身上有点东西")]
+        public int value => 1;
     }
 
     /// <summary>特性挂在私有字段上的资产。</summary>

@@ -45,12 +45,28 @@ namespace XInspector.Editor
         /// <param name="requirement">它要求的类型描述。</param>
         /// <returns>告警文本。</returns>
         /// <remarks>
+        /// <para>
         /// 失败时一律**放行**（调用下一个绘制器）而不是什么都不画——一个标错位置的特性
         /// 不该让字段消失，那正是本包最忌讳的现象。
+        /// </para>
+        /// <para>
+        /// <b>反射成员要单独说。</b> 值绘制器拿不到 <c>SerializedProperty</c> 时统统走这里，
+        /// 而「字段退回普通绘制」那句话对 <c>[ShowInInspector]</c> 的只读成员是错的——
+        /// 它没有字段可退，值是照常显示的，只是这个特性不起作用。措辞错了比不说更糟：
+        /// 照着它去查「为什么字段没画出来」会一无所获。
+        /// </para>
         /// </remarks>
         public static string TypeMismatch(InspectorProperty property, string attributeName, string requirement)
         {
-            var actual = property.ValueEntry != null ? property.ValueEntry.ValueType.Name : "未知";
+            var entry = property.ValueEntry;
+
+            if (entry != null && !entry.IsUnityBacked)
+            {
+                return $"[XInspector] 属性「{property.Path}」上的 {attributeName} 需要 Unity 的序列化后端，" +
+                       "而这是一个 [ShowInInspector] 的只读成员，该特性对它无效——值仍以只读文本显示。";
+            }
+
+            var actual = entry != null ? entry.ValueType.Name : "未知";
             return $"[XInspector] 属性「{property.Path}」上的 {attributeName} 只支持{requirement}，" +
                    $"当前是 {actual}，该特性已忽略、字段退回普通绘制。";
         }

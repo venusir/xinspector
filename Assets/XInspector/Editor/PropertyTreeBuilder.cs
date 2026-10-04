@@ -30,6 +30,8 @@ namespace XInspector.Editor
         private static readonly ChildrenDrawer ChildrenTerminal = new ChildrenDrawer();
         private static readonly UnityFallbackDrawer MemberTerminal = new UnityFallbackDrawer();
         private static readonly MethodTerminalDrawer MethodTerminal = new MethodTerminalDrawer();
+        private static readonly ReflectedMemberTerminalDrawer ReflectedTerminal =
+            new ReflectedMemberTerminalDrawer();
 
         /// <summary>方法节点路径的后缀。C# 标识符不含圆括号，故它与任何字段路径都不可能相撞。</summary>
         private const string MethodPathSuffix = "()";
@@ -52,6 +54,19 @@ namespace XInspector.Editor
         /// 会随编译变化，测试也会莫名其妙地 flaky。存成静态字段是为了不在每次建树时新建比较器。
         /// </remarks>
         private static readonly Comparison<MethodInfo> CompareByMetadataToken =
+            (left, right) => left.MetadataToken.CompareTo(right.MetadataToken);
+
+        /// <summary>按元数据令牌比较两个字段。</summary>
+        /// <remarks>
+        /// <b>字段与属性必须各排各的。</b> 两者分属元数据的不同表（字段 0x04、属性 0x17），
+        /// 表内编号、跨表不可比——这与「方法插不回字段之间」是同一条实测结论。
+        /// 故反射成员的分组顺序是「同一层里先字段后属性」，而不是把两者混起来排。
+        /// </remarks>
+        private static readonly Comparison<FieldInfo> CompareFieldByMetadataToken =
+            (left, right) => left.MetadataToken.CompareTo(right.MetadataToken);
+
+        /// <summary>按元数据令牌比较两个属性。</summary>
+        private static readonly Comparison<PropertyInfo> ComparePropertyByMetadataToken =
             (left, right) => left.MetadataToken.CompareTo(right.MetadataToken);
 
         #endregion
@@ -81,6 +96,15 @@ namespace XInspector.Editor
             // m_Script 以与原生一致」那条默认行为的显式退出，两个行为各有用途。
             var hideMonoScript = root.Attributes.Has<HideMonoScriptAttribute>();
             var members = CollectMembers(serializedObject, targetType, memberFilter, hideMonoScript);
+
+            // 反射成员接在序列化成员之后、方法节点之前：它们是「字段性质」的东西，
+            // 紧跟着字段比夹在按钮之间合理。
+            //
+            // **为什么不与序列化成员按声明顺序交错**：做不到。序列化成员的名字与顺序来自
+            // SerializedObject，反射成员来自元数据表，两者之间没有共同的可比次序——
+            // 字段在 0x04 表、属性在 0x17 表，而序列化顺序本身就是 Unity 说了算的。
+            // 与其猜一个，不如定一条确定的规矩。
+            members.AddRange(CollectReflectedMembers(serializedObject.targetObjects, targetType, members));
 
             // 方法节点一律接在字段之后。**不是没试过按声明顺序交错**——实测拿不到那个信息：
             // 字段令牌与方法令牌分属元数据的两张表（0x04 与 0x06）各自编号，跨表没有可比性；
@@ -114,11 +138,9 @@ namespace XInspector.Editor
             AttachChain(root, ChildrenTerminal);
             for (var i = 0; i < members.Count; i++)
             {
-                // 末端按种类选：方法节点没有值，接到值绘制器上只会画出一句
-                // 「没有 Unity 序列化后端」——那句话本身没错，但答非所问。
-                AttachChain(
-                    members[i],
-                    members[i].Kind == InspectorPropertyKind.Method ? MethodTerminal : MemberTerminal);
+                // 末端按种类选：值从哪来决定了由谁收尾。接错了只会画出一句
+                // 「没有 XX 后端」——那句话本身没错，但答非所问。
+                AttachChain(members[i], TerminalFor(members[i].Kind));
             }
 
             ApplyGrouping(root, members);
@@ -221,6 +243,250 @@ namespace XInspector.Editor
 
             // 链条**不在这里挂**：处理器还没跑，特性尚未最终确定。
             return node;
+        }
+
+        #endregion
+
+        #region 反射成员收集
+
+        /// <summary>
+        /// 为带 <c>[ShowInInspector]</c> 的成员建节点——那些 Unity 不会序列化的成员。
+        /// </summary>
+        /// <param name="targets">目标对象数组，逐目标各解析一个取值访问器。</param>
+        /// <param name="targetType">目标对象的运行时类型。</param>
+        /// <param name="serializedMembers">序列化通道**已经收进树**的成员，用来判重。</param>
+        /// <returns>反射成员节点列表，尚未挂到任何父节点上。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>判重看的是「树里有没有它」，不是「Unity 会不会序列化它」。</b> 两者不等价，
+        /// 而差别正是想要的：<c>[SerializeField] private int x</c> 在树里，于是
+        /// <c>[ShowInInspector]</c> 不会让它出现第二遍；而 <c>[HideInInspector] public int x</c>
+        /// **被 Unity 序列化却不在树里**，于是它会被收进来——这时它是唯一的那一份，不是重复的。
+        /// </para>
+        /// <para>
+        /// <b>不需要「跳过 UnityEngine 框架成员」的规则。</b> 这里只收带
+        /// <c>[ShowInInspector]</c> 的成员，框架自己的成员不可能带本包的标记，
+        /// 于是 <c>EditorWindow</c> 那几十个属性一个都进不来——这是构造上就成立的，不靠名单。
+        /// </para>
+        /// <para>
+        /// <b>排序与去重照抄方法节点那套两段式</b>：先按最派生到最基类逐层收集、按名字去重保最派生，
+        /// 再整体翻转成基类在前。层内字段按令牌排完再排属性（两张表不可比）。
+        /// </para>
+        /// </remarks>
+        private static List<InspectorProperty> CollectReflectedMembers(
+            object[] targets,
+            Type targetType,
+            List<InspectorProperty> serializedMembers)
+        {
+            const BindingFlags Flags =
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.DeclaredOnly;
+
+            var taken = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < serializedMembers.Count; i++)
+            {
+                taken.Add(serializedMembers[i].Path);
+            }
+
+            var seenNames = new HashSet<string>(StringComparer.Ordinal);
+            var perLevel = new List<List<InspectorProperty>>();
+
+            for (var type = targetType; type != null; type = type.BaseType)
+            {
+                var level = new List<InspectorProperty>();
+
+                var fields = type.GetFields(Flags);
+                Array.Sort(fields, CompareFieldByMetadataToken);
+
+                for (var i = 0; i < fields.Length; i++)
+                {
+                    var field = fields[i];
+                    if (!CarriesShowInInspector(field) || taken.Contains(field.Name) ||
+                        !seenNames.Add(field.Name))
+                    {
+                        continue;
+                    }
+
+                    var node = CreateReflectedMember(targets, field);
+                    if (node != null)
+                    {
+                        level.Add(node);
+                    }
+                }
+
+                var properties = type.GetProperties(Flags);
+                Array.Sort(properties, ComparePropertyByMetadataToken);
+
+                for (var i = 0; i < properties.Length; i++)
+                {
+                    var property = properties[i];
+
+                    // 索引器没有「一个目标对应一个值」的语义，取值访问器也编译不出来。
+                    if (property.GetIndexParameters().Length > 0 ||
+                        !CarriesShowInInspector(property) || taken.Contains(property.Name) ||
+                        !seenNames.Add(property.Name))
+                    {
+                        continue;
+                    }
+
+                    var node = CreateReflectedMember(targets, property);
+                    if (node != null)
+                    {
+                        level.Add(node);
+                    }
+                }
+
+                perLevel.Add(level);
+            }
+
+            var members = new List<InspectorProperty>();
+            for (var i = perLevel.Count - 1; i >= 0; i--)
+            {
+                members.AddRange(perLevel[i]);
+            }
+
+            return members;
+        }
+
+        /// <summary>成员身上有没有 <c>[ShowInInspector]</c>。</summary>
+        /// <param name="member">成员。</param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 不继承（<c>inherit: false</c>）：逐层收集已经让基类声明的那一份自己出现，
+        /// 这里再继承会把覆写与声明算成两条。
+        /// </remarks>
+        private static bool CarriesShowInInspector(MemberInfo member)
+        {
+            return member.GetCustomAttributes(typeof(ShowInInspectorAttribute), false).Length > 0;
+        }
+
+        /// <summary>
+        /// 为一个反射成员建节点，并装好它的值入口。
+        /// </summary>
+        /// <param name="targets">目标对象数组。</param>
+        /// <param name="member">字段或属性。</param>
+        /// <returns>建好的节点；取值访问器编译不出来时返回 <c>null</c>（已告警）。</returns>
+        /// <remarks>
+        /// <b>值入口在这里就装好，不等树构造。</b> 处理器在挂链之前跑，而条件族之外还有
+        /// <c>[Toggle]</c> 一族要经 <c>ValueEntry</c> 找「另一个成员」——晚一步装，
+        /// 拿到这些成员的那些处理器就会静默落空。
+        /// </remarks>
+        private static InspectorProperty CreateReflectedMember(object[] targets, MemberInfo member)
+        {
+            var accessors = ResolveAccessors(targets, member, out var reason);
+            if (accessors == null)
+            {
+                Debug.LogWarning(
+                    $"[XInspector] 属性「{member.Name}」上的 [ShowInInspector] 无法生效：{reason}。该属性已跳过。");
+                return null;
+            }
+
+            var valueType = member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType;
+
+            return new InspectorProperty(
+                member.Name,
+                member.Name,
+                valueType,
+                InspectorPropertyKind.ReflectedMember,
+                new PropertyAttributes(CollectMemberAttributes(member)))
+            {
+                ValueEntry = new ReflectedValueEntry(targets, accessors, valueType),
+                Member = member,
+            };
+        }
+
+        /// <summary>
+        /// 逐目标解析取值访问器。
+        /// </summary>
+        /// <param name="targets">目标对象数组。</param>
+        /// <param name="primary">主目标上解析出的成员。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>逐目标的访问器；主目标上都编译不出来时返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// 多选下的目标未必是同一个类型，故**逐个目标按名字重解析**，而不是共用主目标那个。
+        /// 某个目标上解析不出来就是 <c>null</c>，读取时算「不一致」——我们确实不知道它的值。
+        /// </remarks>
+        private static ReflectedAccessor[] ResolveAccessors(
+            object[] targets,
+            MemberInfo primary,
+            out string reason)
+        {
+            if (!ReflectedAccessor.TryCreate(primary, out var primaryAccessor, out reason))
+            {
+                return null;
+            }
+
+            var accessors = new ReflectedAccessor[targets.Length];
+            if (accessors.Length > 0)
+            {
+                accessors[0] = primaryAccessor;
+            }
+
+            for (var i = 1; i < targets.Length; i++)
+            {
+                var type = targets[i]?.GetType();
+                if (type == null)
+                {
+                    continue;
+                }
+
+                var member = FindReflectedMember(type, primary.Name);
+                if (member != null && ReflectedAccessor.TryCreate(member, out var accessor, out _))
+                {
+                    accessors[i] = accessor;
+                }
+            }
+
+            return accessors;
+        }
+
+        /// <summary>按名字逐层上溯找一个字段或属性。</summary>
+        /// <param name="type">起始类型。</param>
+        /// <param name="name">成员名。</param>
+        /// <returns>成员；找不到返回 <c>null</c>。</returns>
+        private static MemberInfo FindReflectedMember(Type type, string name)
+        {
+            const BindingFlags Flags =
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.DeclaredOnly;
+
+            for (var current = type; current != null; current = current.BaseType)
+            {
+                // 用 GetMember 而不是 GetProperty：同名索引器会让 GetProperty 抛
+                // AmbiguousMatchException，而这里要的恰恰是「挑一个能读的」。
+                var candidates = current.GetMember(name, Flags);
+
+                for (var i = 0; i < candidates.Length; i++)
+                {
+                    if (candidates[i] is FieldInfo field)
+                    {
+                        return field;
+                    }
+
+                    if (candidates[i] is PropertyInfo property && property.GetIndexParameters().Length == 0)
+                    {
+                        return property;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>按节点种类挑链条末端。</summary>
+        /// <param name="kind">节点种类。</param>
+        /// <returns>该种类的末端绘制器。</returns>
+        private static XInspectorDrawer TerminalFor(InspectorPropertyKind kind)
+        {
+            switch (kind)
+            {
+                case InspectorPropertyKind.Method:
+                    return MethodTerminal;
+                case InspectorPropertyKind.ReflectedMember:
+                    return ReflectedTerminal;
+                default:
+                    return MemberTerminal;
+            }
         }
 
         #endregion

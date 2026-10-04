@@ -212,8 +212,19 @@ namespace XInspector.Editor
             var entry = state == null ? null : FindEntry(state, attribute);
             var serializedProperty = property.ValueEntry?.SerializedProperty;
 
-            if (entry?.Methods == null || serializedProperty == null)
+            if (entry?.Methods == null)
             {
+                // 「没解析到方法」由处理器负责告警（它才知道找没找到、为什么没找到）。
+                CallNextDrawer(property, label);
+                return;
+            }
+
+            if (serializedProperty == null)
+            {
+                // 这条曾经是静默的：标在 [ShowInInspector] 只读成员上的 [OnValueChanged]
+                // 既不触发也没有任何提示。「改了但没反应」比「压根没监听」难查得多。
+                DrawerWarnings.Once(property, nameof(OnValueChangedDrawer),
+                    DrawerWarnings.TypeMismatch(property, "[OnValueChanged]", "会变化的值"));
                 CallNextDrawer(property, label);
                 return;
             }

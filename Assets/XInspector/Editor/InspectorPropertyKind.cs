@@ -34,5 +34,16 @@ namespace XInspector.Editor
         /// </para>
         /// </summary>
         Method = 3,
+
+        /// <summary>
+        /// 反射成员节点，对应一个带 <c>[ShowInInspector]</c> 的普通属性或非序列化字段。
+        /// <para>
+        /// 它**有值**，但值不来自 Unity 的序列化系统——值入口是反射后端，只读。
+        /// 与 <see cref="Method"/> 单列一类的理由相同：<see cref="Member"/> 的路径被当作
+        /// 「可以交给序列化系统的路径」使用（按路径重置默认值的逻辑、按名解析另一个成员的逻辑），
+        /// 反射成员在这套语义里根本找不到自己，混进去只会让那条不变量多出一堆例外。
+        /// </para>
+        /// </summary>
+        ReflectedMember = 4,
     }
 }

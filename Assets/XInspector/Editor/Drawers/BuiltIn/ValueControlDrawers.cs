@@ -68,6 +68,10 @@ namespace XInspector.Editor
 
             if (serializedProperty == null)
             {
+                // 明说一句再放行。这里曾经是**静默**退让的：标在 [ShowInInspector] 成员上的
+                // [DelayedProperty] 什么也不做、也没有任何提示，正是本包最想避免的那类现象。
+                DrawerWarnings.Once(property, nameof(DelayedPropertyDrawer),
+                    DrawerWarnings.TypeMismatch(property, "[DelayedProperty]", "int、float、double、string"));
                 CallNextDrawer(property, label);
                 return;
             }

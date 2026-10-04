@@ -24,13 +24,18 @@ namespace XInspector.Editor
         #region Public API
 
         /// <summary>
-        /// 判断类型自身、其可序列化字段或其方法上，是否有**能被处理**的特性。
+        /// 判断类型自身、其字段、属性或方法上，是否有**能被处理**的特性。
         /// </summary>
         /// <param name="type">目标类型。</param>
         /// <returns>用到了 XInspector 返回 <c>true</c>。</returns>
         /// <remarks>
         /// <b>方法必须一起扫。</b> <c>[Button]</c> 一族只标在方法上，漏掉的后果不是「少画了点东西」，
         /// 而是**类型不被接管、按钮完全不出现、且没有任何告警**——判据漏一半是最难归因的形态。
+        /// <para>
+        /// <b>属性也必须一起扫。</b> <c>[ShowInInspector]</c> 的主战场就是普通属性，而属性
+        /// 恰恰是 <c>GetFields</c> 看不见的那一类。这是同一种漏法的第二次——判据要覆盖
+        /// 「成员收集真会去看的每一处」，而不是「上次漏过的那一处」。
+        /// </para>
         /// </remarks>
         public static bool IsUsedBy(Type type)
         {
@@ -49,11 +54,11 @@ namespace XInspector.Editor
             const BindingFlags Flags =
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
-            const BindingFlags MethodFlags = Flags | BindingFlags.Static;
+            const BindingFlags StaticFlags = Flags | BindingFlags.Static;
 
             for (var current = type; current != null; current = current.BaseType)
             {
-                var fields = current.GetFields(Flags);
+                var fields = current.GetFields(StaticFlags);
                 for (var i = 0; i < fields.Length; i++)
                 {
                     if (HasSupportedAttribute(fields[i].GetCustomAttributes(true)))
@@ -62,7 +67,16 @@ namespace XInspector.Editor
                     }
                 }
 
-                var methods = current.GetMethods(MethodFlags);
+                var properties = current.GetProperties(StaticFlags);
+                for (var i = 0; i < properties.Length; i++)
+                {
+                    if (HasSupportedAttribute(properties[i].GetCustomAttributes(true)))
+                    {
+                        return true;
+                    }
+                }
+
+                var methods = current.GetMethods(StaticFlags);
                 for (var i = 0; i < methods.Length; i++)
                 {
                     if (HasSupportedAttribute(methods[i].GetCustomAttributes(true)))
@@ -100,6 +114,13 @@ namespace XInspector.Editor
                 // ——它们是属性树自己在特定时机调的。漏掉这一类的后果与条件族当年一样：
                 // 类型不被接管，于是特性一次都不生效，且没有任何告警。
                 if (attribute is ITreeLifecycleAttribute)
+                {
+                    return true;
+                }
+
+                // 第三类：[ShowInInspector] 那样「会产生节点，但既不画也不改别人」的。
+                // 它的作用发生在成员收集那一步，注册表里查不到它——见 ITreeMembershipAttribute。
+                if (attribute is ITreeMembershipAttribute)
                 {
                     return true;
                 }
