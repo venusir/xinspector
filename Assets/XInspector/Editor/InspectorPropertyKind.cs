@@ -23,5 +23,16 @@ namespace XInspector.Editor
         /// 成员节点，对应一个字段或属性。
         /// </summary>
         Member = 2,
+
+        /// <summary>
+        /// 方法节点，对应一个带 <c>[Button]</c> 的方法（<c>[OnInspectorGUI]</c> 一类同理）。
+        /// <para>
+        /// 它与成员节点的根本差别是**没有值**：<see cref="InspectorProperty.ValueEntry"/> 为
+        /// <c>null</c>，末端接方法专用绘制器而不是值绘制器。给它单独一种 Kind 而不是复用
+        /// <see cref="Member"/>，是为了让「成员路径 = 可以交给序列化系统的路径」这条不变量不被弄脏
+        /// ——按路径重置默认值的逻辑只认 <see cref="Member"/>。
+        /// </para>
+        /// </summary>
+        Method = 3,
     }
 }

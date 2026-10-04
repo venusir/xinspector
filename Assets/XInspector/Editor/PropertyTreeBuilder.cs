@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
+using UnityEngine;
 using XInspector.Internal;
 
 namespace XInspector.Editor
@@ -28,6 +29,29 @@ namespace XInspector.Editor
         // 末端绘制器无状态，可以安全共享；建一次即可，不必每个节点新建。
         private static readonly ChildrenDrawer ChildrenTerminal = new ChildrenDrawer();
         private static readonly UnityFallbackDrawer MemberTerminal = new UnityFallbackDrawer();
+        private static readonly MethodTerminalDrawer MethodTerminal = new MethodTerminalDrawer();
+
+        /// <summary>方法节点路径的后缀。C# 标识符不含圆括号，故它与任何字段路径都不可能相撞。</summary>
+        private const string MethodPathSuffix = "()";
+
+        /// <summary>
+        /// 会生成方法节点的特性类型。
+        /// </summary>
+        /// <remarks>
+        /// 新增一个标在**方法**上的特性时往这里加一项——收集、交错、分组装配、处理器都会自动覆盖。
+        /// </remarks>
+        private static readonly Type[] MethodNodeAttributes =
+        {
+            typeof(ButtonAttribute),
+        };
+
+        /// <summary>按元数据令牌比较两个方法，用于把声明顺序稳定下来。</summary>
+        /// <remarks>
+        /// <c>GetMethods</c> 的返回顺序在 .NET 上**不保证**是声明顺序，不排的话按钮的先后
+        /// 会随编译变化，测试也会莫名其妙地 flaky。存成静态字段是为了不在每次建树时新建比较器。
+        /// </remarks>
+        private static readonly Comparison<MethodInfo> CompareByMetadataToken =
+            (left, right) => left.MetadataToken.CompareTo(right.MetadataToken);
 
         #endregion
 
@@ -57,6 +81,12 @@ namespace XInspector.Editor
             var hideMonoScript = root.Attributes.Has<HideMonoScriptAttribute>();
             var members = CollectMembers(serializedObject, targetType, memberFilter, hideMonoScript);
 
+            // 方法节点一律接在字段之后。**不是没试过按声明顺序交错**——实测拿不到那个信息：
+            // 字段令牌与方法令牌分属元数据的两张表（0x04 与 0x06）各自编号，跨表没有可比性；
+            // GetMembers 也只按种类分组返回。三条测量都有用例钉着（MethodNodeTests），
+            // 哪天 Unity 换了行为，那几条会先红。
+            members.AddRange(CollectMethodMembers(targetType));
+
             // ---- 顺序是契约，动之前先读完这段 ----
             //
             // 树必须在**处理器之前**构造好：需要目标对象的处理器（按钮族按名解析方法、
@@ -74,7 +104,11 @@ namespace XInspector.Editor
             AttachChain(root, ChildrenTerminal);
             for (var i = 0; i < members.Count; i++)
             {
-                AttachChain(members[i], MemberTerminal);
+                // 末端按种类选：方法节点没有值，接到值绘制器上只会画出一句
+                // 「没有 Unity 序列化后端」——那句话本身没错，但答非所问。
+                AttachChain(
+                    members[i],
+                    members[i].Kind == InspectorPropertyKind.Method ? MethodTerminal : MemberTerminal);
             }
 
             ApplyGrouping(root, members);
@@ -173,6 +207,127 @@ namespace XInspector.Editor
 
             // 链条**不在这里挂**：处理器还没跑，特性尚未最终确定。
             return node;
+        }
+
+        #endregion
+
+        #region 方法节点收集
+
+        /// <summary>
+        /// 收集带 <c>[Button]</c> 一类的**方法**，为它们建方法节点。
+        /// </summary>
+        /// <param name="targetType">目标对象的运行时类型。</param>
+        /// <returns>方法节点列表，尚未挂到任何父节点上。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>只认检视的那个对象自己（含继承链）上的方法。</b> 成员遍历走的是
+        /// <c>SerializedObject</c>，而方法根本不在序列化系统里，所以这一段只能靠反射。
+        /// 嵌套 <c>[Serializable]</c> 类里的方法同样收不到——拿到嵌套实例需要一条
+        /// 本包还没有的「只读反射路径解析」，那时才能把方法挂到对应的嵌套节点上。
+        /// </para>
+        /// <para>
+        /// <b>先按最派生到最基类的顺序走，再按方法名去重。</b> 覆写链上只保留最派生的一份：
+        /// <c>[Button]</c> 是 <c>Inherited = false</c>，覆写方不带特性就不会被收进来，
+        /// 而带了特性时两份都会命中，去重保最派生的那个才对。同名重载无法两全——
+        /// 按钮名就是方法名，两个同名按钮谁也分不清谁，故保留第一个并告警。
+        /// </para>
+        /// </remarks>
+        private static List<InspectorProperty> CollectMethodMembers(Type targetType)
+        {
+            const BindingFlags Flags =
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.DeclaredOnly;
+
+            var seenNames = new HashSet<string>(StringComparer.Ordinal);
+
+            // 逐层收集的结果先各存一份：**去重要按最派生优先**，而**输出要按基类在前**
+            // （与 Unity 排字段的顺序一致），两件事的顺序要求相反，故不能一趟做完。
+            var perLevel = new List<List<InspectorProperty>>();
+
+            for (var type = targetType; type != null; type = type.BaseType)
+            {
+                var level = new List<InspectorProperty>();
+                var declared = type.GetMethods(Flags);
+
+                Array.Sort(declared, CompareByMetadataToken);
+
+                for (var i = 0; i < declared.Length; i++)
+                {
+                    var method = declared[i];
+                    if (!CreatesMethodNode(method))
+                    {
+                        continue;
+                    }
+
+                    if (!seenNames.Add(method.Name))
+                    {
+                        Debug.LogWarning(
+                            $"[XInspector] 方法「{method.Name}」有多个重载带 [Button]，只保留最派生、"
+                            + "最先声明的那一个——按钮文本默认就是方法名，同名无法区分。"
+                            + "要都画出来，请给它们起不同的方法名。");
+                        continue;
+                    }
+
+                    level.Add(CreateMethodMember(method));
+                }
+
+                perLevel.Add(level);
+            }
+
+            var members = new List<InspectorProperty>();
+            for (var i = perLevel.Count - 1; i >= 0; i--)
+            {
+                members.AddRange(perLevel[i]);
+            }
+
+            return members;
+        }
+
+        /// <summary>
+        /// 判断一个方法是否该生成方法节点——即它身上有没有「会生成节点」的特性。
+        /// </summary>
+        /// <param name="method">候选方法。</param>
+        /// <returns>该建节点返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 新增一个标在方法上的特性时，把它加进 <see cref="MethodNodeAttributes"/> 即可——
+        /// 收集、交错、分组装配、处理器都会自动覆盖到。
+        /// </remarks>
+        private static bool CreatesMethodNode(MethodInfo method)
+        {
+            for (var i = 0; i < MethodNodeAttributes.Length; i++)
+            {
+                // 不继承：特性自己声明了 Inherited = false，这里跟着走才不会把覆写重复收一遍。
+                if (method.GetCustomAttributes(MethodNodeAttributes[i], false).Length > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 为一个方法建立节点。
+        /// </summary>
+        /// <param name="method">方法。</param>
+        /// <returns>建好的方法节点，尚未挂到父节点上。</returns>
+        /// <remarks>
+        /// <b>路径是「方法名 + <c>()</c>」。</b> 路径树内唯一是节点的身份契约，而方法名与字段名
+        /// 可以跨继承重名（基类字段 <c>Foo</c> + 派生类方法 <c>Foo()</c>），加了后缀就不可能相撞
+        /// ——C# 标识符里不允许出现圆括号。
+        /// </remarks>
+        private static InspectorProperty CreateMethodMember(MethodInfo method)
+        {
+            return new InspectorProperty(
+                method.Name,
+                method.Name + MethodPathSuffix,
+                method.ReturnType,
+                InspectorPropertyKind.Method,
+                new PropertyAttributes(CollectMemberAttributes(method)))
+            {
+                // 值入口留空：方法没有值。绘制器要调它时走 Owner 拿到目标对象，不经过值后端。
+                Member = method,
+            };
         }
 
         #endregion
@@ -624,24 +779,24 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 收集成员字段上的特性。
+        /// 收集成员（字段或方法）上的特性。
         /// </summary>
-        /// <param name="field">成员字段，可为 <c>null</c>。</param>
-        /// <returns>特性列表；无字段时为空列表。</returns>
+        /// <param name="member">成员，可为 <c>null</c>。</param>
+        /// <returns>特性列表；无成员时为空列表。</returns>
         /// <remarks>
         /// 反射每次调用都返回**新实例**，故这里天然满足「每个属性一份独立特性」——
         /// 不会出现多个属性共享同一个特性实例、改一个串一片的问题。
         /// 类级特性的分发才需要显式克隆。
         /// </remarks>
-        private static List<Attribute> CollectMemberAttributes(FieldInfo field)
+        private static List<Attribute> CollectMemberAttributes(MemberInfo member)
         {
             var result = new List<Attribute>();
-            if (field == null)
+            if (member == null)
             {
                 return result;
             }
 
-            foreach (var attribute in field.GetCustomAttributes(true))
+            foreach (var attribute in member.GetCustomAttributes(true))
             {
                 if (attribute is Attribute typed)
                 {

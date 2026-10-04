@@ -27,9 +27,10 @@ namespace XInspector
     /// 是本包的既有契约）。方法抛出的异常被捕获后打进 Console，不会炸掉 Inspector 的绘制。
     /// </para>
     /// <para>
-    /// <b>与 Odin 的差异：</b>不声明 <c>ButtonStyle</c>（它只管参数区的三种摆法，本包固定一种）、
-    /// 像素高度重载、图标一族、<c>DrawResult</c>／<c>DirtyOnClick</c>／布局一族——
-    /// 声明做不到的选项等于骗人。按钮在 Inspector 中的位置按声明顺序与字段交错，见包 README 的已知限制。
+    /// <b>与 Odin 的差异：</b>按钮**一律排在字段之后**，不嵌在字段之间（Odin 会紧跟相关字段）。
+    /// 纯反射拿不到「这个方法声明在哪两个字段之间」——字段与方法分属元数据的两张表，各自编号。
+    /// 另有几处不做：<c>ButtonStyle</c>（它只管参数区的三种摆法，本包固定一种）、像素高度重载、
+    /// 图标一族、<c>DrawResult</c>／<c>DirtyOnClick</c>／布局一族。详见包 README 的「已知限制」。
     /// </para>
     /// </remarks>
     /// <example>
