@@ -323,6 +323,48 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 释放宿主会释放树上的状态——节点状态里可释放的资源（如内嵌编辑器的嵌套
+        /// <c>Editor</c> 实例）不跟着宿主一起漏掉。
+        /// </summary>
+        [Test]
+        public void Dispose_DisposesTreeState()
+        {
+            _host.Attach(_target);
+            var probe = _host.Tree.Root.Children[0].State.GetOrCreate<DisposableProbeState>();
+
+            _host.Dispose();
+
+            Assert.That(probe.DisposeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// 换目标时旧树被释放。这条走的是 <c>Attach</c> 里的 <c>Clear</c>——
+        /// 最容易被漏掉的一条路（它看起来只是「改个引用」）。
+        /// </summary>
+        [Test]
+        public void Attach_SwitchingTarget_DisposesPreviousTreeState()
+        {
+            _host.Attach(_target);
+            var probe = _host.Tree.Root.Children[0].State.GetOrCreate<DisposableProbeState>();
+
+            _host.Attach(_other);
+
+            Assert.That(probe.DisposeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>重载同样经 <c>Clear</c>，旧树的状态照样释放。</summary>
+        [Test]
+        public void Reload_DisposesPreviousTreeState()
+        {
+            _host.Attach(_target);
+            var probe = _host.Tree.Root.Children[0].State.GetOrCreate<DisposableProbeState>();
+
+            _host.Reload();
+
+            Assert.That(probe.DisposeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// 释放后附加一律失败，不会让已释放的宿主复活。
         /// </summary>
         [Test]

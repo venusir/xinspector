@@ -51,6 +51,20 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 释放属性树，连带释放各节点状态里可释放的资源（如内嵌编辑器的嵌套 <c>Editor</c> 实例）。
+        /// </summary>
+        /// <remarks>
+        /// <b>子类覆写必须调用 <c>base.OnDisable()</c>。</b> 树上挂着必须在编辑器销毁时释放的
+        /// 原生对象；不调 base 就会泄漏，而症状（原生对象随每次选中/关闭累积）与覆写处看起来
+        /// 毫无关系。域重载时 Unity 也会调到这里——释放路径只碰树自己持有的引用，不依赖任何
+        /// 静态门面，因此那时照样安全。
+        /// </remarks>
+        protected virtual void OnDisable()
+        {
+            Tree?.Dispose();
+        }
+
+        /// <summary>
         /// 绘制 Inspector。
         /// </summary>
         /// <remarks>

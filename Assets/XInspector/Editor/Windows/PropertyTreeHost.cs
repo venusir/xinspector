@@ -265,8 +265,14 @@ namespace XInspector.Editor
         /// <summary>
         /// 丢弃树、序列化对象与目标引用，顺带清掉错误。
         /// </summary>
+        /// <remarks>
+        /// 树要**先释放再丢引用**：节点状态里可能有必须显式销毁的原生对象（内嵌编辑器创建的
+        /// 嵌套 <c>Editor</c> 实例）。换目标（<see cref="Attach"/>）、<see cref="Reload"/>、
+        /// <see cref="Dispose"/> 三条路都经这里，释放写在这一处即可全覆盖。
+        /// </remarks>
         private void Clear()
         {
+            _tree?.Dispose();
             _tree = null;
 
             if (_serializedObject != null)

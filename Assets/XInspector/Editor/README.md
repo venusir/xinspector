@@ -233,6 +233,31 @@ finally
 `Editor/Windows/PropertyTreeHost.cs`，直接读比照着重写快。窗口基类与（将来的）入门窗口
 预览面板共用它。
 
+## 释放：谁建谁销
+
+树上会出现**必须显式销毁**的资源——典型的是内嵌编辑器为被引用对象创建的嵌套 `Editor` 实例
+（绘制器不得持有可变字段，它只能待在 `PropertyState` 的附加状态袋里）。它们沿一条链释放：
+
+```
+状态的 Dispose                释放自己持有的原生对象（如 DestroyImmediate(Editor)）
+  ← PropertyState.Reset()      释放袋里实现 IDisposable 的那些，然后清空袋
+    ← PropertyTree.Dispose()   递归复位每个节点的状态
+      ← 宿主：XInspectorEditor.OnDisable、PropertyTreeHost（换目标 / Reload / Dispose 都经 Clear）
+```
+
+三条约定：
+
+1. **可释放的附加状态必须把释放写进自己的 `Dispose`。** `PropertyState.Reset()` 不认识任何具体
+   状态类型，它只负责调用 `IDisposable.Dispose`——不写进那里就没人会替你释放。
+2. **`PropertyTree.Dispose()` 只管节点状态，不管 `SerializedObject`。** 后者的所有权在调用方：
+   Inspector 路径上它是 Unity 给的，宿主路径上由 `PropertyTreeHost` 自己建、自己释放。
+3. **继承 `XInspectorEditor` 覆写 `OnDisable` 时必须调 `base.OnDisable()`。** 不调就会泄漏，
+   而症状（原生对象随每次选中/关闭累积）与覆写处看起来毫无关系。
+
+释放是幂等的：`Reset()` 之后袋已清空，再 `Dispose()` 一次无事可做。另外**销毁一个 `Editor`
+实例会触发它自己的 `OnDisable`**（已实测，守卫在 `Tests/Editor/PropertyTreeDisposalTests.cs`），
+所以嵌套那一层的属性树会顺着同一条链连带释放——这也是内嵌编辑器不需要额外清理机制的原因。
+
 ## 值的读写
 
 `PropertyValueEntry` 是树与序列化之间的那条缝，当前唯一实现是

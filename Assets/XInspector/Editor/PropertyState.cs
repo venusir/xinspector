@@ -140,16 +140,34 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 复位到初始状态：可见、可编辑、无标签覆盖、清空附加状态。
+        /// 复位到初始状态：可见、可编辑、无标签覆盖、释放并清空附加状态。
         /// </summary>
         /// <remarks>
-        /// 构建期重建属性树时调用，使旧状态不会渗透到新一轮。
+        /// <para>
+        /// 释放附加状态是**销毁**语义：实现 <see cref="IDisposable"/> 的状态在这里被释放
+        /// （典型的是内嵌编辑器持有的嵌套 <c>Editor</c> 实例），此后该状态不可再用。
+        /// 本类不认识任何具体状态类型，故这是一条**约定**——可释放的状态必须把释放写进自己的
+        /// <c>Dispose</c>，而不是指望某个调用方记得它。
+        /// </para>
+        /// <para>
+        /// 由 <see cref="PropertyTree.Dispose"/> 在树被丢弃时逐节点调用；重复调用是幂等的
+        /// ——袋已清空，无事可做。
+        /// </para>
         /// </remarks>
         public void Reset()
         {
             _visibilityResolver = AlwaysVisible;
             _readOnlyResolver = AlwaysEditable;
             LabelOverride = null;
+
+            foreach (var entry in _bag.Values)
+            {
+                if (entry is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+
             _bag.Clear();
         }
 

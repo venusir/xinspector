@@ -12,7 +12,7 @@ namespace XInspector.Editor
     /// 都集中在 <see cref="PropertyTreeBuilder"/>。
     /// </para>
     /// </summary>
-    public sealed class PropertyTree
+    public sealed class PropertyTree : IDisposable
     {
         #region Construction
 
@@ -105,6 +105,48 @@ namespace XInspector.Editor
         public void Draw()
         {
             Root.Draw();
+        }
+
+        /// <summary>
+        /// 释放树：递归复位每个节点的状态。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>只管节点状态，不管序列化对象。</b> <see cref="SerializedObject"/> 的所有权在调用方
+        /// ——Inspector 路径上它是 Unity 给的（<c>Editor.serializedObject</c>），宿主路径上由
+        /// <see cref="PropertyTreeHost"/> 自己建、自己释放。在这里顺手释放它会变成双重释放。
+        /// </para>
+        /// <para>
+        /// 复位状态会释放其中实现 <see cref="IDisposable"/> 的附加状态——内嵌编辑器持有的
+        /// 嵌套 <c>Editor</c> 实例就是靠这条路径销毁的。因此树一旦释放就不该再绘制：
+        /// 状态已空，重建出来的也不是原来那些。
+        /// </para>
+        /// <para>
+        /// 重复调用是幂等的（第二次遍历到的袋已清空，无事可做）。
+        /// </para>
+        /// </remarks>
+        public void Dispose()
+        {
+            DisposeNode(Root);
+        }
+
+        /// <summary>
+        /// 递归复位一个节点及其全部子节点的状态。
+        /// </summary>
+        /// <param name="node">起始节点。</param>
+        /// <remarks>
+        /// 手写递归而非走 <see cref="InspectorProperty.Children"/>：那是个只读列表接口，
+        /// 而这里与构建期一样可以直接用内部列表，少一层接口调用。
+        /// </remarks>
+        private static void DisposeNode(InspectorProperty node)
+        {
+            node.State.Reset();
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                DisposeNode(children[i]);
+            }
         }
 
         #endregion
