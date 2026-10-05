@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using XInspector;
 
@@ -699,6 +700,37 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 集合与表格
+
+        /// <summary>原生对照：没标任何特性，数组照旧由 Unity 画（折行、自带增删与拖拽）。</summary>
+        public int[] nativeNumbers = { 1, 2, 3 };
+
+        /// <summary>自绘列表：索引标签 + 每行一个「−」，标题行右端是「+」。</summary>
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public string[] loadout = { "剑", "盾" };
+
+        /// <summary>只读列表：增删按钮变灰，**元素照常可编辑**（这正是与 [ReadOnly] 的差别）。</summary>
+        [ListDrawerSettings(IsReadOnly = true, HideAddButton = true)]
+        public float[] bakedWeights = { 0.5f, 1.5f };
+
+        /// <summary>恒展开：没有折叠头，标题行右端仍有「+」。</summary>
+        [ListDrawerSettings(ShowFoldout = false, HideRemoveButton = true)]
+        public int[] alwaysOpen = { 7 };
+
+        /// <summary>少于一行的长度校验：默认文案会说清要求与现状。</summary>
+        [RequiredListLength(3)]
+        public string[] threeSlots = { "只填了一个" };
+
+        /// <summary>表格：每行一个元素、每列一个元素类型的成员（列宽与隐藏见下面的行类型）。</summary>
+        [TableList(ShowIndexLabels = true)]
+        public List<TableSampleRow> waves = new List<TableSampleRow>
+        {
+            new TableSampleRow { level = 1, name = "史莱姆", memo = "备注列不进表格" },
+            new TableSampleRow { level = 2, name = "哥布林" },
+        };
+
+        #endregion
+
         #region 调试
 
         /// <summary>把本字段的绘制器链摊开成一张表——展开后第 0 格就是它自己。</summary>
@@ -809,5 +841,21 @@ namespace XInspector.Samples
 
         /// <summary>上界。</summary>
         public float max;
+    }
+
+    /// <summary>展示 <c>[TableList]</c> 用的行类型：一列定宽、一列弹性、一列不进表格。</summary>
+    [Serializable]
+    public class TableSampleRow
+    {
+        /// <summary>定宽列。</summary>
+        [TableColumnWidth(45)]
+        public int level;
+
+        /// <summary>弹性列（不标列宽就均分剩余宽度）。</summary>
+        public string name = "名字";
+
+        /// <summary>标了隐藏的成员不进表格，但字段本身照常在别处序列化。</summary>
+        [HideInTables]
+        public string memo = "备注";
     }
 }

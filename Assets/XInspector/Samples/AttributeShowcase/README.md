@@ -277,6 +277,20 @@
 > **多选时要求全部目标都匹配。** 同时选中一个预制体资产与一个场景对象，两边的字段都不满足条件
 > ——预制体上下文是整个选择的性质，不是某一个目标的事。
 
+### 集合与表格
+
+| 特性 | 预期看到 |
+|---|---|
+| （无特性，`nativeNumbers`） | 原生对照：数组由 Unity 自己画，自带增删与拖拽 |
+| `[ListDrawerSettings(ShowIndexLabels = true)]` | 自绘列表：每行一个「−」、标题行右端一个「+」、行标签是下标 |
+| `[ListDrawerSettings(IsReadOnly = true, HideAddButton = true)]` | 增删按钮变灰、且没有「+」；**元素本身照常可编辑**——这正是与 `[ReadOnly]` 的差别 |
+| `[ListDrawerSettings(ShowFoldout = false)]` | 恒展开：没有折叠三角 |
+| `[RequiredListLength(3)]` | 只有一项 → 字段上方一条错误提示（说清要求与现状） |
+| `[TableList(ShowIndexLabels = true)]` | 表格：列头一行 + 每行一个元素；`level` 定宽 45 像素、`name` 弹性、`memo` 因 `[HideInTables]` 不进表 |
+
+> 两条刻意的边界：**元素仍由原生绘制器画**（元素类型里的本包特性照旧不生效——自绘的是容器，
+> 不是元素）；**增删的新元素是上一个元素的副本**（Unity 自己的语义，与原生「+」一致）。
+
 ### 调试
 
 | 特性 | 预期看到 |

@@ -333,6 +333,44 @@ public struct Range { public float min; public float max; }   // 标在类型上
 | `[InlineProperty]` 的画法 | 本包自定（官方只写了「contents next to the label」）：父标签照常画在标签列（`LabelWidth > 0` 时临时覆盖、画完还原），子字段缩进一级逐个画在下面；叠 `[HideLabel]` 撤掉父标签 |
 | 标在类型上 | 标在**字段的声明类型**上时该类型的字段一律内联（`Inherited = false`：写在哪一层，哪一层才内联）；注入的是每个字段一份**独立**实例 |
 
+### 集合与表格
+
+```csharp
+public int[] native;                                   // 不标：整份交给 Unity，外观与原生一致
+
+[ListDrawerSettings(ShowIndexLabels = true)]
+public string[] loadout;                               // 自绘容器：索引标签 + 每行「−」+ 标题行「+」
+
+[ListDrawerSettings(IsReadOnly = true)]
+public float[] baked;                                  // 去掉增删能力，但**元素照常可编辑**
+
+[TableList(ShowIndexLabels = true)]
+public List<EnemyWave> waves;                          // 表格：每行一个元素、每列一个成员
+
+[RequiredListLength(3)]
+public string[] team;                                  // 长度校验（只读 arraySize，不需要自绘）
+
+[Serializable]
+public class EnemyWave
+{
+    [TableColumnWidth(60)] public int level;            // 定宽列
+    public string name;                                 // 不标 = 弹性均分
+    [HideInTables] public string memo;                  // 不进表格
+}
+```
+
+| 行为 | 说明 |
+|---|---|
+| 作用面 | **只接管容器**：行、增删按钮、索引标签、表格列。元素仍由原生 `PropertyField` 逐个画——元素类型里的本包特性**照旧不生效**（「元素节点化」未做） |
+| 不标时 | 数组整个交给 Unity 的 `PropertyField(includeChildren: true)`，与原生逐像素一致 |
+| 新增元素 | 是**上一个元素的副本**（空列表为默认值）——Unity 自己的语义（官方手册与原生「+」一致）；Odin 的「不复制」旋钮本包不做 |
+| 增删的落盘 | 只改内存副本，写回与 Undo 交给宿主：Inspector 走 Unity 的常规撤销路径，**窗口路径不进 Undo**（本包对窗口的一贯约定） |
+| 多选 | 各目标列表不一致时增删按钮变灰（否则 `arraySize` 的改动会把主目标的列表铺到所有目标）、长度校验跳过（读到的不是任何目标的真值） |
+| `[TableList]` 单独用 | 构建期会补一份 `[ListDrawerSettings]`——不必手写；两者并存时「增删/只读」取后者，「索引列/恒展开」取前者 |
+| 表格列 | 顺序 = 元素类型的声明顺序（有元素时按序列化顺序校一遍，基类在前）；列宽由 `[TableColumnWidth]` 给定、不给则弹性均分；复合类型不做单元格（画占位并告警一次，要彻底去掉用 `[HideInTables]`） |
+| 表格的降级 | 元素不是复合类型（`List<int>`、`string[]`……）时构建期告警一次 + 退回普通列表绘制 |
+| 不做 | 拖拽排序、多选、分页、滚动、列宽拖拽、`CustomAddFunction` 一族、用元素成员的值当行标签、字典、`[TableMatrix]`、`[AssetList]`、`[Searchable]`——**旋钮一律不声明**（写了会编译不过，而不是静默无效） |
+
 ### 按钮族
 
 ```csharp
