@@ -123,6 +123,12 @@ internal sealed class MyProcessor : AttributeProcessor<MyAttribute>
 （例如「多个分组只取第一个」），则继承非泛型的 `AttributeProcessor` 并覆写
 `ProcessChildMemberAttributes`——泛型基类会逐个实例回调，那正是两种基类都留着的理由。
 
+非泛型钩子还有第二种用法：**判据不在父属性的特性上，而在成员自己身上**。
+`ClassLevelInlinePropertyProcessor` 看的是「这个字段的**声明类型**有没有 `[InlineProperty]`」
+（类级内联的官方语义就是标在类型上的）——泛型基类的 `CanProcessChildMemberAttributes` 只问
+「父属性有没有 T」，够不着这种判据。**注入时同样要复制新实例**：类型上那一份会被该类型的
+所有字段共享。
+
 ### 三条纪律
 
 1. **不得绘制。** 一旦它能画东西，绘制器链的顺序语义就被绕过了——「谁包住谁」将不再只由
