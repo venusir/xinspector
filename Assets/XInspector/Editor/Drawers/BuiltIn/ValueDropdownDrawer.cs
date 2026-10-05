@@ -50,6 +50,16 @@ namespace XInspector.Editor
                 return;
             }
 
+            if (!ValueDropdownTarget.IsSupported(serializedProperty))
+            {
+                // 数组/集合目标以前会走到「像字段的下拉按钮」那条路：显示成空白、点开选择后报
+                // 类型不一致。「改了但没反应」比「压根没装上」难查得多，故这里明说并退回。
+                DrawerWarnings.Once(property, nameof(ValueDropdownDrawer) + ".target",
+                    DrawerWarnings.TypeMismatch(property, "[ValueDropdown]", "单值成员（数组形态未做）"));
+                CallNextDrawer(property, label);
+                return;
+            }
+
             var state = property.State.Get<ValueDropdownState>();
             if (state == null || !state.Resolved)
             {
@@ -474,6 +484,31 @@ namespace XInspector.Editor
         private static int CompareByPath(Option left, Option right)
         {
             return string.CompareOrdinal(left.Path, right.Path);
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// <c>[ValueDropdown]</c> 的**目标判定**——纯函数，可无头测试。
+    /// </summary>
+    internal static class ValueDropdownTarget
+    {
+        #region Public API
+
+        /// <summary>
+        /// 目标字段能不能挂这个下拉：需要 Unity 的序列化后端，且是**单值**成员。
+        /// </summary>
+        /// <param name="serializedProperty">目标字段的序列化属性。</param>
+        /// <returns>支持返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 字符串要放行：它在若干语境下被 Unity 算作 <c>isArray</c>，而 <c>[ValueDropdown]</c>
+        /// 恰恰常用在字符串上。数组与 List 才是这里要挡的（按元素画属集合自绘那一层）。
+        /// </remarks>
+        public static bool IsSupported(SerializedProperty serializedProperty)
+        {
+            return serializedProperty != null
+                && (serializedProperty.propertyType == SerializedPropertyType.String || !serializedProperty.isArray);
         }
 
         #endregion
