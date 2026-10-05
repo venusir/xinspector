@@ -75,6 +75,32 @@ namespace XInspector.Samples
         [SuffixLabel("×100%", true)]
         public float ratio = 0.75f;
 
+        /// <summary>内联：子字段摊平画出来，不画折叠头（与下面那个未标的一对照就看出来）。</summary>
+        [InlineProperty]
+        public Range inlineRange;
+
+        /// <summary>同一个类型、没标内联——为对照而留，它会带一个折叠箭头。</summary>
+        public Range foldedRange;
+
+        /// <summary>内联 + 父标签占 60 像素（不标则沿用当前的标签宽度）。</summary>
+        [InlineProperty(LabelWidth = 60)]
+        [HideLabel]
+        public Range tightRange;
+
+        /// <summary>把顺序排到最前（-1）——其余未标注的字段保持声明顺序。</summary>
+        [PropertyOrder(-1f)]
+        public int orderedFirst = 1;
+
+        /// <summary>排在最后（1）。</summary>
+        [PropertyOrder(1f)]
+        public int orderedLast = 2;
+
+        /// <summary>方法也能排：负的顺序让它插到字段之间（默认是一律排在字段之后）。</summary>
+        [Button, PropertyOrder(-0.5f)]
+        private void OrderableAction()
+        {
+        }
+
         #endregion
 
         #region 值绘制
@@ -772,5 +798,16 @@ namespace XInspector.Samples
 
         /// <summary>冰冻。</summary>
         Frozen = 4,
+    }
+
+    /// <summary>展示 <c>[InlineProperty]</c> 用的嵌套类型：标与不标各自出现一次，便于对照。</summary>
+    [Serializable]
+    public struct Range
+    {
+        /// <summary>下界。</summary>
+        public float min;
+
+        /// <summary>上界。</summary>
+        public float max;
     }
 }

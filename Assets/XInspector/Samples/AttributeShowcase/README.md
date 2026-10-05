@@ -32,6 +32,10 @@
 | `[HideLabel]` | 撤掉标签，值占满整行 |
 | `[SuffixLabel("秒")]` | 值控件右侧画后缀 |
 | `[SuffixLabel("×100%", true)]` | 后缀叠在控件上 |
+| `[InlineProperty]` | 嵌套类型的子字段**摊平画出来**，没有折叠箭头；与下面同样类型但未标的那一个直接对照 |
+| `[InlineProperty(LabelWidth = 60)]` + `[HideLabel]` | 父标签整个撤掉、标签列收窄到 60——子字段看起来就像本层的字段 |
+| `[PropertyOrder(-1)]` / `[PropertyOrder(1)]` | 一个排到最前、一个排到最后；其余未标注的字段保持声明顺序 |
+| `[Button, PropertyOrder(-0.5)]` | 按钮**插在字段之间**——默认它排在字段之后，显式顺序开了这个口子 |
 
 ### 值绘制
 

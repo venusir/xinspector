@@ -311,6 +311,28 @@ public static string BuildTag = "静态成员也可以标";
 | `[Toggle]` 的叠加顺序 | 条件族（0）< `[Toggle]`（50）< `[ReadOnly]`（100）< `[EnableGUI]`（110）。与 `[DisableIf]` 并存时开关赢，与 `[ReadOnly]` 并存时后者赢 |
 | `[Toggle]` 解析失败 | 告警一次并**保持可编辑**——拼错的名字不该让字段变得不可用（与条件族「失败即放行」同一规矩） |
 
+### 顺序与内联
+
+```csharp
+[PropertyOrder(-1f)]           public int health;      // 排到最前
+                               public int mana;        // 未标注 = 0，未标注者之间保持声明顺序
+[Button, PropertyOrder(1f)]    private void Reset() { } // 方法也能排：默认在字段之后，显式顺序可插到之间
+
+[InlineProperty]               public Range damage;    // 子字段摊平画出来，不画折叠头
+[Serializable, InlineProperty(LabelWidth = 60)]
+public struct Range { public float min; public float max; }   // 标在类型上：该类型的字段一律内联
+```
+
+| 行为 | 说明 |
+|---|---|
+| `[PropertyOrder]` 的作用面 | **成员顺序**（不是绘制）：构建期在三段收集之后做一次**稳定排序**。未标注者保持声明先后，所以不用它时次序与从前逐字一致 |
+| 与分组的分工 | **本特性排成员，分组特性的 `Order` 排分组**。连带后果：分组节点落在其首个成员出现的位置，成员被排到前面时它所属的分组会跟着移动 |
+| 标在方法上 | 方法与字段同在成员列表里，排序对它们同样生效——于是「按钮默认排在字段之后」有了显式出口 |
+| `[InlineProperty]` 的作用面 | **只改观感**：子字段仍由 Unity 原生绘制、**不进本包管线**（子字段身上的本包特性照旧不生效） |
+| `[InlineProperty]` 的降级 | 没有序列化后端 / 数组与列表 / 没有可见子字段（`int`、`string`……）→ 退回普通绘制并各告警一次，不静默 |
+| `[InlineProperty]` 的画法 | 本包自定（官方只写了「contents next to the label」）：父标签照常画在标签列（`LabelWidth > 0` 时临时覆盖、画完还原），子字段缩进一级逐个画在下面；叠 `[HideLabel]` 撤掉父标签 |
+| 标在类型上 | 标在**字段的声明类型**上时该类型的字段一律内联（`Inherited = false`：写在哪一层，哪一层才内联）；注入的是每个字段一份**独立**实例 |
+
 ### 按钮族
 
 ```csharp
@@ -329,7 +351,7 @@ public static string BuildTag = "静态成员也可以标";
 
 | 行为 | 说明 |
 |---|---|
-| 位置 | 按钮**一律排在字段之后**（分组内的排在组内）。Odin 会紧跟相关字段，本包做不到——见包 README 的已知限制 |
+| 位置 | 按钮**默认排在字段之后**（分组内的排在组内）。Odin 会紧跟相关字段，本包默认做不到——见包 README 的已知限制；**要显式排位用 `[PropertyOrder]`**（方法也收） |
 | 生效范围 | 只对正在检视的那个对象（含继承链）。嵌套 `[Serializable]` 类型里的 `[Button]` 不生效 |
 | 多选 | 每个目标各调一次；静态方法只调一次。Inspector 里一次记**一步**撤销，**窗口路径不记** |
 | 参数 | 支持 `bool`／`int`／`float`／`double`／`string`／枚举／`UnityEngine.Object` 派生／`Vector2-4`／`Color`／`Rect`；初值是 C# 的 `default`（字符串取空串） |
