@@ -21,11 +21,11 @@
   都要同步——漏改的表现分别是「测试程序集编译不过」与「运行时找不到类型」。
   包尚未发布时改是零成本；发布后对**自带 asmdef 的使用方**就是破坏性变更了。
 - **Runtime 侧零第三方依赖**——这是它能被任何项目安全引入的前提，不要在 Runtime 引第三方包
-- 当前版本 `0.1.0-preview.1`，已实现 **77 个特性**；**L1a、L1b、L2、L5 已清完**
+- 当前版本 `0.1.0-preview.1`，已实现 **79 个特性**；**L1a、L1b、L2、L4、L5 已清完**
   （L3 除 `[TypeDrawerSettings]` 外已做——它是核过后确认的独立一批）。
-  L2 收尾之二一次收了两族：分组条件族 `[ShowIfGroup]` / `[HideIfGroup]` 落地，
-  跨对象条件 `"@other.field"` 核过之后判不做。下一个候选是 **L4**（`[PropertyOrder]`
-  与 `[InlineProperty]`，签名已核）与 **L6**（集合自绘，最重的一块）。API 尚未稳定
+  L2 收尾之二收了分组条件族与跨对象条件的结论；L4 收了顺序与内联两条
+  （`[InlineProperty]` 走**观感派**：摊平子字段但不建子节点、不进管线）。
+  **下一个候选是 L6**（集合自绘，最重的一块）与 L7（另一条产品线）。API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -277,15 +277,19 @@ XML 文档告警（同一节的「变通检查」），但它验不了「源文�
 - **元数据令牌的高字节是表号**：字段在 FieldDef（`0x04`）、方法在 MethodDef（`0x06`），
   两张表**各自编号**，跨表比大小没有意义（实测同一夹具里字段行号 94/95、方法行号 282/283）；
   `Type.GetMembers()` 也不按声明顺序返回。故「把方法节点插到它声明所在的字段之间」做不到
-  ——按钮一律排在字段之后。想按声明顺序排方法，只能用**同一张表内**的行号（低 24 位）。
+  ——按钮默认排在字段之后（`[PropertyOrder]` 提供显式出口，方法也收）。想按声明顺序排方法，
+  只能用**同一张表内**的行号（低 24 位）。
   三条测量都有用例钉着（`MethodNodeTests`），Unity 哪天换了行为会先红
 - **既无绘制器也无处理器的特性会被自动接管判据漏掉**。生命周期钩子
   （`[OnInspectorInit]` / `[OnInspectorDispose]` / `[OnStateUpdate]`）就是这样一类：
   它们不产生节点、不配绘制器，漏掉的症状是「类型不被接管、特性静默不生效、零告警」。
   新增这类特性时，让它实现 `XInspector.Internal.ITreeLifecycleAttribute`；
   「产生节点但不画也不改别人」的那一类（`[ShowInInspector]`）实现
-  `XInspector.Internal.ITreeMembershipAttribute`。**同时**：`IsUsedBy` 的扫描范围要与
-  成员收集的范围对齐——它漏过一次方法（`[Button]`），又漏过一次属性（`[ShowInInspector]`）
+  `XInspector.Internal.ITreeMembershipAttribute`；「不产生节点但改变排列」的那一类
+  （`[PropertyOrder]`）实现 `XInspector.Internal.ITreeOrderingAttribute`。**同时**：
+  `IsUsedBy` 的扫描范围要与成员收集的范围对齐——它漏过一次方法（`[Button]`），
+  又漏过一次属性（`[ShowInInspector]`），还漏过一次「标在**字段类型**上」（类级
+  `[InlineProperty]`，判据与注入必须看同一处）
 - **`Object[]` 改 `object[]` 会静默弄丢一条白送的语义**。形参类型一旦是 `object`，
   裸写 `target != null` 就退化成引用比较，而 Unity 的已销毁对象恰恰是「引用不为 null、
   按它自己的语义却是空」——以前这是 `Object[]` 白送的（`!= null` 自动走 Unity 的重载）。
@@ -349,7 +353,8 @@ XML 文档告警（同一节的「变通检查」），但它验不了「源文�
 折叠状态的跨会话持久化、UI Toolkit、`[TypeDrawerSettings]`（核过签名：它要的是
 `System.Type` 的整套绘制，**不依赖**反射后端，是独立的一批）。
 （`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完；
-**L5 的按钮族与回调族也已做完**——两批，2026-10-04。下一步是 L3。）
+**L5 的按钮族与回调族**、**L3 的反射值后端**、**L2 的收尾**、**L4 的顺序与内联**均已做完
+——分别见 Pipeline §八/§九/§十一/§十二。）
 
 **特性处理器层已做**（`Editor/Processors/`），条件族做了 `[ShowIf]` `[HideIf]` `[EnableIf]`
 `[DisableIf]`、四个模式变体（`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]`

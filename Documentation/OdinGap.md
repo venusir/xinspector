@@ -15,10 +15,10 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-05，L2 收尾之二之后）：**
+**本项目的家底（2026-10-05，L4 之后）：**
 
-- 公开特性 **77 个**（清单见文末「总账」），分九族：分组与条件、状态与门控、标签与外观、
-  值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**，另有调试 1 个
+- 公开特性 **79 个**（清单见文末「总账」），分十族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
   **`PrefabKind`**）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）；
@@ -61,7 +61,7 @@
 | **L1b** | 分组族与重型值绘制器 | **✅ 整层已清完**（2026-10-04）：分组族 6 个、值绘制器 6 个，收尾的 `[InlineEditor]` 一族（含三个内嵌环境条件）也落地了 |
 | **L2** | 条件族 + 类级分组分发 | ✅ **整层已清完**（2026-10-05）：分组条件族（`[ShowIfGroup]` / `[HideIfGroup]`）落地，构建期补上「分组装配之后」的第二趟处理器；跨对象条件核过之后判 ⛔ |
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
-| **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持（签名已核，见 §七末） |
+| **L4** | `[PropertyOrder]` `[InlineProperty]` | ✅ **整层已清完**（2026-10-05）：排序落在构建期的一次稳定排序上；`[InlineProperty]` 走**观感派**（只改画法，嵌套字段仍不进管线——「自己展开嵌套类型」那条推迟项因此仍然推迟着） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
 | **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 集合自绘 |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
@@ -154,7 +154,7 @@
 | `[EnableGUI]` | ✅ 已实现 | — |
 | **`[GUIColor]`** | **✅ 已实现** | — |
 | **`[HideLabel]`** | **✅ 已实现** | — |
-| `[PropertyOrder]` | ❌ 缺 | L4 |
+| `[PropertyOrder]` | ✅ 已实现 | 构建期稳定排序；`0` 是合法值；可标方法（按钮因此能插到字段之间） |
 | **`[PropertySpace]`** | **✅ 已实现** | — |
 | **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ✅ 已实现 | — |
@@ -167,7 +167,8 @@
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ✅ 已实现 | 数据源只收序列化数组/List；只声明有真行为的选项（另见 Collections） |
 
-**小计：已实现 14 / 缺 2 / 不做 3**（2026-10-04：`[ValueDropdown]` 转已实现、
+**小计：已实现 15 / 缺 1 / 不做 3**（2026-10-05：`[PropertyOrder]` 转已实现；
+2026-10-04：`[ValueDropdown]` 转已实现、
 `[TypeFilter]` 由「缺」改判「不做」；同日 L3 把 `[ShowInInspector]` 转已实现、
 L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 
@@ -227,7 +228,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
 | **`[Indent]`** | **✅ 已实现** | — |
 | **`[InfoBox]`** | **✅ 已实现** | — |
-| `[InlineProperty]` | ❌ 缺 | L4 |
+| `[InlineProperty]` | ✅ 已实现 | 观感派：只摊平子字段，不进管线；类级形态标在**字段的声明类型**上（另见 Essentials/Layout） |
 | **`[LabelText]`** | **✅ 已实现** | — |
 | **`[LabelWidth]`** | **✅ 已实现** | — |
 | `[OnCollectionChanged]` | ❌ 缺 | L6 |
@@ -241,7 +242,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | **`[PropertyTooltip]`** | **✅ 已实现** | — |
 | **`[SuffixLabel]`** | **✅ 已实现** | — |
 
-**小计：已实现 13 / 缺 5 / 不做 1**
+**小计：已实现 14 / 缺 4 / 不做 1**（2026-10-05：`[InlineProperty]` 转已实现）
 
 ### Collections（6）
 
@@ -325,10 +326,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 77 已实现 + 19 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 79 已实现 + 17 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 77 个：
+已实现的 79 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -352,9 +353,13 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 - **回调**（6，2026-10-04 L5）：`[OnInspectorInit]` `[OnInspectorDispose]` `[OnStateUpdate]`
   `[OnInspectorGUI]` `[OnValueChanged]` `[CustomContextMenu]`
 - **反射成员**（1，2026-10-04 L3）：`[ShowInInspector]`
+- **结构与顺序**（2，2026-10-05 L4）：`[PropertyOrder]`（构建期稳定排序，可标方法）、
+  `[InlineProperty]`（观感派：摊平子字段、不画折叠头）
 - **调试**（1）：`[ShowDrawerChain]`
 
-（另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。）
+（另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。
+同样不计入的还有 `ITreeLifecycleAttribute` / `ITreeMembershipAttribute` / `ITreeOrderingAttribute`
+三个**内部**标记接口。）
 
 **标 ⛔ 的 8 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]`
 `[HideNetworkBehaviourFields]` `[ShowPropertyResolver]` `[SuppressInvalidAttributeError]`
@@ -364,7 +369,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 19 个」也不等于「19 份工作量」**：其中真正需要新层的集中在
+**「缺 17 个」也不等于「17 份工作量」**：其中真正需要新层的集中在
 L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族、`[InlineEditor]` 一族、
 **L5 的按钮与回调两批**、**L3 的反射后端**、以及 **L2 的预制体上下文族**（都 2026-10-04）
 这几块已经清完。剩下的缺口里，**L6 是最重的一块**（它比原先估计的更重，见推荐顺序）。
@@ -491,11 +496,15 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 一整套 `System.Type` 的绘制（类型选择器 + `TypeInclusionFilter` 枚举），
 只是**借** `[ShowInInspector]` 的样例出场。它是独立的一批。
 
-## L4 · 需要构建期支持
+## L4 · 需要构建期支持　✅ 整层已清完（2026-10-05）
 
-- `[PropertyOrder]`——影响**成员顺序**，不是绘制。要在 `PropertyTreeBuilder` 的成员收集之后、
-  分组装配之前重排。注意与分组交互：`[PropertyOrder]` 是排成员，`Order` 是排分组。
-- `[InlineProperty]`——把嵌套类型的字段**提到本层**（不画折叠头）。要在建树时展开子成员。
+- ✅ `[PropertyOrder]`——影响**成员顺序**，不是绘制。落地在 `PropertyTreeBuilder` 的成员收集
+  之后、分组装配之前（与本节当初记的落点一致），一次**稳定**排序；`[PropertyOrder]` 排成员、
+  分组 `Order` 排分组。它顺带解锁了「按钮插到字段之间」——见 [Pipeline §十二](Modules/Pipeline.md)。
+- ✅ `[InlineProperty]`——当初记的落点是「要在建树时展开子成员」，**本轮没有走那条路**：
+  选了**观感派**（只把子字段摊平画出来，不建子节点、不进管线），理由是它对外承诺得起
+  （不展开就没有「嵌套字段行为悄悄变了」的风险）。完全体的触发条件与 Pipeline §二第 7 条
+  写的一样——「要让特性作用于嵌套类型内部时」，仍未触发。
 
 ## L5 · 需要拿到目标对象并调用　✅ 整层已清完（2026-10-04）
 
@@ -595,8 +604,13 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    ——`"@this.*"` 那半已被嵌套路径覆盖，剩下那半本包没有读路径，多对象语义也未定。
    「性价比要单独评估」这条评估完了：分组条件族值得做（2 个特性 + 一块可复用的第二趟基建），
    跨对象条件不值得。
-8. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
-   以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
+8. ~~**L4**~~——✅ **整层已清完**（2026-10-05，两条一起）。`[PropertyOrder]` 是「加一次
+   稳定排序 + 一个标记接口」；`[InlineProperty]` 走了**观感派**——它把 OdinGap 当初记的
+   落点（「要在建树时展开子成员」）**换掉了**：那要复活一条已推迟的形状，而观感派是
+   「不画折叠头」这半个缺口的完整答案、且承诺得起。两条都顺带各踩出一个判据坑
+   （见新的第七条经验）。
+   **下一步是 L6**——它的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
+   以及 `[AssetList]` 的列表绘制），比原先估计的更重；文档建议先只做「只读展示 + 元素级特性」。
 9. **L7**——要么不做，要么当成独立产品立项。
 
 **判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
@@ -626,6 +640,14 @@ L7 是另一条产品线。
 （否则同祖先下的兄弟分组会被一起藏掉），类级分组改写路径时**该**跟着走。
 修法是让特性自己带上「声明路径」，用「目标路径是不是当前路径的祖先」反推调用者。
 **改动共享机制前先问：同一条路径上的每个调用方，要的是不是同一件事。**
+
+**第七条（2026-10-05 新增）：判据的漏法有三种，不是两种。**
+自动接管的判据一直按「有没有绘制器 / 有没有处理器」问问题，于是漏过三次：
+`[Button]`（只标在方法上）、`[ShowInInspector]`（只标在属性上）——这两次是**扫的范围**漏了；
+`[PropertyOrder]` 是**性质**漏了：它既不画也不处理，由构建期直接消费，两张注册表永远问不到它。
+前两次的对策是「判据要覆盖成员收集真会去看的每一处」，第三次的对策是标记接口
+（`ITreeOrderingAttribute`）——**对「注册表之外」的特性，让判据认得它的存在本身**。
+每次都要问一遍：这个新特性，判据看得见吗？
 
 ---
 
