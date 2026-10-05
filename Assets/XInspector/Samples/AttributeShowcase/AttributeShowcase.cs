@@ -102,6 +102,15 @@ namespace XInspector.Samples
         {
         }
 
+        /// <summary>
+        /// 嵌套类型的成员成为真节点：展开后**里面的 [ShowIf] 会跟随、[Title] 会画出来**——
+        /// 这在嵌套层第一次生效（判据：嵌套成员里带了本包特性）。点开与下面那个对照着看。
+        /// </summary>
+        public NestedShowcaseStats stats = new NestedShowcaseStats();
+
+        /// <summary>只带原生装饰器的嵌套类型——不展开，整份仍由 Unity 画（外观与从前一致）。</summary>
+        public NestedShowcaseNative nativeNested;
+
         #endregion
 
         #region 值绘制
@@ -857,5 +866,36 @@ namespace XInspector.Samples
         /// <summary>标了隐藏的成员不进表格，但字段本身照常在别处序列化。</summary>
         [HideInTables]
         public string memo = "备注";
+    }
+
+    /// <summary>
+    /// 展示**嵌套成员节点化**用的类型：里面的本包特性第一次生效。
+    /// </summary>
+    [Serializable]
+    public class NestedShowcaseStats
+    {
+        /// <summary>条件开关——注意它是**同层**的，嵌套层的条件先找同级。</summary>
+        public bool alive = true;
+
+        /// <summary>嵌套层的标题。</summary>
+        [Title("嵌套层里的标题")]
+        public int level = 1;
+
+        /// <summary>嵌套层的条件：取消上面的勾选，这一行消失。</summary>
+        [ShowIf(nameof(alive))]
+        public int hp = 100;
+
+        /// <summary>嵌套层的顺序：排到这一层的最前。</summary>
+        [PropertyOrder(-1f)]
+        public string tag = "精英";
+    }
+
+    /// <summary>只带原生装饰器的嵌套类型——用来对照「没用到本包的类型外观不变」。</summary>
+    [Serializable]
+    public class NestedShowcaseNative
+    {
+        /// <summary>Unity 自己的装饰器。</summary>
+        [UnityEngine.Range(0f, 1f)]
+        public float ratio;
     }
 }
