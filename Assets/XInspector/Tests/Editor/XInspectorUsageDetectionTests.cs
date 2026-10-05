@@ -214,6 +214,26 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 分组条件族同样是处理器专有（没有绘制器）——判据漏了它们，只挂
+        /// <c>[ShowIfGroup]</c> 的类型就不会被自动接管，症状一如既往：**静默失效、零告警**。
+        /// </summary>
+        [Test]
+        public void HasProcessorForAttribute_分组条件族为真()
+        {
+            Assert.That(
+                AttributeProcessorRegistry.HasProcessorForAttribute(typeof(ShowIfGroupAttribute)), Is.True);
+            Assert.That(
+                AttributeProcessorRegistry.HasProcessorForAttribute(typeof(HideIfGroupAttribute)), Is.True);
+        }
+
+        /// <summary>只挂分组条件特性的类型必须被判为「用到了本插件」。</summary>
+        [Test]
+        public void IsUsedBy_只挂分组条件特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(GroupConditionOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 只有绘制器的特性不该被处理器注册表认领——两张表的回答各管各的。
         /// </summary>
         [Test]
@@ -223,8 +243,8 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 非泛型处理器（如类级分组分发）不暴露所处理的特性类型，因此查不到——
-        /// 这是刻意的：它不对应任何**单一**特性类型，判据那一半由绘制器覆盖。
+        /// 类级分组分发不对应任何**单一**特性类型，因此不认领 `[BoxGroup]` 这类分组特性——
+        /// 它处理的是「父节点上第一份分组特性」，判据那一半由绘制器覆盖。
         /// </summary>
         [Test]
         public void HasProcessorForAttribute_非泛型处理器不认领特性()
@@ -250,6 +270,17 @@ namespace XInspector.Tests.Editor
 
         /// <summary>只有条件特性，没有绘制器。</summary>
         [ShowIf(nameof(flag))]
+        public int value = 1;
+    }
+
+    /// <summary>只挂分组条件特性（同样是处理器专有）的资产。</summary>
+    internal sealed class GroupConditionOnlyFixture : ScriptableObject
+    {
+        /// <summary>条件开关。</summary>
+        public bool toggle = true;
+
+        /// <summary>分组条件没有绘制器——判据必须靠处理器那一半把它认出来。</summary>
+        [ShowIfGroup("条件组", Condition = nameof(toggle))]
         public int value = 1;
     }
 
