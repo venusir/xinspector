@@ -270,6 +270,29 @@ namespace XInspector.Samples
         [HorizontalGroup("三格")]
         public int cellC = 3;
 
+        /// <summary>条件为真才显示整组——组名与条件名不同时用 <c>Condition</c> 指定。</summary>
+        [ShowIfGroup("条件组", Condition = nameof(showGroupCondition))]
+        public int groupConditionalA = 1;
+
+        /// <summary>同组的第二个成员：一起出现、一起消失。</summary>
+        [ShowIfGroup("条件组", Condition = nameof(showGroupCondition))]
+        public int groupConditionalB = 2;
+
+        /// <summary>条件组配一个框：两份分组特性同路径并存，框照画、条件照判。</summary>
+        [ShowIfGroup("条件框", Condition = nameof(showGroupCondition))]
+        [BoxGroup("条件框")]
+        public int groupConditionalBoxed = 3;
+
+        /// <summary>取反：勾上「调试组」的开关时整组消失。</summary>
+        [HideIfGroup("调试组", Condition = nameof(hideDebugGroup))]
+        public int groupHiddenByDefault = 4;
+
+        /// <summary>上面几组的开关——条件名由 <c>Condition</c> 显式指定，组名因此可以随便起。</summary>
+        public bool showGroupCondition = true;
+
+        /// <summary>取反组的开关：勾上时「调试组」整组消失。</summary>
+        public bool hideDebugGroup;
+
         #endregion
 
         #region 结构与门控

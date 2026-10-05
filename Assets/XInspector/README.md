@@ -2,7 +2,7 @@
 
 特性驱动的可编程 Inspector 管线，用于 Unity 6。
 
-> **状态：** `0.1.0-preview.1` — 已实现 **69 个特性**（分组与条件、状态与门控、标签与外观、
+> **状态：** `0.1.0-preview.1` — 已实现 **77 个特性**（分组与条件、状态与门控、标签与外观、
 > 值绘制、校验与钳制、按钮、回调、反射成员，另有自建分组的基类与编辑器窗口基类）。
 > API 尚未稳定，可能随时变更。
 
@@ -187,11 +187,19 @@ public class PlayerProfileEditor : XInspectorEditor
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。
-- **条件族还差两族。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、四个模式变体
+- **条件族（含分组条件）已齐。** 有 `[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、四个模式变体
   （`[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`）、
-  三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`），
-  以及四个**预制体上下文**条件（`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`，接 `PrefabKind`）。
-  **没有** `[ShowIfGroup]` / `[HideIfGroup]`。
+  三个内嵌环境条件（`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`）、
+  四个**预制体上下文**条件（`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`，接 `PrefabKind`），
+  以及两个**分组条件**（`[ShowIfGroup]` `[HideIfGroup]`——条件为假时整组连同子成员一起消失）。
+- **分组条件族有几处自定的边界：**
+  - **组路径的末段默认兼任条件成员名**（`[ShowIfGroup("Box/Toggle")]` 判的是成员 `Toggle`），
+    组名想另起就用 `Condition` 显式指定。
+  - **本身不画任何东西**：纯条件载体，想让组有框，用同一个路径再配一个 `[BoxGroup]`。
+  - **不做** `Value` 值比较、`Animate`（没有动画系统）、`CombineValuesWith`
+    （同路径多次声明走既有的「先声明者优先」）。
+  - **组名与某个成员名相同时，树里会出现两个同路径的节点**——本包以路径当节点身份。
+    用 `Condition` 显式指定条件名、或让组名与成员名不同，即可避开。
 - **预制体上下文族（含 `[RequiredIn]` `[DisallowModificationsIn]`）有几处自定的边界：**
   - **模型预制体归入 `Regular`。** Odin 的 `PrefabKind` 里没有模型对应的成员；归成「不匹配」
     会让 `[ShowIn(PrefabKind.PrefabAsset)]` 在模型资产上**静默隐藏**。
@@ -212,7 +220,8 @@ public class PlayerProfileEditor : XInspectorEditor
   写在别的对象上的 `"@other.field"` 语法**不支持**。
 - **同一个成员上挂多个条件时，后装入者覆盖前者**（`PropertyState` 只有一个求值器槽）。
   覆盖次序是确定的（处理器按优先级、同优先级按类型名排），但**不是「全部满足」语义**
-  ——要表达合取请写一个返回 `bool` 的条件成员。
+  ——要表达合取请写一个返回 `bool` 的条件成员。同一个**分组节点**上挂两类分组条件
+  （`[ShowIfGroup]` 与 `[HideIfGroup]` 同路径）时同理。
 
 ## 依赖
 

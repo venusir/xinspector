@@ -124,7 +124,30 @@ public bool HasAmmo() => ammo > 0;        // 无参、返回 bool 的方法同�
 **模型预制体归 `Regular`**；**普通 C# 对象与非预制体资产（`ScriptableObject` 等）没有上下文**
 （`None`），既不满足 `[ShowIn]` 也不满足 `[HideIn]`。
 
-**不支持的**：条件写在别的对象上（Odin 的 `"@other.field"` 语法）、`[ShowIfGroup]` / `[HideIfGroup]`。
+**分组条件**（`[ShowIfGroup]` / `[HideIfGroup]`）把判据挂在**分组节点**上：条件为假时
+整组连同子成员一起消失。条件名默认取**组路径的末段**（组名兼条件名），组名想另起就用
+`Condition` 显式指定。
+
+```csharp
+public bool showDetails = true;
+
+[ShowIfGroup(nameof(showDetails))]                    // 组名兼条件名
+public int health;
+
+[ShowIfGroup("战斗组", Condition = nameof(showDetails))]  // 组名另起
+[BoxGroup("战斗组")]                                   // 想要框，就自己配一个
+public int attack;
+```
+
+| 行为 | 说明 |
+|---|---|
+| 判据挂点 | **分组节点**上——整组一起消失，不是逐个成员各判一次；祖先与兄弟分组不受牵连 |
+| 视觉 | 本特性**不画任何东西**（纯条件载体）；框、标题由配对的其它分组特性提供 |
+| 类级用法 | 可以标在类上；成员**全部**自带分组时，条件经「根上回退」仍然生效 |
+| 组名与成员重名 | 树里会出现两个同路径的节点（本包以路径当身份）——用 `Condition` 或另起组名避开 |
+| 不做 | `Value` 值比较、`Animate`、`CombineValuesWith`（同路径多次声明先声明者优先） |
+
+**不支持的**：条件写在别的对象上（Odin 的 `"@other.field"` 语法）。
 
 ### `[ShowInInspector]`
 
