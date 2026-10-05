@@ -44,6 +44,36 @@ namespace XInspector.Editor
         #region Public API
 
         /// <summary>
+        /// 展开过的成员里若有**分组特性**，报一次告警。
+        /// </summary>
+        /// <param name="parent">刚展开过的复合成员节点。</param>
+        /// <remarks>
+        /// 嵌套层的分组装配本轮**没有做**（它要动 <c>ApplyGrouping</c> 的路径前缀与
+        /// 「已挂载成员重排」，属另一轮）。不警告的话，那些分组特性会**静默不生效**——
+        /// 一个标了却什么都不做的 `[BoxGroup]` 正是本包最忌讳的现象。
+        /// </remarks>
+        public static void WarnAboutInertGroups(InspectorProperty parent)
+        {
+            var children = parent.RawChildren;
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                for (var a = 0; a < children[i].Attributes.Count; a++)
+                {
+                    if (children[i].Attributes[a] is PropertyGroupAttribute group)
+                    {
+                        Debug.LogWarning(
+                            $"[XInspector] 嵌套层里的分组特性（「{children[i].Path}」上的 " +
+                            $"[{group.GetType().Name}(\"{group.GroupID}\")]）**本轮不生效**：" +
+                            "嵌套层的分组装配尚未实现（`ApplyGrouping` 只跑顶层）。" +
+                            "该特性已忽略，这个成员会平铺在父字段之下。");
+                        return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// 这个类型（作为字段的**声明类型**）会不会被按需展开——**自动接管的判据**用它。
         /// </summary>
         /// <param name="declaredType">字段的声明类型。</param>

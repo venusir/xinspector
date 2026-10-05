@@ -350,6 +350,9 @@ namespace XInspector.Editor
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
+
+            // 分组特性在嵌套层本轮不生效——报一次，别让它静默（下一轮做装配）。
+            NestedMemberExpansion.WarnAboutInertGroups(parent);
         }
 
         #endregion
