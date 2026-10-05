@@ -15,13 +15,15 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-04，L2 收尾之一之后）：**
+**本项目的家底（2026-10-05，L2 收尾之二之后）：**
 
-- 公开特性 **75 个**（清单见文末「总账」），分九族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **77 个**（清单见文末「总账」），分九族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
   **`PrefabKind`**）
-- 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）
+- 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）；
+  **处理器分两趟跑**——处理分组特性的那些在**分组装配之后**（只对分组节点）跑，
+  这是 2026-10-05 为此类需求补上的那个阶段
 - **方法节点**：树上第一次出现没有值的节点（`InspectorPropertyKind.Method`）
 - **反射成员节点**：树上第一次出现值不来自 Unity 序列化的节点（`InspectorPropertyKind.ReflectedMember`），
   配套**第二套值后端** `ReflectedValueEntry`（只读），以及把成员编译成委托的 `ReflectedAccessor`
@@ -57,7 +59,7 @@
 | **L0** | Unity 原生装饰器：`[Range]` `[Space]` `[TextArea]` `[Multiline]` `[Header]` `[Tooltip]` | **无需工作**——由 `PropertyField` 绘制。✅ 结构侧已实测（2026-10-03），见文末「L0 的验证记录」 |
 | **L1a** | 21 个十几行的特性 | **零新基础设施** ✅ **已清完**（2026-10-04） |
 | **L1b** | 分组族与重型值绘制器 | **✅ 整层已清完**（2026-10-04）：分组族 6 个、值绘制器 6 个，收尾的 `[InlineEditor]` 一族（含三个内嵌环境条件）也落地了 |
-| **L2** | 条件族 + 类级分组分发 | **特性处理器层** ✅ 已做；预制体那一族 ✅ **已做**（2026-10-04，含两个原先判 ⛔ 的校验）。仍缺 `[ShowIfGroup]`/`[HideIfGroup]`（卡在「构建期没有分组装配之后的阶段」）与跨对象条件 |
+| **L2** | 条件族 + 类级分组分发 | ✅ **整层已清完**（2026-10-05）：分组条件族（`[ShowIfGroup]` / `[HideIfGroup]`）落地，构建期补上「分组装配之后」的第二趟处理器；跨对象条件核过之后判 ⛔ |
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | 构建期的结构支持（签名已核，见 §七末） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
@@ -194,16 +196,16 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[Button]` | ✅ 已实现 | 参数支持简单类型；参数区固定 CompactBox 形态 |
 | `[ButtonGroup]` | ✅ 已实现 | 一行等分；默认组名照抄官方 |
 | `[FoldoutGroup]` | ✅ 已实现 | — |
-| `[HideIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
+| `[HideIfGroup]` | ✅ 已实现 | 纯条件载体（不画东西）；组名兼条件名，可覆盖（另见 Conditionals） |
 | `[HorizontalGroup]` | ✅ 已实现 | — |
 | `[ResponsiveButtonGroup]` | ✅ 已实现 | 按标签宽度折行；本层唯一需要新布局基建的一个 |
-| `[ShowIfGroup]` | ❌ 缺 | L2 剩余（另见 Conditionals） |
+| `[ShowIfGroup]` | ✅ 已实现 | 纯条件载体（不画东西）；组名兼条件名，可覆盖（另见 Conditionals） |
 | `[TabGroup]` | ✅ 已实现 | — |
 | `[TitleGroup]` | ✅ 已实现 | — |
 | `[ToggleGroup]` | ✅ 已实现 | — |
 | `[VerticalGroup]` | ✅ 已实现 | — |
 
-**小计：已实现 10 / 缺 2**
+**小计：已实现 12 / 缺 0**（2026-10-05：`[ShowIfGroup]` `[HideIfGroup]` 转已实现）
 
 ### Buttons（6）
 
@@ -323,15 +325,16 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 75 已实现 + 21 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 77 已实现 + 19 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 75 个：
+已实现的 77 个：
 
-- **分组与条件**（19）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
+- **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
   `[HideInEditorMode]` `[HideInPlayMode]` `[DisableInEditorMode]` `[DisableInPlayMode]`、
-  `[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`
+  `[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`、
+  `[ShowIfGroup]` `[HideIfGroup]`（2026-10-05：判据挂在**分组节点**上，整组一起消失）
 - **状态与门控**（6）：`[ReadOnly]` `[EnableGUI]` `[Toggle]` `[HideMonoScript]`
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
@@ -361,7 +364,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 21 个」也不等于「21 份工作量」**：其中真正需要新层的集中在
+**「缺 19 个」也不等于「19 份工作量」**：其中真正需要新层的集中在
 L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族、`[InlineEditor]` 一族、
 **L5 的按钮与回调两批**、**L3 的反射后端**、以及 **L2 的预制体上下文族**（都 2026-10-04）
 这几块已经清完。剩下的缺口里，**L6 是最重的一块**（它比原先估计的更重，见推荐顺序）。
@@ -453,9 +456,9 @@ L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族
 | 缺口 | 为什么 |
 |---|---|
 | ~~`[ShowIn]` `[HideIn]` `[EnableIn]` `[DisableIn]`~~ | ✅ 已随预制体上下文族落地（2026-10-04）：签名核到后原来的拦阻条件消失 |
-| `[ShowIfGroup]` `[HideIfGroup]` | 签名已核（构造 `(string path, bool animate = true)` 与 `(string path, object value, bool animate = true)`，另有 `Value` / `Animate` / `Condition` 与 `CombineValuesWith`）。**仍不做是换了个理由**：判据要挂在**分组节点**上，而分组节点在处理器阶段之后才由分组装配创建——构建期没有「分组装配之后」那个阶段（`Editor/README.md` 已把这个口子记下）。要么加那个阶段（动顺序契约），要么把决策搬回绘制期（与「处理器专有」的分界相抵） |
+| ~~`[ShowIfGroup]` `[HideIfGroup]`~~ | ✅ 已做（2026-10-05，L2 收尾之二）：选了「给构建期加一个『分组装配之后』的第二趟处理器」那条路。三处偏差（不做 `Value` / `Animate` / `CombineValuesWith`）与「本身不画东西」的兜底理由见 [Pipeline §十一](Modules/Pipeline.md) |
 | ~~条件为**方法**或**普通属性**~~ | ✅ 已随 L3 落地（2026-10-04）：三级解析「序列化成员 → 反射字段/属性 → 无参返回 bool 的方法」 |
-| 条件写在**别的对象**上（Odin 的 `"@other.field"`） | 需要跨对象引用解析，与本包「条件名只认本对象」的既有边界冲突 |
+| 条件写在**别的对象**上（Odin 的 `"@other.field"`） | ⛔ **不做**（2026-10-05 结论）：`"@this.*"` 那一半已被「条件名可以是 `a/b` 嵌套路径」覆盖；剩下的是「借成员持有的对象实例去读它的字段」——本包没有那条读路径，多对象语义也未定。理由归档见 [Pipeline §十一](Modules/Pipeline.md) |
 | ~~`[ShowInInlineEditors]` `[HideInInlineEditors]` `[DisableInInlineEditors]`~~ | ✅ 已随 `[InlineEditor]` 一族落地（2026-10-04） |
 
 **同层内的一处口径不一致，刻意留着**：既有的 `[ShowIf]` 一系取「首个存活目标」的值，
@@ -477,8 +480,12 @@ L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族
 本包是「不给改」，理由见 Pipeline §二 第 17 条。
 
 **本轮另外清掉的**：L2 剩余项里的「条件指向普通属性/方法」也一并做了（三级解析）。
-L2 表里还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——它们卡在**签名未核**，
+L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——它们卡在**签名未核**，
 与反射后端无关。
+
+> **2026-10-05 追记：** 上面这句在本轮已全部收口——`[ShowIn]` 一族随预制体那一轮落地，
+> `[ShowIfGroup]` / `[HideIfGroup]` 与跨对象条件在 L2 收尾之二里各自有了结论
+> （前两个落地，后一个判 ⛔）。见 [Pipeline §十一](Modules/Pipeline.md)。
 
 **没清掉的**：`[TypeDrawerSettings]` 原记在 L3，核过签名后确认它依赖的是
 一整套 `System.Type` 的绘制（类型选择器 + `TypeInclusionFilter` 枚举），
@@ -581,9 +588,13 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    一处当初没料到的成本：**种类探测是真的难**——隔离编辑模式里 `GetPrefabAssetType` 不可靠，
    判定阶梯得把它排在第一位并绕道资产路径；还有三处官方没写明的地方只能给兜底。
    一处当初也没料到的**测试代价**：预制体夹具必须往盘上写资产，这是本仓头一遭。
-7. **L2 剩下的两族**——`[ShowIfGroup]` / `[HideIfGroup]`（签名已核，卡在「构建期没有
-   分组装配之后的阶段」）与跨对象条件 `"@other.field"`（与本包「条件名只认本对象」冲突）。
-   两族都不再卡在签名上，卡的是结构性改动，故性价比要单独评估。
+7. ~~**L2 剩下的两族**~~——✅ **已收口**（2026-10-05，L2 收尾之二）。
+   `[ShowIfGroup]` / `[HideIfGroup]` 选了「给构建期加一个『分组装配之后』的第二趟处理器」
+   那条路（另一条是沿用 `[ToggleGroup]` 的绘制期解析）：它保住了「解析在构建期、求值在
+   绘制期」的分界，代价是顺序契约多一条。跨对象条件 `"@other.field"` 核过之后**判不做**
+   ——`"@this.*"` 那半已被嵌套路径覆盖，剩下那半本包没有读路径，多对象语义也未定。
+   「性价比要单独评估」这条评估完了：分组条件族值得做（2 个特性 + 一块可复用的第二趟基建），
+   跨对象条件不值得。
 8. **L4 / L6**——按需。L6 的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
    以及 `[AssetList]` 的列表绘制），它比原先估计的更重。
 9. **L7**——要么不做，要么当成独立产品立项。
@@ -609,6 +620,12 @@ L7 是另一条产品线。
 隔离编辑模式里的资产类型）。三处都不是靠猜，而是**各自挑一个「不会误判成另一类」的落点**
 并写进注释：宁可少报，不可错报。这一条与「不猜 API 形状」是一对——形状不许猜，
 **兜底必须选**，选完要写下来。
+
+**第六条（2026-10-05 新增）：共享机制里的「谁在调用」不会写在数据上。**
+`CloneForPath` 同时服务两处，对条件特性而言要求恰好相反：合成祖先时**不该**继承条件
+（否则同祖先下的兄弟分组会被一起藏掉），类级分组改写路径时**该**跟着走。
+修法是让特性自己带上「声明路径」，用「目标路径是不是当前路径的祖先」反推调用者。
+**改动共享机制前先问：同一条路径上的每个调用方，要的是不是同一件事。**
 
 ---
 
