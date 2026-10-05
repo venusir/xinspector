@@ -133,6 +133,22 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **只挂 <c>[PropertyOrder]</c> 的**类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 它既没有绘制器也没有处理器——判据靠 <c>ITreeOrderingAttribute</c> 这个标记认出它。
+        /// 漏掉的后果与条件族、生命周期钩子当年一样：类型不被接管，排序**静默不生效**。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂排序特性的类型为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(PropertyOrderOnlyFixture)),
+                Is.True,
+                "排序特性由构建期直接消费，两张注册表都查不到它。");
+        }
+
+        /// <summary>
         /// 控制项：属性上挂着一个**别人家的**特性时为假。
         /// <para>
         /// 没有这一条，上面三条无法区分「认得 <c>[ShowInInspector]</c>」与
@@ -270,6 +286,14 @@ namespace XInspector.Tests.Editor
 
         /// <summary>只有条件特性，没有绘制器。</summary>
         [ShowIf(nameof(flag))]
+        public int value = 1;
+    }
+
+    /// <summary>只挂排序特性的资产。</summary>
+    internal sealed class PropertyOrderOnlyFixture : ScriptableObject
+    {
+        /// <summary>只标了顺序——它既没有绘制器也没有处理器。</summary>
+        [PropertyOrder(-1f)]
         public int value = 1;
     }
 

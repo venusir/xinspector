@@ -125,6 +125,14 @@ namespace XInspector.Editor
                     return true;
                 }
 
+                // 第四类：[PropertyOrder] 那样「不产生节点，但改变它们的排列」的。
+                // 它由构建期在成员收集之后直接消费（排的是收集完的那份列表），
+                // 两张注册表同样查不到——见 ITreeOrderingAttribute。
+                if (attribute is ITreeOrderingAttribute)
+                {
+                    return true;
+                }
+
                 var attributeType = attribute.GetType();
                 if (DrawerTypeRegistry.HasDrawerForAttribute(attributeType) ||
                     AttributeProcessorRegistry.HasProcessorForAttribute(attributeType))

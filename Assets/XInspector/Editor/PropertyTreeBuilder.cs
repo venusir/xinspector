@@ -128,6 +128,12 @@ namespace XInspector.Editor
             // 哪天 Unity 换了行为，那几条会先红。
             members.AddRange(CollectMethodMembers(targetType));
 
+            // [PropertyOrder]：三段都收完之后、**分组装配之前**做一次稳定排序。
+            // 位置由 OdinGap 记着的落点决定（「成员收集之后、分组装配之前」）——
+            // 装配是唯一消费这份顺序的地方：它决定根下散字段的次序、组内成员的次序，
+            // 以及分组节点落在哪里，所以排序必须在它之前完成。
+            SortMembersByPropertyOrder(members);
+
             // ---- 顺序是契约，动之前先读完这段 ----
             //
             // 树必须在**处理器之前**构造好：需要目标对象的处理器（按钮族按名解析方法、
@@ -637,6 +643,62 @@ namespace XInspector.Editor
                 // 值入口留空：方法没有值。绘制器要调它时走 Owner 拿到目标对象，不经过值后端。
                 Member = method,
             };
+        }
+
+        /// <summary>
+        /// 按 <see cref="PropertyOrderAttribute"/> 稳定排序成员：数值升序，未标注者视为 <c>0</c>。
+        /// </summary>
+        /// <param name="members">成员列表，就地排序。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>稳定是必需的。</b> 未标注的成员之间必须保持声明先后——否则字段的呈现次序会随
+        /// 列表规模变化（<c>List.Sort</c> 是不稳定排序，这正是分组那边手写插入排序的原因）。
+        /// 一个都不标时，本方法不改变任何次序，既有顺序守卫因此照常成立。
+        /// </para>
+        /// <para>
+        /// 三段成员（序列化 / 反射 / 方法）**一起参与**：无标注时原序保持，有标注时跨段排序
+        /// 成为可能——这正是「<c>[Button]</c> 方法能排到字段之间」的实现途径。
+        /// </para>
+        /// <para>
+        /// <c>0</c> 在这里是合法值而非「未指定」——与 <see cref="SortGroupNodesAtLevel"/> 的
+        /// 「最小非零」刻意不同，理由写在 <see cref="PropertyOrderAttribute.Order"/> 上。
+        /// </para>
+        /// <para>
+        /// <b>本方法排在处理器之前</b>（三段收集之后、<c>new PropertyTree</c> 之前），
+        /// 更贴近 OdinGap 记的落点。今天的处理器没有任何一个注入或删除
+        /// <see cref="PropertyOrderAttribute"/>，故与「处理器之后」等价；若将来支持**类级**
+        /// <c>[PropertyOrder]</c>（把类型上的顺序分发到成员），注入发生在处理器阶段、
+        /// 排在这一步之后——那时本方法要挪到处理器之后，否则排序看不到注入的特性。
+        /// </para>
+        /// </remarks>
+        private static void SortMembersByPropertyOrder(List<InspectorProperty> members)
+        {
+            // 插入排序：稳定，且成员数不大——与 SortGroupNodesAtLevel 同一套手法。
+            for (var i = 1; i < members.Count; i++)
+            {
+                var current = members[i];
+                var order = OrderOfMember(current);
+                var j = i - 1;
+
+                while (j >= 0 && OrderOfMember(members[j]) > order)
+                {
+                    members[j + 1] = members[j];
+                    j--;
+                }
+
+                members[j + 1] = current;
+            }
+        }
+
+        /// <summary>
+        /// 取成员的排序权重：标了 <see cref="PropertyOrderAttribute"/> 用它的值，否则 <c>0</c>。
+        /// </summary>
+        /// <param name="member">成员节点。</param>
+        /// <returns>排序权重。</returns>
+        private static float OrderOfMember(InspectorProperty member)
+        {
+            var attribute = member.Attributes.Get<PropertyOrderAttribute>();
+            return attribute?.Order ?? 0f;
         }
 
         #endregion
