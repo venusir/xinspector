@@ -204,6 +204,34 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **只把本包特性标在嵌套类型内部**的类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 嵌套层从本轮起会真的展开（<c>NestedMemberExpansion</c>）——判据看不见它，
+        /// 类型就不被接管、嵌套层的特性**静默失效**。这是判据第四次漏同一类东西
+        /// （前三次：方法、属性、字段声明类型）。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只标在嵌套层成员上为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NestedOnlyUsageFixture)), Is.True);
+        }
+
+        /// <summary>控制项：嵌套类型里只挂**原生**装饰器的不算（那不会触发展开）。</summary>
+        [Test]
+        public void IsUsedBy_嵌套层里的原生特性不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NativeNestedUsageFixture)), Is.False);
+        }
+
+        /// <summary>控制项：嵌套类型上的**类级**特性不算（那本轮不生效，也不触发展开）。</summary>
+        [Test]
+        public void IsUsedBy_嵌套类型上的类级特性不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ClassLevelNestedUsageFixture)), Is.False);
+        }
+
+        /// <summary>
         /// 控制项：属性上挂着一个**别人家的**特性时为假。
         /// <para>
         /// 没有这一条，上面三条无法区分「认得 <c>[ShowInInspector]</c>」与
@@ -387,6 +415,27 @@ namespace XInspector.Tests.Editor
         /// <summary>只标了列表设置——靠绘制器那一半被认出来。</summary>
         [ListDrawerSettings]
         public int[] values = { 1 };
+    }
+
+    /// <summary>只把本包特性标在**嵌套类型内部**的资产。</summary>
+    internal sealed class NestedOnlyUsageFixture : ScriptableObject
+    {
+        /// <summary>嵌套类型内部带 <c>[ShowIf]</c> 与 <c>[PropertyOrder]</c>。</summary>
+        public NestedStats stats = new NestedStats();
+    }
+
+    /// <summary>嵌套类型里只挂原生装饰器的资产（控制项）。</summary>
+    internal sealed class NativeNestedUsageFixture : ScriptableObject
+    {
+        /// <summary>只带 Unity 自己的 <c>[Range]</c>。</summary>
+        public NativeOnlyNested nested;
+    }
+
+    /// <summary>嵌套类型上有类级特性的资产（控制项）。</summary>
+    internal sealed class ClassLevelNestedUsageFixture : ScriptableObject
+    {
+        /// <summary>类级 <c>[Title]</c>——嵌套层的类级特性本轮不生效。</summary>
+        public ClassLevelNested nested;
     }
 
     /// <summary>挂着 <c>[Title]</c> 的嵌套类型（标题只对被检视类型生效）。</summary>

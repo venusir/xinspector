@@ -53,7 +53,13 @@ namespace XInspector.Editor
         /// <summary>递归回填每个节点的 <see cref="InspectorProperty.Owner"/>。</summary>
         /// <param name="node">起始节点。</param>
         /// <param name="owner">所属的树。</param>
-        private static void AssignOwner(InspectorProperty node, PropertyTree owner)
+        /// <remarks>
+        /// 构建期在成员还没上树时先给每个成员**各调一次**（那时它的子树已经成形）——
+        /// 嵌套子节点是收集期挂到父节点上的，而那时父节点的 <c>Owner</c> 还是
+        /// <c>null</c>，<c>AddChild</c> 传播过去也是 <c>null</c>。漏了这一步的症状是
+        /// 「嵌套层里需要 <c>Owner.Targets</c> 的条件与解析器全部落空」。
+        /// </remarks>
+        internal static void AssignOwner(InspectorProperty node, PropertyTree owner)
         {
             node.Owner = owner;
 

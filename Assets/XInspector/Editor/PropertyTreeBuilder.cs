@@ -29,6 +29,8 @@ namespace XInspector.Editor
         // 末端绘制器无状态，可以安全共享；建一次即可，不必每个节点新建。
         private static readonly ChildrenDrawer ChildrenTerminal = new ChildrenDrawer();
         private static readonly UnityFallbackDrawer MemberTerminal = new UnityFallbackDrawer();
+        private static readonly CompositeMemberTerminalDrawer CompositeMemberTerminal =
+            new CompositeMemberTerminalDrawer();
         private static readonly MethodTerminalDrawer MethodTerminal = new MethodTerminalDrawer();
         private static readonly ReflectedMemberTerminalDrawer ReflectedTerminal =
             new ReflectedMemberTerminalDrawer();
@@ -141,10 +143,11 @@ namespace XInspector.Editor
             var tree = new PropertyTree(serializedObject, targets, root);
 
             // 成员此刻还不在树上（要等分组装配才挂上去），故构造期那次递归回填够不着它们。
-            // 这一步补上；此后分组装配挂进来的节点由 AddChild 传播。
+            // 这一步补上，**且要递归**——嵌套子节点是收集期挂到父节点上的，那时父节点的
+            // Owner 还是 null，AddChild 传播不过去；漏了的话嵌套层的条件与解析器全部落空。
             for (var i = 0; i < members.Count; i++)
             {
-                members[i].Owner = tree;
+                PropertyTree.AssignOwner(members[i], tree);
             }
 
             // 生命周期钩子不产生节点（它们不在某个位置上画东西），故走独立通道收集。
@@ -165,7 +168,9 @@ namespace XInspector.Editor
             {
                 // 末端按种类选：值从哪来决定了由谁收尾。接错了只会画出一句
                 // 「没有 XX 后端」——那句话本身没错，但答非所问。
-                AttachChain(members[i], TerminalFor(members[i].Kind));
+                // **递归**：嵌套子节点不在 members 列表里，漏了它们就没链
+                // （症状是绘制时直接抛「链为空」）。
+                AttachChainRecursive(members[i]);
             }
 
             ApplyGrouping(root, members);
@@ -276,8 +281,75 @@ namespace XInspector.Editor
                 Member = field,
             };
 
+            // 嵌套复合成员按需展开（见 NestedMemberExpansion 的取舍）。
+            if (NestedMemberExpansion.ShouldExpand(node, stableProperty))
+            {
+                ExpandChildren(serializedObject, node);
+            }
+
             // 链条**不在这里挂**：处理器还没跑，特性尚未最终确定。
             return node;
+        }
+
+        /// <summary>
+        /// 把复合成员的直接子级展开成真节点（递归下去）。
+        /// </summary>
+        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="parent">复合成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 子节点的值入口一律用 <see cref="SerializedObject.FindProperty"/> 按各自路径取
+        /// **独立**实例——迭代器是共享的（老坑：存进节点会让所有节点指向最后一个属性）。
+        /// </para>
+        /// <para>
+        /// <b>子节点不过 <c>memberFilter</c>。</b> 那个过滤器的存在理由只是排除
+        /// EditorWindow 自己的那几个内部字段（判据是 <c>field == null</c> 即拒、
+        /// 声明类型必须可赋给窗口基类），套到嵌套层会把整层**静默滤掉**。
+        /// </para>
+        /// </remarks>
+        private static void ExpandChildren(SerializedObject serializedObject, InspectorProperty parent)
+        {
+            var property = parent.ValueEntry?.SerializedProperty;
+            if (property == null)
+            {
+                return;
+            }
+
+            var child = property.Copy();
+            var depth = property.depth + 1;
+            var next = child.NextVisible(true) && child.depth == depth;
+
+            while (next)
+            {
+                var path = child.propertyPath;
+                var field = NestedMemberExpansion.ResolveField(parent.Type, child.name);
+                var valueType = field != null ? field.FieldType : typeof(object);
+                var stableProperty = serializedObject.FindProperty(path);
+
+                var node = new InspectorProperty(
+                    child.name,
+                    path,
+                    valueType,
+                    InspectorPropertyKind.Member,
+                    new PropertyAttributes(CollectMemberAttributes(field)))
+                {
+                    ValueEntry = new SerializedPropertyValueEntry(stableProperty, valueType),
+                    Member = field,
+                };
+
+                parent.AddChild(node);
+
+                if (node.Member != null && NestedMemberExpansion.ShouldExpand(node, stableProperty))
+                {
+                    ExpandChildren(serializedObject, node);
+                }
+
+                next = child.NextVisible(false) && child.depth == depth;
+            }
+
+            // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
+            // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
+            SortMembersByPropertyOrder(parent.RawChildren);
         }
 
         #endregion
@@ -508,19 +580,43 @@ namespace XInspector.Editor
             return null;
         }
 
-        /// <summary>按节点种类挑链条末端。</summary>
-        /// <param name="kind">节点种类。</param>
-        /// <returns>该种类的末端绘制器。</returns>
-        private static XInspectorDrawer TerminalFor(InspectorPropertyKind kind)
+        /// <summary>
+        /// 为节点及其**全部后代**装链（末端按节点形状选）。
+        /// </summary>
+        /// <param name="node">起始节点。</param>
+        /// <remarks>
+        /// 嵌套子节点不在顶层 <c>members</c> 列表里（那列表只服务顶层装配），
+        /// 故挂链必须自己递归下去——漏了它们的链，绘制时会直接抛。
+        /// </remarks>
+        private static void AttachChainRecursive(InspectorProperty node)
         {
-            switch (kind)
+            AttachChain(node, TerminalFor(node));
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                AttachChainRecursive(children[i]);
+            }
+        }
+
+        /// <summary>按节点挑链条末端。</summary>
+        /// <param name="node">节点。</param>
+        /// <returns>该节点的末端绘制器。</returns>
+        /// <remarks>
+        /// 成员节点分两种：**展开过的复合成员**（有子节点）末端画「标签 + 折叠三角 + 子节点」，
+        /// 其余照旧交给 <c>UnityFallbackDrawer</c>。链在挂链期装配，而子节点在收集期就位，
+        /// 故此刻 <c>Children.Count</c> 可信。
+        /// </remarks>
+        private static XInspectorDrawer TerminalFor(InspectorProperty node)
+        {
+            switch (node.Kind)
             {
                 case InspectorPropertyKind.Method:
                     return MethodTerminal;
                 case InspectorPropertyKind.ReflectedMember:
                     return ReflectedTerminal;
                 default:
-                    return MemberTerminal;
+                    return node.Children.Count > 0 ? CompositeMemberTerminal : MemberTerminal;
             }
         }
 
@@ -772,6 +868,51 @@ namespace XInspector.Editor
                         processors[i].ProcessChildMemberAttributes(root, member.Member, member.Attributes.Raw);
                     }
                 }
+            }
+
+            // 嵌套子节点单独递归一趟：它们不在 members 列表里（那列表只服务顶层装配），
+            // 但「先自身、后父级注入」这两步与顶层同款，只是父节点换成了各自的复合父节点。
+            // 只**加一趟**，顶层那趟一字未动——顺序契约因此不受影响。
+            for (var m = 0; m < members.Count; m++)
+            {
+                RunNestedProcessors(processors, members[m]);
+            }
+        }
+
+        /// <summary>
+        /// 对复合成员下的子节点跑处理器的两个钩子（递归到自己那一层）。
+        /// </summary>
+        /// <param name="processors">第一趟处理器（有序）。</param>
+        /// <param name="parent">复合父节点。</param>
+        private static void RunNestedProcessors(AttributeProcessor[] processors, InspectorProperty parent)
+        {
+            var children = parent.RawChildren;
+
+            for (var c = 0; c < children.Count; c++)
+            {
+                var child = children[c];
+
+                for (var i = 0; i < processors.Length; i++)
+                {
+                    if (processors[i].CanProcessSelfAttributes(child))
+                    {
+                        processors[i].ProcessSelfAttributes(child, child.Attributes.Raw);
+                    }
+                }
+
+                // 与顶层同一条守卫：没有反射信息的成员不参与「父级注入」钩子。
+                if (child.Member != null)
+                {
+                    for (var i = 0; i < processors.Length; i++)
+                    {
+                        if (processors[i].CanProcessChildMemberAttributes(parent, child.Member))
+                        {
+                            processors[i].ProcessChildMemberAttributes(parent, child.Member, child.Attributes.Raw);
+                        }
+                    }
+                }
+
+                RunNestedProcessors(processors, child);
             }
         }
 

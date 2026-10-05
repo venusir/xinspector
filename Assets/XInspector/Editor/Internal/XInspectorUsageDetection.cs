@@ -78,6 +78,14 @@ namespace XInspector.Editor
                     {
                         return true;
                     }
+
+                    // 嵌套类型**内部**带特性的类型会被按需展开（见 NestedMemberExpansion）——
+                    // 判据必须看得见同一批类型，否则类型不被接管、嵌套层的特性**静默失效**。
+                    // 这是同一种漏法的又一面（前几面：方法、属性、字段声明类型）。
+                    if (NestedMemberExpansion.WouldExpand(fields[i].FieldType))
+                    {
+                        return true;
+                    }
                 }
 
                 var properties = current.GetProperties(StaticFlags);
@@ -110,11 +118,17 @@ namespace XInspector.Editor
         /// <param name="attributes">特性实例数组。</param>
         /// <returns>有能被处理的特性返回 <c>true</c>。</returns>
         /// <remarks>
+        /// <para>
         /// <b>两张表都要查。</b>绘制器决定「画得出来吗」，处理器决定「有没有东西会响应它」——
         /// 条件族（<c>[ShowIf]</c> 等）只有后者。漏掉处理器这一半的后果不是「少画了点东西」，
         /// 而是**特性完全失效且没有任何提示**：类型不被接管，走的还是原生 Inspector。
+        /// </para>
+        /// <para>
+        /// <b>它同时是「本包支持的特性」的唯一定义处</b>（`NestedMemberExpansion` 也用它判断
+        /// 一个嵌套类型值不值得展开）——两处若各写一份判据，迟早分家。
+        /// </para>
         /// </remarks>
-        private static bool HasSupportedAttribute(object[] attributes)
+        internal static bool HasSupportedAttribute(object[] attributes)
         {
             for (var i = 0; i < attributes.Length; i++)
             {

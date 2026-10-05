@@ -79,7 +79,10 @@ namespace XInspector.Editor
         /// 配合告警足以定位；而抛异常会让后果升级成「什么都看不见」。
         /// </para>
         /// <para>
-        /// <b>三级解析，顺序固定：序列化成员 → 反射字段/属性 → 无参返回 bool 的方法。</b>
+        /// <b>解析顺序固定：同一嵌套对象里的兄弟成员（只对嵌套成员）→ 本对象上的序列化成员
+        /// → 反射字段/属性 → 无参返回 bool 的方法。</b>
+        /// 第一级是「嵌套层里写 <c>[ShowIf("flag")]</c> 指的是同层的 flag」这条直觉的落点；
+        /// 顶层成员没有它（父节点是根而非成员），顺序对既有行为零变化。
         /// 序列化成员是本包的主路（它免费带着 Undo、预制体覆盖那一整套），反射那两级是兜底。
         /// 顺序固定下来，失败信息才可解释——「找不到」与「找到了但形状不对」是两句不同的话，
         /// 而「找到的是哪一级」也一样。
@@ -88,6 +91,30 @@ namespace XInspector.Editor
         internal static bool TryResolve(InspectorProperty property, string conditionName, out Func<bool> condition)
         {
             condition = null;
+
+            // 第 0 级（**只在嵌套成员上生效**）：同一嵌套对象里的兄弟成员。
+            // 顶层成员没有这一级——它的父节点是根而不是成员——因此对既有行为**零变化**。
+            // 顺序是刻意的：嵌套层里写 [ShowIf("flag")] 指的是同层的 flag；
+            // 只有当同层没有它时，才回落到根上的绝对名。
+            var container = NestedScopeOf(property);
+            if (container != null)
+            {
+                var sibling = container.FindPropertyRelative(conditionName);
+                if (sibling != null)
+                {
+                    if (sibling.propertyType != SerializedPropertyType.Boolean)
+                    {
+                        // 找到了却类型不符：**不再往下找**（与绝对名那一级同款的理由——
+                        // 继续找会报第二次警，而两条消息互相矛盾）。
+                        Warn(property, conditionName,
+                            $"找到的「{conditionName}」是 {sibling.propertyType}，条件必须是 bool");
+                        return false;
+                    }
+
+                    condition = () => sibling.boolValue;
+                    return true;
+                }
+            }
 
             // 第一级：序列化成员。这一段与 [Toggle]/[ToggleGroup] 共用类型判定——见 SerializedMemberResolver。
             var serializedObject = SerializedMemberResolver.FindSerializedObject(property);
@@ -113,6 +140,18 @@ namespace XInspector.Editor
                 }
             }
 
+            // 嵌套成员**到此为止**，不走下面那两级反射兜底：反射是在**被检视对象**上找成员，
+            // 拿到的是根上的同名成员——「条件看错了对象」，静默且极难归因。
+            // 与「嵌套 [Serializable] 里的 [Button]/[ShowInInspector] 不生效」是同一条限制
+            // （拿到嵌套实例需要一条本包没有的只读反射路径解析）。
+            if (container != null)
+            {
+                Warn(property, conditionName,
+                    "嵌套层里的条件必须是**序列化的兄弟成员**——反射字段/属性与方法的取值" +
+                    "需要嵌套实例，本包没有那条读路径");
+                return false;
+            }
+
             // 第二、三级：反射成员与方法。同样在构建期解析一次，绘制期只有委托调用。
             if (!ReflectedMemberResolver.TryResolveBooleanCondition(
                     property?.Owner?.Targets, conditionName, out condition, out var reason))
@@ -122,6 +161,20 @@ namespace XInspector.Editor
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// 取「同一嵌套对象」的序列化属性——嵌套成员的父节点是另一个成员时才有。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <returns>嵌套容器的序列化属性；顶层成员返回 <c>null</c>。</returns>
+        private static SerializedProperty NestedScopeOf(InspectorProperty property)
+        {
+            var parent = property?.Parent;
+
+            return parent != null && parent.Kind == InspectorPropertyKind.Member
+                ? parent.ValueEntry?.SerializedProperty
+                : null;
         }
 
         /// <summary>
