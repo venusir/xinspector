@@ -33,8 +33,9 @@ namespace XInspector.Editor
         /// <remarks>
         /// <b>构造点必须在处理器之前</b>（见 <see cref="PropertyTreeBuilder"/> 的构建顺序）：
         /// 需要目标对象的处理器，只能经 <see cref="InspectorProperty.Owner"/> 拿到树。
-        /// 因此这里要求「子树已成形」——分组装配会把新节点挂进来，但那些节点只被挂链，
-        /// 不再跑处理器。
+        /// 因此这里要求「子树已成形」——分组装配会把新节点挂进来，那些节点不跑第一趟处理器，
+        /// 但会在装配之后跑第二趟（只跑处理分组特性的那些，见
+        /// <see cref="AttributeProcessorRegistry.GroupProcessors"/>）。
         /// </remarks>
         internal PropertyTree(SerializedObject serializedObject, object[] targets, InspectorProperty root)
         {

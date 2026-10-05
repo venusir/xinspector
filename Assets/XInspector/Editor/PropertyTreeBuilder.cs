@@ -144,11 +144,14 @@ namespace XInspector.Editor
             // 生命周期钩子不产生节点（它们不在某个位置上画东西），故走独立通道收集。
             tree.Lifecycle = TreeLifecycle.Collect(targetType, tree.Targets);
 
-            // 处理器必须在**分组装配之前**跑：类级分组特性是处理器注入到成员上的，
+            // 处理器的**第一趟**必须在**分组装配之前**跑：类级分组特性是处理器注入到成员上的，
             // 而分组装配必须看到它——顺序反过来，类级 [BoxGroup] 会静默地不生效。
             //
-            // 处理器也必须在**挂链之前**跑：注入的特性会改变链条的构成
+            // 第一趟也必须在**挂链之前**跑：注入的特性会改变链条的构成
             // （例如类级 [Title] 被分发到成员身上，那个成员就该多一格标题绘制器）。
+            //
+            // 处理**分组特性**的处理器不在第一趟里（见 AttributeProcessorRegistry.FirstPassProcessors），
+            // 它们走下面的第二趟。
             RunProcessors(root, members);
 
             AttachChain(root, ChildrenTerminal);
@@ -160,6 +163,16 @@ namespace XInspector.Editor
             }
 
             ApplyGrouping(root, members);
+
+            // 处理器的**第二趟**：分组装配之后跑，只对分组节点、只跑「处理的特性派生自
+            // PropertyGroupAttribute」的那些。分组节点到第一趟时还不存在（它们由
+            // ApplyGrouping 创建），而分组特性只可能出现在分组节点上——两条合起来使
+            // 「判据挂在分组节点上」这类需求第一次有了构建期的落点，且判据不需要任何开关。
+            //
+            // 本趟只有**自身**钩子：往成员身上注入分组特性在装配之后已经太晚，装配看不见它，
+            // 症状是「特性像没写一样」。本趟也只许改 PropertyState——分组与链都已冻结，
+            // 增删特性不会反映到它们上面。
+            RunGroupProcessors(root);
 
             // [OnInspectorInit] 在**整棵树建好之后**才跑：它多半要读字段、甚至读别的节点的状态，
             // 提前到构造点等于让它在半成品上工作。
@@ -631,7 +644,7 @@ namespace XInspector.Editor
         #region 特性处理器
 
         /// <summary>
-        /// 跑一遍所有特性处理器，让它们改写节点的特性列表或状态。
+        /// 跑处理器的**第一趟**（分组装配之前）：让它们改写节点的特性列表或状态。
         /// </summary>
         /// <param name="root">根节点，类级特性都挂在它上面。</param>
         /// <param name="members">尚未挂到父节点上的成员列表。</param>
@@ -641,6 +654,10 @@ namespace XInspector.Editor
         /// 顺序由注册表保证确定——一个处理器注入的特性可能被后一个读到。
         /// </para>
         /// <para>
+        /// <b>处理分组特性的处理器不在这里</b>（注册表已按这条拆开）：分组节点本趟还不存在。
+        /// 它们走 <see cref="RunGroupProcessors"/>。
+        /// </para>
+        /// <para>
         /// <b>每个成员先跑「自身」再跑「父级注入」。</b> 这个顺序是契约：注入的特性不该影响
         /// 「这个成员自己有什么」的判断；而反过来，后跑的注入能被已经跑过的处理器看到，
         /// 那正是类级分组分发所需要的。
@@ -648,7 +665,7 @@ namespace XInspector.Editor
         /// </remarks>
         private static void RunProcessors(InspectorProperty root, List<InspectorProperty> members)
         {
-            var processors = AttributeProcessorRegistry.Processors;
+            var processors = AttributeProcessorRegistry.FirstPassProcessors;
             if (processors.Length == 0)
             {
                 return;
@@ -693,6 +710,43 @@ namespace XInspector.Editor
                         processors[i].ProcessChildMemberAttributes(root, member.Member, member.Attributes.Raw);
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// 跑处理器的**第二趟**（分组装配之后）：对**分组节点**跑「处理分组特性」的处理器。
+        /// </summary>
+        /// <param name="node">当前节点。根与成员会被跳过——它们的自身钩子已在第一趟跑过。</param>
+        /// <remarks>
+        /// <para>
+        /// 深度优先遍历整棵（此时已装配完的）树，只对 <see cref="InspectorPropertyKind.Group"/>
+        /// 的节点跑**自身**钩子。「父级注入」钩子留在第一趟：分组之后再往成员身上注入分组特性
+        /// 已经太晚，分组装配看不见它，症状是「特性像没写一样」。
+        /// </para>
+        /// <para>
+        /// 本趟只许改 <see cref="PropertyState"/>（如装一个可见性求值器）。此时分组与链都已
+        /// 装配完毕，增删特性不会反映到它们上面。
+        /// </para>
+        /// </remarks>
+        private static void RunGroupProcessors(InspectorProperty node)
+        {
+            var processors = AttributeProcessorRegistry.GroupProcessors;
+
+            if (node.Kind == InspectorPropertyKind.Group && processors.Length > 0)
+            {
+                for (var i = 0; i < processors.Length; i++)
+                {
+                    if (processors[i].CanProcessSelfAttributes(node))
+                    {
+                        processors[i].ProcessSelfAttributes(node, node.Attributes.Raw);
+                    }
+                }
+            }
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                RunGroupProcessors(children[i]);
             }
         }
 

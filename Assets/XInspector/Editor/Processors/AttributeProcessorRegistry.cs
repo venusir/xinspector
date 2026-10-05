@@ -21,6 +21,8 @@ namespace XInspector.Editor
         #region Private Fields
 
         private static AttributeProcessor[] _processors;
+        private static AttributeProcessor[] _firstPass;
+        private static AttributeProcessor[] _groupPass;
 
         #endregion
 
@@ -39,6 +41,39 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// **第一趟**（分组装配之前）要跑的处理器——处理分组特性的那些不在其中。
+        /// </summary>
+        /// <remarks>
+        /// 两趟共用同一份优先级排序：两趟作用的节点集合不相交，不存在跨趟的顺序依赖，
+        /// 只有「第一趟全部跑完，第二趟才开始」这一条。
+        /// </remarks>
+        public static AttributeProcessor[] FirstPassProcessors
+        {
+            get
+            {
+                EnsureInitialized();
+                return _firstPass;
+            }
+        }
+
+        /// <summary>
+        /// **第二趟**（分组装配之后、只对分组节点）要跑的处理器。
+        /// </summary>
+        /// <remarks>
+        /// 判据见 <see cref="RunsAfterGrouping"/>：它是一条**推导**出来的规则，不是开关——
+        /// 分组特性只存在于分组节点上，而分组节点到第一趟时还不存在，于是「处理分组特性的
+        /// 处理器只能在装配之后跑」在构造上成立。
+        /// </remarks>
+        public static AttributeProcessor[] GroupProcessors
+        {
+            get
+            {
+                EnsureInitialized();
+                return _groupPass;
+            }
+        }
+
+        /// <summary>
         /// 清空缓存，强制下次使用时重新扫描。
         /// </summary>
         /// <remarks>
@@ -48,6 +83,8 @@ namespace XInspector.Editor
         public static void Reset()
         {
             _processors = null;
+            _firstPass = null;
+            _groupPass = null;
         }
 
         /// <summary>
@@ -81,6 +118,32 @@ namespace XInspector.Editor
             return false;
         }
 
+        /// <summary>
+        /// 该处理器是否只处理**分组特性**——即它配对的特性类型派生自
+        /// <see cref="PropertyGroupAttribute"/>，因而走构建期的**第二趟**
+        /// （分组装配之后、只对分组节点）。
+        /// </summary>
+        /// <param name="processor">处理器。</param>
+        /// <returns>只处理分组特性返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 判据是**推导**出来的，不是开关：分组特性只可能出现在分组节点上（成员与根携带它
+        /// 只为归属），而分组节点要到分组装配之后才存在——两条合起来使「处理分组特性的
+        /// 处理器只能在装配之后跑」在构造上成立。做成开关的话，漏开关的症状是
+        /// 「静默地什么都不做」，正是本仓最想避免的一类。
+        /// </para>
+        /// <para>
+        /// 非泛型处理器（<see cref="AttributeProcessor.HandledAttributeType"/> 为 <c>null</c>）
+        /// 恒返回 <c>false</c>，永远留在第一趟——类级分组分发正需要如此：它注入的分组特性
+        /// 必须被随后的分组装配看到。
+        /// </para>
+        /// </remarks>
+        internal static bool RunsAfterGrouping(AttributeProcessor processor)
+        {
+            var handled = processor?.HandledAttributeType;
+            return handled != null && typeof(PropertyGroupAttribute).IsAssignableFrom(handled);
+        }
+
         #endregion
 
         #region Private Helpers
@@ -104,6 +167,18 @@ namespace XInspector.Editor
 
             found.Sort(CompareByPriorityThenName);
             _processors = found.ToArray();
+
+            // 按「跑第几趟」拆一份。两趟各自保持上面的优先级顺序。
+            var firstPass = new List<AttributeProcessor>(found.Count);
+            var groupPass = new List<AttributeProcessor>();
+
+            for (var i = 0; i < found.Count; i++)
+            {
+                (RunsAfterGrouping(found[i]) ? groupPass : firstPass).Add(found[i]);
+            }
+
+            _firstPass = firstPass.ToArray();
+            _groupPass = groupPass.ToArray();
         }
 
         /// <summary>
