@@ -231,4 +231,49 @@ namespace XInspector
         /// <summary>是否叠在值控件之上，默认 <c>false</c>（占右侧一列）。</summary>
         public bool Overlay { get; }
     }
+
+    /// <summary>
+    /// 把复合类型的子字段**提到本层**画——**不画折叠头**。
+    /// <para>
+    /// 默认情形下，嵌套的 <c>[Serializable]</c> 类型会带一个可折叠的箭头，子字段藏在里面；
+    /// 标上本特性后它直接摊平画出来。标在**成员**上是「这一个字段内联」；
+    /// 标在**类**上是「凡是声明为该类型的字段一律内联」。
+    /// </para>
+    /// <para>
+    /// <b>本包只做「观感」。</b> 子字段仍由 Unity 的原生绘制器逐个画，**不进本包的管线**——
+    /// 它们身上的本包特性（条件、标签、分组……）照旧不生效，这与「嵌套类型交给 Unity」的
+    /// 既有边界一致。数组与列表同样不内联（展开集合是另一件事，见 README 的已知限制）。
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// 画法（官方文档只有一句「contents next to the label」，本包自定并写进文档）：
+    /// **父标签照常画在标签列（宽度受 <see cref="LabelWidth"/> 控制），子字段缩进一级逐个
+    /// 画在下面**。想要完全平铺（连父字段名也不出现），在同一个字段上再叠一个
+    /// <see cref="HideLabelAttribute"/>——它在链上更外层，会把父标签整个撤掉。
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// [InlineProperty]
+    /// public Range damage;                 // 子字段 min / max 直接摊平
+    ///
+    /// [Serializable, InlineProperty(LabelWidth = 60)]
+    /// public struct Range { public float min; public float max; }
+    /// </code>
+    /// </example>
+    [AttributeUsage(
+        AttributeTargets.Class | AttributeTargets.Field | AttributeTargets.Property,
+        AllowMultiple = false,
+        Inherited = false)]
+    public sealed class InlinePropertyAttribute : Attribute
+    {
+        /// <summary>
+        /// 子字段绘制期间的标签宽度（像素）。
+        /// <para>
+        /// 默认 <c>0</c> 表示**不改**——沿用当前的 <c>EditorGUIUtility.labelWidth</c>；
+        /// 只有正值才临时覆盖，画完即还原。与 <see cref="LabelWidthAttribute"/> 的
+        /// 「负值交还默认」不同：这里非正值一律按「不改」处理。
+        /// </para>
+        /// </summary>
+        public int LabelWidth { get; set; }
+    }
 }

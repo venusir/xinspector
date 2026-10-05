@@ -65,6 +65,19 @@ namespace XInspector.Editor
                     {
                         return true;
                     }
+
+                    // 类级 [InlineProperty] 标在**字段的声明类型**上，成员自身看不到它——
+                    // 而注入处理器（ClassLevelInlinePropertyProcessor）看的正是同一处，
+                    // 判据与注入必须对齐，否则类型不被接管、内联**静默失效**。
+                    //
+                    // 只认 [InlineProperty]：字段类型上的其它本包特性在现有管线里是**惰性**的
+                    // （嵌套字段不进管线），把它们算进来会让没真正用到本插件的容器被接管——
+                    // 那是「过度接管」，与漏接管方向相反但同属静默。
+                    if (fields[i].FieldType != null &&
+                        fields[i].FieldType.GetCustomAttribute<InlinePropertyAttribute>(inherit: false) != null)
+                    {
+                        return true;
+                    }
                 }
 
                 var properties = current.GetProperties(StaticFlags);

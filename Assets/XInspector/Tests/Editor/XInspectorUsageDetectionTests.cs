@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using UnityEngine;
 using XInspector.Editor;
@@ -149,6 +150,36 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **内联标注在字段的声明类型上**的类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 类级 <c>[InlineProperty]</c> 标在字段的**声明类型**上，成员自身看不到它——
+        /// 判据不看这一处，类型就不被接管，内联**静默失效**。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_内联标注在字段类型上为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ClassLevelInlineUsageFixture)), Is.True);
+        }
+
+        /// <summary>控制项：**数组元素类型**上的内联标注不算——数组本来就不内联（L6）。</summary>
+        [Test]
+        public void IsUsedBy_数组元素类型的内联标注不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(InlineArrayUsageFixture)), Is.False);
+        }
+
+        /// <summary>
+        /// 控制项：**嵌套类型上挂着别的本包特性**不算——那些特性在嵌套层是惰性的
+        /// （嵌套字段不进管线），算进来就是「过度接管」，与漏接管同属静默。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_嵌套类型上的其它支持特性不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NestedOtherAttributeUsageFixture)), Is.False);
+        }
+
+        /// <summary>
         /// 控制项：属性上挂着一个**别人家的**特性时为假。
         /// <para>
         /// 没有这一条，上面三条无法区分「认得 <c>[ShowInInspector]</c>」与
@@ -295,6 +326,36 @@ namespace XInspector.Tests.Editor
         /// <summary>只标了顺序——它既没有绘制器也没有处理器。</summary>
         [PropertyOrder(-1f)]
         public int value = 1;
+    }
+
+    /// <summary>内联标注在**字段的声明类型**上的资产。</summary>
+    internal sealed class ClassLevelInlineUsageFixture : ScriptableObject
+    {
+        /// <summary>声明类型带 <c>[InlineProperty]</c>——成员自身看不到它。</summary>
+        public InlineMarkedType value;
+    }
+
+    /// <summary>内联只标在**数组元素类型**上的资产。</summary>
+    internal sealed class InlineArrayUsageFixture : ScriptableObject
+    {
+        /// <summary>数组元素类型有标记，数组本身没有——判据刻意不认这一处。</summary>
+        public InlineMarkedType[] items;
+    }
+
+    /// <summary>嵌套类型上挂着别的本包特性的资产。</summary>
+    internal sealed class NestedOtherAttributeUsageFixture : ScriptableObject
+    {
+        /// <summary>嵌套类型上有 <c>[Title]</c>——它在嵌套层进不了管线。</summary>
+        public TitledNestedType value;
+    }
+
+    /// <summary>挂着 <c>[Title]</c> 的嵌套类型（标题只对被检视类型生效）。</summary>
+    [Serializable]
+    [Title("嵌套层用不到")]
+    internal sealed class TitledNestedType
+    {
+        /// <summary>子字段。</summary>
+        public int a = 1;
     }
 
     /// <summary>只挂分组条件特性（同样是处理器专有）的资产。</summary>

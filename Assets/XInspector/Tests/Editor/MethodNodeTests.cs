@@ -154,7 +154,7 @@ namespace XInspector.Tests.Editor
         #region 按钮的位置
 
         /// <summary>
-        /// <b>按钮一律排在字段之后</b>——这是实测结论，不是偷懒。
+        /// <b>没有 <c>[PropertyOrder]</c> 时，按钮排在字段之后</b>——这是实测结论，不是偷懒。
         /// </summary>
         /// <remarks>
         /// <para>
@@ -162,12 +162,17 @@ namespace XInspector.Tests.Editor
         /// 位置不理想是小事，把按钮插到随机位置才是大事；「可预测」优先于「看起来更聪明」。
         /// </para>
         /// <para>
+        /// **2026-10-05 起这是「默认」而非铁律**：<c>[PropertyOrder]</c> 给了显式出口——
+        /// 给方法一个负的顺序即可排到字段之间（<c>PropertyOrderTests</c> 钉着那条路径）。
+        /// 本 fixture 一个标注都没有，因此原文的断言逐字成立。
+        /// </para>
+        /// <para>
         /// 断言用相对位置而不是整份清单：<c>m_Script</c> 这类 Unity 注入的成员在不在树里
         /// 取决于对象种类，写死清单会把无关差异也判成失败。
         /// </para>
         /// </remarks>
         [Test]
-        public void 按钮一律排在字段之后()
+        public void 按钮默认排在字段之后()
         {
             using (var tree = Build(_order))
             {
@@ -196,7 +201,7 @@ namespace XInspector.Tests.Editor
             }
         }
 
-        /// <summary>字段之间的相对顺序不受影响——它来自 Unity 的序列化顺序，我们从不重排字段。</summary>
+        /// <summary>字段之间的相对顺序不受影响——它来自 Unity 的序列化顺序；没有 <c>[PropertyOrder]</c> 时我们从不重排字段。</summary>
         [Test]
         public void 字段之间的相对顺序不受影响()
         {
