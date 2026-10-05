@@ -15,10 +15,11 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-05，L4 之后）：**
+**本项目的家底（2026-10-05，L6 第一批之后）：**
 
-- 公开特性 **79 个**（清单见文末「总账」），分十族：分组与条件、状态与门控、标签与外观、
-  值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**，另有调试 1 个
+- 公开特性 **84 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+  值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
+  **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
   **`PrefabKind`**）
 - 特性处理器层（`AttributeProcessor`）与条件求值分离（构建期解析、绘制期求值）；
@@ -63,7 +64,7 @@
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | ✅ **整层已清完**（2026-10-05）：排序落在构建期的一次稳定排序上；`[InlineProperty]` 走**观感派**（只改画法，嵌套字段仍不进管线——「自己展开嵌套类型」那条推迟项因此仍然推迟着） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
-| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 集合自绘 |
+| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 🟡 **部分已做**（2026-10-05）：容器（自绘列表 + 表格 + 长度校验）已落地；**元素节点化未做**——元素类型里的本包特性照旧不生效 |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
 
 ---
@@ -125,7 +126,7 @@
 | `[FilePath]` | ✅ 已实现 | 只作用单个 `string`；`$` 成员引用不做（另见 Validation） |
 | `[FolderPath]` | ✅ 已实现 | 与 `[FilePath]` 同形（另见 Validation） |
 | `[HideInInlineEditors]` | ✅ 已实现 | 被动随 `[InlineEditor]` 落地 |
-| `[HideInTables]` | ❌ 缺 | 依赖 `[TableList]` |
+| `[HideInTables]` | ✅ 已实现 | 空标记；让成员不进 `[TableList]` 的表格（单独用时惰性） |
 | `[HideMonoScript]` | ✅ 已实现 | — |
 | `[HideNetworkBehaviourFields]` | ⛔ 不做 | 目标类型（UNet `NetworkBehaviour`）在 Unity 6 已不存在，只能做成静默 no-op |
 | `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
@@ -135,12 +136,13 @@
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
 | `[TypeDrawerSettings]` | ❌ 缺 | **独立性已核实**：它**借** `[ShowInInspector]` 的 `System.Type` 字段出场，但依赖的是一整套类型选择器绘制（`BaseType` + `TypeInclusionFilter` 枚举），不是反射后端。L3 落地后它仍在，见 Pipeline §九末 |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
-| `[TableList]` | ❌ 缺 | L6（另见 Collections） |
+| `[TableList]` | ✅ 已实现 | 表格呈现；**不配绘制器、配处理器**（构建期建列模型并补一份 `[ListDrawerSettings]`） |
 | `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 15 / 缺 8 / 不做 1**（2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
+**小计：已实现 17 / 缺 6 / 不做 1**（2026-10-05：`[TableList]` `[HideInTables]` 转已实现；
+2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
 `[PreviewField]` 四项转已实现；同日 `[InlineEditor]` `[HideInInlineEditors]` 转已实现）
 
 ### Essentials（19）
@@ -184,9 +186,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[MinValue]` | ✅ 已实现 | — |
 | `[PropertyRange]` | ✅ 已实现 | — |
 | `[Range]` | ➖ 不需要 | Unity 自己的（另见 Unity） |
-| `[RequiredListLength]` | ❌ 缺 | L6 |
+| `[RequiredListLength]` | ✅ 已实现 | 只读 `arraySize` 的长度校验；表达式 getter 构造与 `PrefabKind` 不声明 |
 
-**小计：已实现 5 / 缺 1 / 不做 0 / 不需要 1**（2026-10-04：`[MinMaxSlider]` 转已实现；
+**小计：已实现 6 / 缺 0 / 不做 0 / 不需要 1**（2026-10-05：`[RequiredListLength]` 转已实现；
+2026-10-04：`[MinMaxSlider]` 转已实现；
 同日 L2 收尾之一把 `[DisallowModificationsIn]` 从「不做」翻成已实现）
 
 ### Groups（12）
@@ -251,10 +254,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | 特性 | 状态 | 层 |
 |---|---|---|
 | `[DictionaryDrawerSettings]` | ❌ 缺 | L6 |
-| `[ListDrawerSettings]` | ❌ 缺 | L6 |
-| `[TableColumnWidth]` | ❌ 缺 | L6 |
+| `[ListDrawerSettings]` | ✅ 已实现 | 自绘容器（行、增删、索引标签）；**元素仍由原生绘制**；旋钮只取五个有真行为的 |
+| `[TableColumnWidth]` | ✅ 已实现 | 表格列宽（不标则弹性均分）；官方的 `resizable` 参数不声明 |
 
-**小计：已实现 0 / 缺 3**
+**小计：已实现 2 / 缺 1**（2026-10-05：`[ListDrawerSettings]` `[TableColumnWidth]` 转已实现）
 
 ### Conditionals（16）
 
@@ -326,10 +329,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 79 已实现 + 17 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 84 已实现 + 12 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 79 个：
+已实现的 84 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -355,6 +358,9 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 - **反射成员**（1，2026-10-04 L3）：`[ShowInInspector]`
 - **结构与顺序**（2，2026-10-05 L4）：`[PropertyOrder]`（构建期稳定排序，可标方法）、
   `[InlineProperty]`（观感派：摊平子字段、不画折叠头）
+- **集合与表格**（5，2026-10-05 L6 第一批）：`[ListDrawerSettings]`（自绘容器）、
+  `[TableList]`（表格呈现）、`[TableColumnWidth]`、`[HideInTables]`、`[RequiredListLength]`
+  ——**只接管容器，元素仍由原生绘制**（元素节点化未做）
 - **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。
@@ -369,7 +375,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 17 个」也不等于「17 份工作量」**：其中真正需要新层的集中在
+**「缺 12 个」也不等于「12 份工作量」**：其中真正需要新层的集中在
 L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族、`[InlineEditor]` 一族、
 **L5 的按钮与回调两批**、**L3 的反射后端**、以及 **L2 的预制体上下文族**（都 2026-10-04）
 这几块已经清完。剩下的缺口里，**L6 是最重的一块**（它比原先估计的更重，见推荐顺序）。
@@ -526,7 +532,7 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 `[OnValueChanged]` 的判据改成「绘制这一趟里值前后不一致」，于是不必跨帧记旧值、
 也没有第一帧误报。
 
-## L6 · 需要集合自绘
+## L6 · 需要集合自绘　🟡 部分已做（2026-10-05：容器与表格）
 
 `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]`
 `[TableColumnWidth]` `[OnCollectionChanged]` `[RequiredListLength]`。
@@ -535,6 +541,15 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 自己做展开的**唯一理由**是让本包的**特性作用于元素**（`[ShowIf]` 标在元素字段上之类）。
 
 一旦自己展开，增删元素、拖拽排序、多选、Undo 全都要自己处理——Unity 内部实现都不薄。
+
+> **2026-10-05 第一批落地，并把上面那句理由改掉。** 做了 `[ListDrawerSettings]`（容器：行、
+> 增删、索引标签）、`[TableList]`（表格，含 `[TableColumnWidth]` / `[HideInTables]`）与
+> `[RequiredListLength]`（只读 `arraySize`，根本不需要自绘）。
+> **但「让特性作用于元素」没有兑现**：元素仍由原生 `PropertyField` 逐个画、不进本包管线——
+> 自绘的收益是**容器行为与表格呈现**。要兑现那句话得先做**元素节点化**（见 §十二 与
+> Pipeline 的已否决形状）。
+> **仍缺**：`[DictionaryDrawerSettings]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]`
+> `[AssetList]`。
 
 ## L7 · 性质不同：那是 Odin 的另一个产品
 
@@ -609,8 +624,10 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
    落点（「要在建树时展开子成员」）**换掉了**：那要复活一条已推迟的形状，而观感派是
    「不画折叠头」这半个缺口的完整答案、且承诺得起。两条都顺带各踩出一个判据坑
    （见新的第七条经验）。
-   **下一步是 L6**——它的清单此前因改判长了三项（`[Searchable]` `[AssetList]`
-   以及 `[AssetList]` 的列表绘制），比原先估计的更重；文档建议先只做「只读展示 + 元素级特性」。
+   **L6 第一批也已落地**（2026-10-05，同日）：容器与表格五条。它的**下一步不是「再做几条」，
+   而是先答一个问题**——要不要做**元素节点化**（让嵌套/集合的元素成为真正的树节点）。
+   做了它，「让特性作用于元素」这句最初的动因才兑现；不做，剩下的 L6 条目（字典、矩阵、
+   搜索、资产列表）都只是又一种「容器画法」。见 §十二 与 Pipeline 的已否决形状。
 9. **L7**——要么不做，要么当成独立产品立项。
 
 **判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
@@ -648,6 +665,12 @@ L7 是另一条产品线。
 前两次的对策是「判据要覆盖成员收集真会去看的每一处」，第三次的对策是标记接口
 （`ITreeOrderingAttribute`）——**对「注册表之外」的特性，让判据认得它的存在本身**。
 每次都要问一遍：这个新特性，判据看得见吗？
+
+**第八条（2026-10-05 新增）：「做这一层」的动因要逐轮对账，它会过期。**
+L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包的特性作用于元素」。
+真做的时候发现：自绘**容器**（行、增删、表格）并不带来任何元素级特性——那要**元素节点化**，
+是另一件事。本轮如实把动因改述成「容器行为 + 表格呈现」，并把元素节点化留在未做列。
+**不这么做，下一轮会读成「L6 做了，元素特性怎么还不生效」**——一份过期的动因比没有动因更误导。
 
 ---
 
