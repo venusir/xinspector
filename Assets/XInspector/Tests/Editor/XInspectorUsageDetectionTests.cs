@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using XInspector.Editor;
@@ -180,6 +181,29 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **只挂 <c>[TableList]</c> 的**类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 它没有自己的绘制器，靠**处理器**那一半被认出来——而处理器的「所处理的特性类型」
+        /// 只有泛型基类才暴露（非泛型恒为 <c>null</c>）。处理器写错了基类，这条就红。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂表特性的类型为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(TableListOnlyFixture)),
+                Is.True,
+                "表格靠处理器接手绘制，判据必须看得见它。");
+        }
+
+        /// <summary>只挂 <c>[ListDrawerSettings]</c> 的类型同样为真（它靠绘制器那一半）。</summary>
+        [Test]
+        public void IsUsedBy_只挂列表特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ListSettingsOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 控制项：属性上挂着一个**别人家的**特性时为假。
         /// <para>
         /// 没有这一条，上面三条无法区分「认得 <c>[ShowInInspector]</c>」与
@@ -347,6 +371,22 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>嵌套类型上有 <c>[Title]</c>——它在嵌套层进不了管线。</summary>
         public TitledNestedType value;
+    }
+
+    /// <summary>只挂表格特性的资产。</summary>
+    internal sealed class TableListOnlyFixture : ScriptableObject
+    {
+        /// <summary>只标了表格——它没有绘制器，靠处理器那一半被认出来。</summary>
+        [TableList]
+        public List<TableRow> rows = new List<TableRow>();
+    }
+
+    /// <summary>只挂列表设置特性的资产。</summary>
+    internal sealed class ListSettingsOnlyFixture : ScriptableObject
+    {
+        /// <summary>只标了列表设置——靠绘制器那一半被认出来。</summary>
+        [ListDrawerSettings]
+        public int[] values = { 1 };
     }
 
     /// <summary>挂着 <c>[Title]</c> 的嵌套类型（标题只对被检视类型生效）。</summary>

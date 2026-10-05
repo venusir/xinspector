@@ -70,7 +70,7 @@ namespace XInspector.Editor
             // 由 Unity 的 PropertyField 免费显示为「—」，不受影响。
             var canResize = !readOnly && !serializedProperty.hasMultipleDifferentValues;
 
-            var append = DrawHeader(serializedProperty, attribute, state, canResize, label);
+            var append = DrawHeader(property, attribute, state, canResize, label);
 
             if (!state.Expanded)
             {
@@ -84,7 +84,7 @@ namespace XInspector.Editor
             EditorGUI.indentLevel++;
             try
             {
-                removeIndex = DrawRows(serializedProperty, attribute, state, canResize);
+                removeIndex = DrawRows(property, serializedProperty, attribute, state, canResize);
 
                 if (removeIndex >= 0)
                 {
@@ -113,20 +113,22 @@ namespace XInspector.Editor
         #region Private Helpers
 
         /// <summary>标题行：折叠头（或普通标签）+ 右端的「+」。</summary>
-        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="property">集合节点（表格模型的「恒展开」取自它的状态）。</param>
         /// <param name="attribute">特性实例。</param>
         /// <param name="state">每属性状态（折叠状态存这里）。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
         /// <param name="label">链上传下来的标签（可能被 <c>[HideLabel]</c> 撤掉）。</param>
         /// <returns>本趟是否请求了追加。</returns>
         private static bool DrawHeader(
-            SerializedProperty array,
+            InspectorProperty property,
             ListDrawerSettingsAttribute attribute,
             CollectionDrawerState state,
             bool canResize,
             GUIContent label)
         {
             var row = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+            var model = property.State.Get<TableModel>();
+            var showFoldout = attribute.ShowFoldout && (model == null || !model.AlwaysExpanded);
             var showAdd = attribute.HideAddButton == false;
             var addRect = row;
 
@@ -136,7 +138,7 @@ namespace XInspector.Editor
                 row.xMax = addRect.xMin - 2f;
             }
 
-            if (attribute.ShowFoldout)
+            if (showFoldout)
             {
                 state.Expanded = EditorGUI.Foldout(row, state.Expanded, label ?? GUIContent.none, true);
             }
@@ -162,18 +164,29 @@ namespace XInspector.Editor
         }
 
         /// <summary>逐行画元素；只**记录**删除意图（下标），不在循环里改结构。</summary>
+        /// <param name="property">集合节点（表格形态要用它的状态与告警）。</param>
         /// <param name="array">集合的序列化属性。</param>
         /// <param name="attribute">特性实例。</param>
         /// <param name="state">每属性状态（行标签缓存）。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
         /// <returns>请求删除的下标；没有请求时为 <c>-1</c>。</returns>
         private static int DrawRows(
+            InspectorProperty property,
             SerializedProperty array,
             ListDrawerSettingsAttribute attribute,
             CollectionDrawerState state,
             bool canResize)
         {
             var removeIndex = -1;
+            var model = property.State.Get<TableModel>();
+
+            if (model != null)
+            {
+                // 表格形态：模型是构建期建好的（见 TableListProcessor），绘制路径不反射。
+                TableLayout.DrawRows(property, array, attribute, model, canResize, ref removeIndex);
+                return removeIndex;
+            }
+
             var count = array.arraySize;
 
             for (var i = 0; i < count; i++)
