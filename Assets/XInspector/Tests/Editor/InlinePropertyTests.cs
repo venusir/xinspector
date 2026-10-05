@@ -30,7 +30,7 @@ namespace XInspector.Tests.Editor
 
         #region 内联绘制器
 
-        /// <summary>标了内联的成员链上有内联绘制器，且排在末端之前。</summary>
+        /// <summary>标了内联的复合成员链上有内联绘制器，且排在末端之前。</summary>
         [Test]
         public void 成员级内联在链上占值档位()
         {
@@ -43,10 +43,6 @@ namespace XInspector.Tests.Editor
 
                 Assert.That(index, Is.GreaterThanOrEqualTo(0));
                 Assert.That(index, Is.LessThan(node.Chain.Count - 1), "末端永远是链上最后一格。");
-                Assert.That(
-                    node.Chain.Entries[node.Chain.Count - 1].Drawer,
-                    Is.InstanceOf<UnityFallbackDrawer>(),
-                    "观感派不改末端：没内联的元素仍交给 Unity。");
             }
             finally
             {
@@ -72,10 +68,11 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 内联**不产生子节点**——观感派的可观测形态（子字段仍是原生绘制、不进管线）。
+        /// 内联的复合成员**产生子节点**（完全体）——子字段成为真节点、身上的本包特性随之生效；
+        /// 末端换成复合末端，且**折叠头由外层绘制器负责**（构建期定案的 <c>FoldoutSuppressed</c>）。
         /// </summary>
         [Test]
-        public void 内联不产生子节点()
+        public void 内联产生子节点且折叠头归外层()
         {
             var target = ScriptableObject.CreateInstance<InlineFixture>();
             try
@@ -83,8 +80,34 @@ namespace XInspector.Tests.Editor
                 var tree = BuildTree(target);
                 var node = Find(tree.Root, "inline");
 
-                Assert.That(node.Children.Count, Is.EqualTo(0), "观感派不建子节点：完整展开是另一件事，未做。");
-                Assert.That(node.Chain.Count, Is.GreaterThan(1), "但链上确实多了一格——内联是绘制器的事。");
+                Assert.That(node.Children.Count, Is.EqualTo(2), "子字段成为真节点。");
+                Assert.That(node.Children[0].Path, Is.EqualTo("inline.a"));
+                Assert.That(
+                    node.Chain.Entries[node.Chain.Count - 1].Drawer,
+                    Is.InstanceOf<CompositeMemberTerminalDrawer>());
+
+                var state = node.State.Get<CompositeMemberState>();
+                Assert.That(state, Is.Not.Null, "状态在构建期定案。");
+                Assert.That(state.FoldoutSuppressed, Is.True, "标签与内联由外层绘制器说了算，末端不画折叠头。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>向量这类**原生复合类型**不展开真节点——仍走观感派的自画路径。</summary>
+        [Test]
+        public void 向量走观感派不建子节点()
+        {
+            var target = ScriptableObject.CreateInstance<InlineFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "inlineVector");
+
+                Assert.That(node.Children.Count, Is.EqualTo(0), "向量由原生控件整块画，本包不拆。");
+                Assert.That(IndexOf<InlinePropertyDrawer>(node), Is.GreaterThanOrEqualTo(0), "但内联绘制器仍在。");
             }
             finally
             {
@@ -287,7 +310,11 @@ namespace XInspector.Tests.Editor
         [InlineProperty]
         public InlineSample[] array;
 
-        /// <summary>向量：原生就有 x/y 子属性。</summary>
+        /// <summary>向量：原生就有 x/y 子属性，可内联（走观感派那条自画路径）。</summary>
+        [InlineProperty]
+        public Vector2Int inlineVector;
+
+        /// <summary>未标内联的向量（控制项）。</summary>
         public Vector2Int vector;
     }
 

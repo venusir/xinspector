@@ -31,19 +31,22 @@ namespace XInspector.Editor
         #region Public API
 
         /// <summary>
-        /// 仅当父节点是根、且该成员是**声明类型带 <see cref="InlinePropertyAttribute"/> 的字段**
-        /// 时参与。
+        /// 仅当父节点是根**或另一个复合成员**、且该成员是**声明类型带 <see cref="InlinePropertyAttribute"/>
+        /// 的字段**时参与。
         /// </summary>
-        /// <param name="parentProperty">父属性（类级特性经构建期放在根节点上）。</param>
+        /// <param name="parentProperty">父属性（类级特性经构建期放在根节点上；嵌套层里是复合成员）。</param>
         /// <param name="member">子成员。</param>
         /// <returns>需要处理返回 <c>true</c>。</returns>
         /// <remarks>
         /// 只看字段：属性没有「声明类型的内联」这回事（反射后端也没有子字段可摊平）。
+        /// 父节点放宽到「根或成员」是 2026-10-06 的事——嵌套层的子成员也要享受类级内联，
+        /// 否则**同一个类型在顶层被内联、在嵌套层里却多一个折叠头**，两种观感。
         /// </remarks>
         public override bool CanProcessChildMemberAttributes(InspectorProperty parentProperty, MemberInfo member)
         {
             return parentProperty != null
-                && parentProperty.Kind == InspectorPropertyKind.Root
+                && (parentProperty.Kind == InspectorPropertyKind.Root ||
+                    parentProperty.Kind == InspectorPropertyKind.Member)
                 && member is FieldInfo field
                 && FindDeclared(field.FieldType) != null;
         }

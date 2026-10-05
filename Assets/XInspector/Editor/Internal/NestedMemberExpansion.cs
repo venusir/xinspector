@@ -81,9 +81,21 @@ namespace XInspector.Editor
                 return false;
             }
 
+            // 字段自己标了内联。
+            if (member.Attributes.Has<InlinePropertyAttribute>())
+            {
+                return true;
+            }
+
+            // 声明类型上标了内联（官方的类级形态；Inherited = false，只看声明类型自身）。
+            if (member.Type.IsDefined(typeof(InlinePropertyAttribute), false))
+            {
+                return true;
+            }
+
             // 嵌套成员里有本包支持的特性——递归判一遍（孙辈也带特性时，得连展开两层）。
-            // **判据只看成员级特性，不看嵌套类型的类级特性**：后者本轮不生效（没有收集它的
-            // 地方），算进来等于「为了一个不画东西的特性而展开」。
+            // **判据只看成员级特性，不看嵌套类型的类级特性**（[InlineProperty] 除外，它是
+            // 官方的类级形态）：其它类级特性本轮不生效，算进来等于「为了一个不画东西的特性而展开」。
             return HasSupportedMember(property, member.Type, 0);
         }
 
@@ -96,15 +108,6 @@ namespace XInspector.Editor
         private static bool IsCompositeCandidate(InspectorProperty member, SerializedProperty property)
         {
             if (member == null || property == null || member.Type == null)
-            {
-                return false;
-            }
-
-            // [InlineProperty] 那条路留到下一批：它今天还是**替换型**绘制器（自己迭代
-            // SerializedProperty 画子字段、不调下一个）。此刻让节点展开会得到一个
-            // 「子节点存在但永不绘制」的半成品——两件事必须同批做。
-            if (member.Attributes.Has<InlinePropertyAttribute>() ||
-                member.Type.IsDefined(typeof(InlinePropertyAttribute), false))
             {
                 return false;
             }

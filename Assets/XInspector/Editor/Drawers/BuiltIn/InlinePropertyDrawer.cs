@@ -9,24 +9,22 @@ namespace XInspector.Editor
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>替换型绘制器</b>：有可内联的子字段时自己画完、不调下一个（与
-    /// <see cref="DisplayAsStringDrawer"/> 同档同款）。因此它绕过了末端绘制器那层禁用罩，
-    /// **必须自己处理只读**——<c>[ReadOnly]</c> / <c>[DisableIf]</c> 要在这类字段上照常生效。
+    /// <b>两种形态，按构建期判据分派：</b>
     /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <b>真节点形态</b>：复合成员已在构建期展开成子节点（<c>NestedMemberExpansion</c>）——
+    /// 本绘制器只画标签与标签宽度，子节点交给复合末端。它因此从**替换型变成了穿过型**：
+    /// 调 <c>CallNextDrawer</c>。副产品是同档的替换型绘制器（<c>[DisplayAsString]</c> 等）
+    /// 与它同挂时**不再是非此即彼**，两者都会跑（不支持的类型各自告警一次后放行）。
+    /// </description></item>
+    /// <item><description>
+    /// <b>观感派形态</b>：向量这类**原生复合类型**不展开真节点（它们的子属性由原生控件整块画），
+    /// 本绘制器照旧自己迭代 <c>SerializedProperty</c> 画出来——行为与本轮之前逐字一致。
+    /// </description></item>
+    /// </list>
     /// <para>
-    /// <b>观感派：子字段不进本包管线。</b> 它们仍由 Unity 的原生 <c>PropertyField</c> 逐个绘制，
-    /// 不建子节点、不换末端——嵌套字段身上的本包特性照旧不生效，这与「嵌套类型交给 Unity」
-    /// 的既有边界一致（见 <c>Pipeline</c> §二第 7 条的推迟记录）。
-    /// </para>
-    /// <para>
-    /// 画法（官方只有一句「contents next to the label」，此为兜底并写进文档）：
-    /// **父标签照常画在标签列（宽度受 <see cref="InlinePropertyAttribute.LabelWidth"/> 控制），
-    /// 子字段缩进一级逐个画在下面**——「不画折叠头」的字面实现，父字段名不丢，
-    /// 叠一个 <c>[HideLabel]</c> 还能把父标签整个撤掉。
-    /// </para>
-    /// <para>
-    /// 与同档（值绘制带）的其它替换型绘制器（<c>[DisplayAsString]</c> 等）谁生效，
-    /// 由**声明先后**决定——同一格子上不会两条都跑。
+    /// 降级（数组/列表、没有可见子字段、反射成员）两支保留：告警一次 + 退回末端。
     /// </para>
     /// </remarks>
     [DrawerPriority(0d)]
@@ -67,6 +65,17 @@ namespace XInspector.Editor
                     EditorGUIUtility.labelWidth = width;
                 }
 
+                if (property.Children.Count > 0)
+                {
+                    // **真节点形态**：这个复合成员已经在构建期展开了（见 NestedMemberExpansion），
+                    // 子节点由复合末端统一画（缩进、只读罩、折叠头都在那边）。
+                    // 本绘制器只负责标签与标签宽度——它从替换型变成了**穿过型**：调下一个。
+                    CallNextDrawer(property, label);
+                    return;
+                }
+
+                // 观感派形态：向量这类**原生复合类型**不展开真节点（它们的子属性由原生控件整块画），
+                // 这里保持既有的「自己迭代子属性画出来」——行为与本轮之前逐字一致。
                 // 标签在禁用罩之外：禁用的是可编辑性，不是标题。
                 if (label != null && label != GUIContent.none)
                 {

@@ -590,7 +590,16 @@ namespace XInspector.Editor
         /// </remarks>
         private static void AttachChainRecursive(InspectorProperty node)
         {
-            AttachChain(node, TerminalFor(node));
+            var terminal = TerminalFor(node);
+            AttachChain(node, terminal);
+
+            if (ReferenceEquals(terminal, CompositeMemberTerminal))
+            {
+                // 复合成员的状态在**构建期**定案（绘制期只读）：带 [InlineProperty] 的节点
+                // 不画折叠头——标签与「内联」由那只绘制器说了算，末端只负责把子节点画出来。
+                node.State.GetOrCreate<CompositeMemberState>().FoldoutSuppressed =
+                    node.Attributes.Has<InlinePropertyAttribute>();
+            }
 
             var children = node.RawChildren;
             for (var i = 0; i < children.Count; i++)
