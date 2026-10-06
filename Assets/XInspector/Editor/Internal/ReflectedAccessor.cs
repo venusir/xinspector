@@ -280,6 +280,54 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 把「无参、返回 bool 的**方法**」编译成 <c>实例 → bool</c> 的委托。
+        /// </summary>
+        /// <param name="method">方法。</param>
+        /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>编译成「开实例」的调用，而不是把方法绑到某个实例上</b>
+        /// （<c>MethodInfo.CreateDelegate(typeof(Func&lt;bool&gt;), target)</c> 那种）。
+        /// 绑死的实例在嵌套层会**过期**：用户把父字段重新赋值（<c>stats = new …</c>、Undo、
+        /// 预制体 revert）之后，条件读的还是旧对象——静默且极难归因。
+        /// 开实例的委托每次调用都吃**当时**那个实例。
+        /// </para>
+        /// <para>
+        /// 静态方法忽略入参，所以同一个委托签名两种情况都能用。
+        /// </para>
+        /// </remarks>
+        public static bool TryCreateBooleanInvoker(
+            MethodInfo method, out Func<object, bool> invoker, out string reason)
+        {
+            invoker = null;
+
+            if (method == null)
+            {
+                reason = "方法为 null";
+                return false;
+            }
+
+            try
+            {
+                var instance = Expression.Parameter(typeof(object), "target");
+                var call = method.IsStatic
+                    ? Expression.Call(method)
+                    : Expression.Call(Convert(instance, method.DeclaringType), method);
+
+                invoker = Expression.Lambda<Func<object, bool>>(call, instance).Compile();
+                reason = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                reason = Describe(exception);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 读一次值。
         /// </summary>
         /// <param name="target">目标对象；静态成员忽略它，可以传 <c>null</c>。</param>
@@ -365,7 +413,7 @@ namespace XInspector.Editor
         /// <returns>原因文本。</returns>
         private static string Describe(Exception exception)
         {
-            return $"无法为它编译取值委托：{exception.Message}";
+            return $"无法为它编译访问委托：{exception.Message}";
         }
 
         /// <summary>

@@ -69,18 +69,100 @@ namespace XInspector.Editor
                 return false;
             }
 
-            var type = target.GetType();
+            return TryResolveOn(target.GetType(), () => target, memberName, "目标对象", out condition, out reason);
+        }
+
+        /// <summary>
+        /// 解析一个基于**嵌套实例**上反射成员的条件。
+        /// </summary>
+        /// <param name="nestedType">嵌套实例的声明类型。</param>
+        /// <param name="containerPath">嵌套实例相对根目标的序列化路径（如 <c>stats</c>）。</param>
+        /// <param name="targets">根目标对象列表。</param>
+        /// <param name="memberName">条件成员名。</param>
+        /// <param name="condition">解析出的每帧求值器；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>解析成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 与根层那条的差别只有一处：**在哪一个对象上找成员**。根层找目标对象本身，
+        /// 这里找「沿 <paramref name="containerPath"/> 走到的那个嵌套实例」——
+        /// 不这么做就会拿到根上的同名成员，「条件看错了对象」，静默且极难归因。
+        /// </para>
+        /// <para>
+        /// 实例**每帧现读**（编译出的字段链），不是绑死的：用户把父字段重新赋值之后
+        /// （<c>stats = new …</c>、Undo、预制体 revert）条件要跟着走。
+        /// <b>实例为空时条件算假</b>——它在那时确实没有值可言。
+        /// </para>
+        /// </remarks>
+        public static bool TryResolveNestedBooleanCondition(
+            Type nestedType,
+            string containerPath,
+            object[] targets,
+            string memberName,
+            out Func<bool> condition,
+            out string reason)
+        {
+            condition = null;
+            reason = null;
+
+            var target = FirstAlive(targets);
+            if (target == null)
+            {
+                reason = "取不到目标对象";
+                return false;
+            }
+
+            if (nestedType == null)
+            {
+                reason = "取不到嵌套实例的类型";
+                return false;
+            }
+
+            if (!ReflectedAccessor.TryCreatePath(
+                    target.GetType(), containerPath, out var scope, out reason))
+            {
+                return false;
+            }
+
+            return TryResolveOn(
+                nestedType,
+                () => scope.Read(target),
+                memberName,
+                $"嵌套实例（{nestedType.Name}）",
+                out condition,
+                out reason);
+        }
+
+        /// <summary>
+        /// 在指定类型上按名找成员并绑定——根层与嵌套层共用这一段。
+        /// </summary>
+        /// <param name="type">在哪一个类型上找。</param>
+        /// <param name="instance">取当前实例（每帧现读）；根层是恒等，嵌套层是沿路径下钻。</param>
+        /// <param name="memberName">成员名。</param>
+        /// <param name="scopeName">失败信息里的范围名。</param>
+        /// <param name="condition">绑定出的求值器。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        private static bool TryResolveOn(
+            Type type,
+            Func<object> instance,
+            string memberName,
+            string scopeName,
+            out Func<bool> condition,
+            out string reason)
+        {
+            condition = null;
 
             for (var current = type; current != null; current = current.BaseType)
             {
                 var candidates = current.GetMember(memberName, Flags);
                 if (candidates.Length > 0)
                 {
-                    return TryBind(candidates, target, memberName, out condition, out reason);
+                    return TryBind(candidates, instance, memberName, out condition, out reason);
                 }
             }
 
-            reason = $"目标对象上找不到名为「{memberName}」的字段、属性或方法";
+            reason = $"{scopeName}上找不到名为「{memberName}」的字段、属性或无参方法";
             return false;
         }
 
@@ -111,14 +193,14 @@ namespace XInspector.Editor
 
         /// <summary>在一层里挑出可用的那一个成员并绑定。</summary>
         /// <param name="candidates">同名成员。</param>
-        /// <param name="target">目标对象。</param>
+        /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名，用于告警文本。</param>
         /// <param name="condition">绑定出的求值器。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>绑定成功返回 <c>true</c>。</returns>
         private static bool TryBind(
             MemberInfo[] candidates,
-            object target,
+            Func<object> instance,
             string memberName,
             out Func<bool> condition,
             out string reason)
@@ -130,12 +212,12 @@ namespace XInspector.Editor
             {
                 if (candidates[i] is FieldInfo field)
                 {
-                    return TryBindField(field, target, memberName, out condition, out reason);
+                    return TryBindField(field, instance, memberName, out condition, out reason);
                 }
 
                 if (candidates[i] is PropertyInfo property)
                 {
-                    return TryBindProperty(property, target, memberName, out condition, out reason);
+                    return TryBindProperty(property, instance, memberName, out condition, out reason);
                 }
             }
 
@@ -143,7 +225,7 @@ namespace XInspector.Editor
             {
                 if (candidates[i] is MethodInfo method)
                 {
-                    return TryBindMethod(method, target, memberName, out condition, out reason);
+                    return TryBindMethod(method, instance, memberName, out condition, out reason);
                 }
             }
 
@@ -153,14 +235,14 @@ namespace XInspector.Editor
 
         /// <summary>绑定一个 bool 字段。</summary>
         /// <param name="field">字段。</param>
-        /// <param name="target">目标对象。</param>
+        /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="condition">绑定出的求值器。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         private static bool TryBindField(
             FieldInfo field,
-            object target,
+            Func<object> instance,
             string memberName,
             out Func<bool> condition,
             out string reason)
@@ -178,20 +260,25 @@ namespace XInspector.Editor
                 return false;
             }
 
-            condition = () => reader(target);
+            condition = () =>
+            {
+                var target = instance();
+                return target != null && reader(target);
+            };
+
             return true;
         }
 
         /// <summary>绑定一个 bool 属性。</summary>
         /// <param name="property">属性。</param>
-        /// <param name="target">目标对象。</param>
+        /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="condition">绑定出的求值器。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         private static bool TryBindProperty(
             PropertyInfo property,
-            object target,
+            Func<object> instance,
             string memberName,
             out Func<bool> condition,
             out string reason)
@@ -221,7 +308,12 @@ namespace XInspector.Editor
                 return false;
             }
 
-            condition = () => reader(target);
+            condition = () =>
+            {
+                var target = instance();
+                return target != null && reader(target);
+            };
+
             return true;
         }
 
@@ -229,19 +321,20 @@ namespace XInspector.Editor
         /// 绑定一个无参、非泛型、返回 bool 的方法。
         /// </summary>
         /// <param name="method">方法。</param>
-        /// <param name="target">目标对象。</param>
+        /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="condition">绑定出的求值器。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         /// <remarks>
-        /// <b>绑定成委托而不是每帧 <c>Invoke</c>。</b> 条件每帧求值一次，
+        /// <b>编译成委托而不是每帧 <c>Invoke</c>。</b> 条件每帧求值一次，
         /// 而 <c>MethodInfo.Invoke</c> 是反射调用——「反射仅限构建期」这条规则对它同样成立。
-        /// 实例方法绑到主目标上（闭包里的那个），静态方法不绑目标。
+        /// 实例方法走**开实例**调用（每次吃当时的实例），理由见
+        /// <see cref="ReflectedAccessor.TryCreateBooleanInvoker"/>。
         /// </remarks>
         private static bool TryBindMethod(
             MethodInfo method,
-            object target,
+            Func<object> instance,
             string memberName,
             out Func<bool> condition,
             out string reason)
@@ -267,18 +360,24 @@ namespace XInspector.Editor
                 return false;
             }
 
-            try
+            if (!ReflectedAccessor.TryCreateBooleanInvoker(method, out var invoker, out reason))
             {
-                condition = method.IsStatic
-                    ? (Func<bool>)method.CreateDelegate(typeof(Func<bool>))
-                    : (Func<bool>)method.CreateDelegate(typeof(Func<bool>), target);
-                return true;
-            }
-            catch (Exception exception)
-            {
-                reason = $"无法为方法「{memberName}」绑定委托：{exception.Message}";
                 return false;
             }
+
+            if (method.IsStatic)
+            {
+                condition = () => invoker(null);
+                return true;
+            }
+
+            condition = () =>
+            {
+                var target = instance();
+                return target != null && invoker(target);
+            };
+
+            return true;
         }
 
         #endregion

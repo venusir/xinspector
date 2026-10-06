@@ -87,6 +87,12 @@ namespace XInspector.Editor
         /// 顺序固定下来，失败信息才可解释——「找不到」与「找到了但形状不对」是两句不同的话，
         /// 而「找到的是哪一级」也一样。
         /// </para>
+        /// <para>
+        /// <b>嵌套成员的四级找的是「同一个嵌套实例」。</b> 前两级是它的序列化兄弟成员与根上的
+        /// 绝对名；后两级是**该实例**上的反射字段/属性与方法（实例由一条构建期编译的字段链
+        /// 每帧现读，父字段被重新赋值后条件跟着走）。在根上找就会拿到根上的同名成员——
+        /// 「条件看错了对象」，静默且极难归因。
+        /// </para>
         /// </remarks>
         internal static bool TryResolve(InspectorProperty property, string conditionName, out Func<bool> condition)
         {
@@ -99,7 +105,8 @@ namespace XInspector.Editor
             //
             // 容器由 SerializedMemberResolver 提供（它会**跳过分组节点**上溯）——
             // 与 [ToggleGroup] / 值绘制器的成员引用共用同一条规则，只留一份实现。
-            var container = SerializedMemberResolver.FindNestedScope(property);
+            var containerNode = SerializedMemberResolver.FindNestedScopeNode(property);
+            var container = containerNode?.ValueEntry?.SerializedProperty;
             if (container != null)
             {
                 var sibling = container.FindPropertyRelative(conditionName);
@@ -143,27 +150,39 @@ namespace XInspector.Editor
                 }
             }
 
-            // 嵌套成员**到此为止**，不走下面那两级反射兜底：反射是在**被检视对象**上找成员，
-            // 拿到的是根上的同名成员——「条件看错了对象」，静默且极难归因。
-            // 与「嵌套 [Serializable] 里的 [Button]/[ShowInInspector] 不生效」是同一条限制
-            // （拿到嵌套实例需要一条本包没有的只读反射路径解析）。
-            if (container != null)
-            {
-                Warn(property, conditionName,
-                    "嵌套层里的条件必须是**序列化的兄弟成员**——反射字段/属性与方法的取值" +
-                    "需要嵌套实例，本包没有那条读路径");
-                return false;
-            }
-
             // 第二、三级：反射成员与方法。同样在构建期解析一次，绘制期只有委托调用。
-            if (!ReflectedMemberResolver.TryResolveBooleanCondition(
-                    property?.Owner?.Targets, conditionName, out condition, out var reason))
+            //
+            // **嵌套成员在这两级上找的是「同一个嵌套实例」**，不是被检视对象——
+            // 在根上按名找会拿到根上的同名成员，「条件看错了对象」，静默且极难归因。
+            // 实例由一条构建期编译的字段链每帧现读（见 ReflectedAccessor.TryCreatePath），
+            // 因此父字段被重新赋值之后条件跟着走。
+            if (containerNode != null)
             {
-                Warn(property, conditionName, reason);
+                if (ReflectedMemberResolver.TryResolveNestedBooleanCondition(
+                        containerNode.Type,
+                        containerNode.Path,
+                        property?.Owner?.Targets,
+                        conditionName,
+                        out var nested,
+                        out var nestedReason))
+                {
+                    condition = nested;
+                    return true;
+                }
+
+                Warn(property, conditionName, nestedReason);
                 return false;
             }
 
-            return true;
+            if (ReflectedMemberResolver.TryResolveBooleanCondition(
+                    property?.Owner?.Targets, conditionName, out var root, out var reason))
+            {
+                condition = root;
+                return true;
+            }
+
+            Warn(property, conditionName, reason);
+            return false;
         }
 
         /// <summary>
