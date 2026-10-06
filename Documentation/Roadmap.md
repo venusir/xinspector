@@ -142,9 +142,15 @@ resolved string**（`MinMaxSlider` 的三个 getter、`ValueDropdown.valuesGette
 > `[MinMaxSlider]` 的三个 getter 其中之一可以指向普通字段/属性或无参方法，
 > `[ToggleGroup]` 的开关同理。**仍不做 `$`/`@` 那套表达式语言**——那与「找到哪一个成员」
 > 是两件事，混在一起做出来的会是半个解析器。
-> 两处仍在的边界：`[ValueDropdown]` 的 `valuesGetter` 只认序列化数组（它要的是一个数组
+> 当时仍有两处边界：`[ValueDropdown]` 的 `valuesGetter` 只认序列化数组（它要的是一个数组
 > 而不是一个值，消费侧还没有第二种形态）、`[FilePath]` 的 `ParentFolder` 插值不做
 > （那是路径拼接，不是成员引用）。
+>
+> **2026-10-07 再追记：又收了一处。** `[ValueDropdown]` 的 `valuesGetter` 现在也认**成员**
+> ——它的消费侧补上了第二种形态（`IList` 读法 + 一条 object → `SerializedProperty` 的写回
+> 通道，见 Pipeline §二十五），故只额外要求「声明类型实现 `IList`」。
+> **仅剩的一处**是 `[FilePath]` 的 `ParentFolder` 插值——那是路径拼接，不是成员引用，
+> 本就不该混进来。
 
 ---
 

@@ -227,6 +227,7 @@ public static string BuildTag = "静态成员也可以标";
 
 [ValueDropdown("options")]                     public string difficulty;   // 选项来自数组
 [ValueDropdown("paths", AppendNextDrawer = true)] public string picked;    // 小按钮 + 普通框
+[ValueDropdown(nameof(GetLevels))]             public int level;           // 来源可以是方法/属性
 [AssetSelector]                                public Material anyMaterial; // 资产下拉
 [AssetSelector(Paths = "Assets/Art", Filter = "t:Material")] public Material scoped;
 ```
@@ -234,13 +235,15 @@ public static string BuildTag = "静态成员也可以标";
 | 行为 | 说明 |
 |---|---|
 | **只作用于单个成员值** | 标在**数组/`List` 字段本身**上时不支持——那个字段整个交给 Unity 展开。元素**类型里面**的字段不受此限（元素节点化，见「集合与表格」）；**`[AssetList]` 是例外**——它同时支持列表与单值两个形态（见同节）。`[ValueDropdown]` 与 `[AssetSelector]` 那几个只对列表有意义的选项因此**不声明**（写了编译不过） |
-| **成员引用认「成员」，不认表达式** | `[MinMaxSlider("r")]` 的 `r` 可以指向**序列化成员、普通字段/属性，或无参返回 `float` / `Vector2` 的方法**（2026-10-06 起与条件族同款：按名找成员收成了一层）；`[ValueDropdown("x")]` 的 `x` 是例外——它要的是一个**数组**而不是一个值，仍只认序列化数组字段。Odin 的 `$` 成员引用与 `@` 表达式语言**都不做**。名字解析失败时**告警并退回普通绘制** |
+| **成员引用认「成员」，不认表达式** | `[MinMaxSlider("r")]` 的 `r` 可以指向**序列化成员、普通字段/属性，或无参返回 `float` / `Vector2` 的方法**（2026-10-06 起与条件族同款：按名找成员收成了一层）；`[ValueDropdown("x")]` 的 `x` 同理，只是要求它**实现 `IList`**（2026-10-07 起）——它要的是一个**列表**而不是一个值。嵌套层与元素层里先找同层的、再回落根上的绝对名、最后才看容器实例上的反射成员。Odin 的 `$` 成员引用与 `@` 表达式语言**都不做**。名字解析失败时**告警并退回普通绘制** |
+| `[ValueDropdown]` 的来源形态 | 两形态：**序列化的数组 / List**（选项就是它的元素），或声明类型**实现 `IList`** 的普通字段 / 属性 / 无参方法。**只实现 `IEnumerable` 的不收并告警**——`string` 也只实现 `IEnumerable<char>`，放宽会静默变出字符选项表；声明成 `IList<T>` 的成员同样被拒（泛型接口不继承非泛型 `IList`）。无参方法在**每次弹出菜单时**被调用一次（不是每帧） |
 | 路径怎么存 | `[FilePath]`/`[FolderPath]` 默认存**工程相对**路径（`Assets/…` 开头）；`ParentFolder` 之下则存相对它的路径；`AbsolutePath = true` 存绝对路径。选中的文件若不在基准目录之下（工程外），存绝对路径而不是悄悄改成别的 |
 | `Extensions` 只过滤对话框 | 不校验手填的值，也不拦已选的值——标错了不该让字段用不了 |
 | `[MinMaxSlider]` 的边界 | 可以是字面量、一个 `Vector2` 成员、两个 `float` 成员或混搭；那三个「成员」**也可以是普通字段/属性或无参方法**（2026-10-06 起）。**只作用 `Vector2`**（`Vector2Int` 不做：值后端不支持它）。边界出现 NaN/无穷时退回普通绘制；动态成员的值被改成倒置时**自动换序** |
 | `[PreviewField]` 的方块 | **方块是预览、不是控件**——可编辑的是旁边那个对象字段（原生控件，拖拽赋值照常）。宽度不够时字段排到下一行。默认高度 64、默认对齐 `Left`，都由本包定 |
 | `[ValueDropdown]` 的树形 | 选项里带 `/` 就**分子菜单**（与 Odin 一致，默认就是树形）；`FlattenTreeView = true` 拍平成一层 |
-| `[ValueDropdown]` 的类型判定 | 源与目标 `propertyType` 必须相同；**枚举还要求成员名与顺序完全一致**——不符则**拒绝这次选择并告警**，绝不按索引硬写 |
+| `[ValueDropdown]` 的类型判定 | 源与目标类型必须一致；**枚举还要求成员名与顺序完全一致**——不符则**拒绝这次选择并告警**，绝不按索引硬写。序列化来源比 `propertyType`，反射来源比 CLR 类型（对象引用还要求**能赋给字段的声明类型**）——两条通道共用同一份枚举判据 |
+| `[ValueDropdown]` 的选项标签 | 序列化来源按元素类型格式化；反射来源与 `[ShowInInspector]` 的只读展示**共用同一个格式化器**——因此浮点精度（`0.###` 对 `0.######`）与 Unity 空对象的写法（`(None)` 对 `None`）在两种来源下**略有出入**，这是有意的取舍：不为此再写第二套格式化器 |
 | `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |
 | 只读与多对象 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存。`[MinMaxSlider]` 在多对象值不一致时退回普通绘制（双滑块没有混合值形态） |
 

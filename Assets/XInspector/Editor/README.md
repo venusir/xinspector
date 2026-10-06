@@ -71,7 +71,9 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
   而不是被检视对象（在根上找会「看错对象」），实例由构建期编译的字段链每帧现读；
   **有容器时不再回落到根上的反射**（同层没有就是没有）。失败时给专门的告警。
   整条阶梯收在 `Editor/Internal/MemberReferenceResolver.cs` **一处**——
-  条件族、`[ToggleGroup]` 与 `[MinMaxSlider]` 共用它。
+  条件族、`[ToggleGroup]`、`[MinMaxSlider]` 与 `[ValueDropdown]`（2026-10-07 起）共用它。
+  各消费者要的**值类型**不同（bool / float / Vector2 / 一个 `IList`），那一处由
+  `MemberTypeRequirement` 表达：前三个是「恰好是」，列表那一格是「**实现** `IList`」。
 - **嵌套层会装配分组**，规则有两条与顶层不同：分组节点的路径以**父字段的序列化路径为前缀**
   （`stats/基础`），且前缀**不是分组段**（`EnsureGroupChain` 靠 `prefixSegments` 跳过它，
   绝不造出一个以成员名命名的假分组节点）。前缀保证「同一个嵌套类型用在两处时 `Path` 仍唯一」，

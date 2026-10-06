@@ -48,11 +48,17 @@
   见 Pipeline §二十二。第八条能力轮**成员引用收成一层**（2026-10-06，第二十批，特性计数 +0）——
   「按名找成员」的四级阶梯收进 `Editor/Internal/MemberReferenceResolver`，
   `[ToggleGroup]` 的开关与 `[MinMaxSlider]` 的边界随之可指向反射成员，
-  **OdinGap 的「仍欠」至此清零**，见 Pipeline §二十三。
+  **OdinGap 的「仍欠」至此清零**，见 Pipeline §二十三。第九条能力轮
+  **`[ValueDropdown]` 的反射数据源**（2026-10-07，第二十一批，特性计数 +0）——数据源多了
+  「声明类型**实现 `IList`** 的字段/属性/无参方法」这一形态（只实现 `IEnumerable` 的不收，
+  `string` 会静默变出字符选项表），并写下本包第一条 **object → `SerializedProperty`** 的
+  写回通道；**L0–L6 至此连最后的遗留也收口**，见 Pipeline §二十五。
   **下一个候选**：`[ColorPalette]` 的调色板来源设计（缺的是数据：命名调色板存在哪、谁来编辑）、
-  `[ValueDropdown]` 数据源的两形态（要另建 `IList` 形态与 object → `SerializedProperty` 的写回通道）；
-  **字典与矩阵与 `[TypeDrawerSettings]` 的前置是 L7**（Unity 根本不序列化前两者、
-  不给第三者可写的 Type 通道——字段进不了树或写不进去，零告警）。API 尚未稳定
+  窗口补齐（`Initialize()` / `WindowPadding` / `DrawEditors`）、
+  「搜索按元素内的反射值匹配」（要给行掩码加一条「按活值匹配」的通道）；
+  其余全是 **L7 那条产品线**（多态引用与类型注册表——字典、矩阵与 `[TypeDrawerSettings]`
+  是它的前置：Unity 根本不序列化前两者、不给第三者可写的 Type 通道，字段进不了树或写不进去，
+  零告警）。API 尚未稳定
 
 ## 仓库布局与边界规则
 
