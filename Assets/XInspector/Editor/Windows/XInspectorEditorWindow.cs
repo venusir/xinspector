@@ -144,16 +144,84 @@ namespace XInspector.Editor
         /// </summary>
         /// <remarks>
         /// 子类可以覆写它并调用 <c>base.OnGUI()</c> 来插入自己的内容，但更推荐覆写
-        /// <see cref="DrawToolbar"/>——那里是留给窗口自己加控件的位置。
+        /// <see cref="DrawToolbar"/>（窗口自己加控件）或 <see cref="DrawEditors"/>（内容区）。
         /// </remarks>
         protected virtual void OnGUI()
+        {
+            DrawToolbar();
+
+            if (WindowPadding <= 0f)
+            {
+                // 没有留白：走与从前逐字相同的那条路（不多套一层布局组）。
+                DrawEditors();
+                return;
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Space(WindowPadding);
+
+                using (new EditorGUILayout.VerticalScope())
+                {
+                    GUILayout.Space(WindowPadding);
+                    DrawEditors();
+                    GUILayout.Space(WindowPadding);
+                }
+
+                GUILayout.Space(WindowPadding);
+            }
+        }
+
+        /// <summary>
+        /// 内容四周的留白（像素），四边同宽。默认 <c>0</c>。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>本包自定形状</b>（Odin 的对应签名没核到）：只取一个单值、四边同宽，够用就不多发明。
+        /// </para>
+        /// <para>
+        /// 它有两个真实落点：**内容区宽度**（<see cref="PropertyTreeHost.Draw"/> 按宽度推算
+        /// <c>labelWidth</c>，不扣掉留白会让窄窗口的标签比例偏大）与四边的实际留白。
+        /// <b>默认 0 时逐字沿用从前的布局</b>——连布局组都不多套一层。
+        /// </para>
+        /// </remarks>
+        protected virtual float WindowPadding => 0f;
+
+        /// <summary>
+        /// 画**内容区**：默认把目标对象的属性树画出来。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>与 Odin 同名不同义，这是有意的。</b> Odin 的 <c>DrawEditors</c> 是「逐个
+        /// <see cref="UnityEditor.Editor"/> 调 <c>OnInspectorGUI</c>」——本包只有一个目标、
+        /// 没有 <c>Editor</c> 列表。留着这个名字是为了让从 Odin 迁来的读者找得到落点，
+        /// 语义是本包的：**内容区**。
+        /// </para>
+        /// <para>
+        /// 它存在的真实理由：把 <c>Attach</c> 与 <c>Draw</c> 的**配对**收进一个可覆写的方法。
+        /// 覆写 <see cref="OnGUI"/> 时容易漏掉配对里的第一步，症状是**画的是上一帧的目标、
+        /// 或者什么都不画**；覆写这里并调用 <see cref="DrawPropertyTree"/> 就不会。
+        /// </para>
+        /// </remarks>
+        protected virtual void DrawEditors()
+        {
+            DrawPropertyTree();
+        }
+
+        /// <summary>
+        /// 画属性树本身——<c>Attach</c> 与 <c>Draw</c> 的配对，可单独调用。
+        /// </summary>
+        /// <remarks>
+        /// <b>它是配对本身，不给覆写点</b>：要往内容前后插东西就覆写 <see cref="DrawEditors"/>，
+        /// 要加控件就覆写 <see cref="DrawToolbar"/>。多一个同义虚方法只会造出
+        /// 「两个都该覆写」的困惑。
+        /// </remarks>
+        protected void DrawPropertyTree()
         {
             var host = EnsureHost();
             var target = GetTarget();
             host.Attach(target, FilterFor(target));
-
-            DrawToolbar();
-            host.Draw(position.width);
+            host.Draw(position.width - (WindowPadding * 2f));
         }
 
         /// <summary>

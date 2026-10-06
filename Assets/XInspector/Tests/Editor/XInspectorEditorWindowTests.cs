@@ -75,6 +75,59 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 两个切口（留白与内容区）
+
+        /// <summary>
+        /// 两个切口的**形状**：都必须是虚的（子类覆写它们），且 <c>DrawPropertyTree</c>
+        /// 刻意**不是**虚的——它是配对本身，不给第二个覆写点。
+        /// </summary>
+        [Test]
+        public void 两个切口的形状()
+        {
+            var type = typeof(XInspectorEditorWindow);
+
+            var draw = type.GetMethod("DrawEditors", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(draw, Is.Not.Null);
+            Assert.That(draw.IsVirtual, Is.True, "子类要覆写它。");
+            Assert.That(draw.ReturnType, Is.EqualTo(typeof(void)));
+
+            var padding = type.GetProperty("WindowPadding", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(padding, Is.Not.Null);
+            Assert.That(padding.PropertyType, Is.EqualTo(typeof(float)));
+            Assert.That(padding.GetGetMethod(true).IsVirtual, Is.True, "子类要覆写它。");
+
+            var tree = type.GetMethod("DrawPropertyTree", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(tree, Is.Not.Null);
+            Assert.That(tree.IsVirtual, Is.False, "配对本身不给第二个覆写点——要插内容覆写 DrawEditors。");
+        }
+
+        /// <summary>默认留白为 <c>0</c>：那一档走的是与原实现逐字相同的那条路（不多套布局组）。</summary>
+        [Test]
+        public void 默认留白为零()
+        {
+            Assert.That(_window.ExposedPadding, Is.EqualTo(0f));
+        }
+
+        /// <summary>子类覆写之后，两个切口都按子类说的算。</summary>
+        [Test]
+        public void 子类可以覆写留白与内容区()
+        {
+            var window = ScriptableObject.CreateInstance<CutoutWindowFixture>();
+            try
+            {
+                Assert.That(window.ExposedPadding, Is.EqualTo(6f), "留白取子类的值。");
+
+                window.InvokeDrawEditors();
+                Assert.That(window.DrawCount, Is.EqualTo(1), "内容区取子类的实现（基类默认那份被换掉了）。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        #endregion
+
         #region 成员过滤的实际效果
 
         /// <summary>
@@ -269,5 +322,39 @@ namespace XInspector.Tests.Editor
         /// 比把成员改成 public 或给测试开 InternalsVisibleTo 更干净——后者需要动产品代码的可见性。
         /// </remarks>
         public PropertyTree ExposedTree => Tree;
+
+        /// <summary>把留白暴露给测试（同 <see cref="ExposedTree"/> 的理由）。</summary>
+        public float ExposedPadding => WindowPadding;
+    }
+
+    /// <summary>覆写了两个切口的窗口——验它们真的可覆写、且子类给的值生效。</summary>
+    internal sealed class CutoutWindowFixture : XInspectorEditorWindow
+    {
+        /// <summary>覆写留白。</summary>
+        protected override float WindowPadding => 6f;
+
+        /// <summary>覆写内容区被调用的次数。</summary>
+        public int DrawCount { get; private set; }
+
+        /// <summary>
+        /// 覆写内容区：**只记账、不画树**。
+        /// </summary>
+        /// <remarks>
+        /// 基类默认实现会走 <c>Attach</c> + <c>Draw</c>，而后者是 IMGUI——在 <c>OnGUI</c>
+        /// 之外调用会抛。测试里没有 GUI 上下文，故这里刻意不调 <c>base</c>。
+        /// </remarks>
+        protected override void DrawEditors()
+        {
+            DrawCount++;
+        }
+
+        /// <summary>把留白读出来给断言用。</summary>
+        public float ExposedPadding => WindowPadding;
+
+        /// <summary>调用内容区切口（它是受保护的，测试从外面调不到）。</summary>
+        public void InvokeDrawEditors()
+        {
+            DrawEditors();
+        }
     }
 }
