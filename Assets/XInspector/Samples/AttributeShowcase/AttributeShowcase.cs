@@ -103,8 +103,9 @@ namespace XInspector.Samples
         }
 
         /// <summary>
-        /// 嵌套类型的成员成为真节点：展开后**里面的 [ShowIf] 会跟随、[Title] 会画出来**——
-        /// 这在嵌套层第一次生效（判据：嵌套成员里带了本包特性）。点开与下面那个对照着看。
+        /// 嵌套类型的成员成为真节点：展开后**里面的 [ShowIf] 会跟随、[Title] 会画出来、
+        /// [BoxGroup] 会框住它那一组**——这些都只在嵌套成员带了本包特性时发生。
+        /// 点开与下面那个对照着看。
         /// </summary>
         public NestedShowcaseStats stats = new NestedShowcaseStats();
 
@@ -888,6 +889,13 @@ namespace XInspector.Samples
         /// <summary>嵌套层的顺序：排到这一层的最前。</summary>
         [PropertyOrder(-1f)]
         public string tag = "精英";
+
+        /// <summary>
+        /// 嵌套层的**分组**：框嵌在这个复合字段里面，而不是跑到 Inspector 末尾去。
+        /// 同一个类型用在两处时，两处的分组各是各的（路径带父字段前缀）。
+        /// </summary>
+        [BoxGroup("嵌套层里的分组")]
+        public int armor = 25;
     }
 
     /// <summary>只带原生装饰器的嵌套类型——用来对照「没用到本包的类型外观不变」。</summary>
