@@ -178,7 +178,8 @@ namespace XInspector.Editor
         /// </para>
         /// <para>
         /// <b>数组与多态段响亮拒绝，不静默错读。</b> 展开判据本来就不展开数组与
-        /// <c>[SerializeReference]</c>，所以今天走不到那里；拒绝是给元素节点化那天留的接口。
+        /// <c>[SerializeReference]</c>，所以今天走不到那里；拒绝是给元素节点化那天留的接口
+        /// （两条都有用例，见 <c>ReflectedAccessorTests</c>）。
         /// </para>
         /// </remarks>
         public static bool TryCreatePath(
@@ -228,6 +229,14 @@ namespace XInspector.Editor
                 if (field == null)
                 {
                     reason = $"在 {current.Name} 上找不到名为「{name}」的实例字段";
+                    return false;
+                }
+
+                if (NestedMemberExpansion.IsPolymorphicReference(field))
+                {
+                    reason =
+                        $"路径段「{name}」是多态引用（[SerializeReference]）——展开判据不给它开半扇门" +
+                        "（那是 L7 那条产品线），路径也就不该穿过它";
                     return false;
                 }
 

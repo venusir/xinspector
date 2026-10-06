@@ -63,12 +63,12 @@ namespace XInspector.Editor
         /// <param name="property">属性。</param>
         /// <returns>原因文本。</returns>
         /// <remarks>
-        /// 多态引用要看**字段上**的特性（<c>[SerializeReference]</c> 的用处就是标在字段上），
-        /// 不是看声明类型——按类型判会永远为假，于是这条最有用的提示永远说不出口。
+        /// 多态引用走**与展开判据同一处**的判据（<see cref="NestedMemberExpansion.IsPolymorphicReference"/>）：
+        /// 两处各写一遍的话，告警说的与真正发生的事迟早对不上。
         /// </remarks>
         private static string Reason(InspectorProperty property)
         {
-            if (property.Member is FieldInfo field && field.IsDefined(typeof(SerializeReference), true))
+            if (NestedMemberExpansion.IsPolymorphicReference(property.Member as FieldInfo))
             {
                 return "多态引用（[SerializeReference]）本轮不展开，它的成员进不了树";
             }

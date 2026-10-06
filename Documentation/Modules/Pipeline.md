@@ -1427,6 +1427,15 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 - `EnsureListSettings` 从 `TableListProcessor` 提到 `CollectionDrawerLayout` 共用
   （`[TableList]` / `[OnCollectionChanged]` / `[Searchable]` 三处都要它）。
 - 元素类型的两处算法（表格建模、回调取值）收成 `CollectionElement.TypeOf` 一份。
+- **多态引用的判据原先是一条恒为假的检查**：展开判据里那句「`[SerializeReference]` 不展开」
+  看的是字段的**声明类型**，而那个特性标在**字段**上——类型上永远找不到它。
+  今天挡住这类字段的是「序列化属性必须是 Generic」那一关（测量：这类字段报
+  `ManagedReference`，有用例钉着）。本轮改成看字段（`NestedMemberExpansion.IsPolymorphicReference`），
+  并与 `[Searchable]` 的构建期告警、`ReflectedAccessor` 的路径拒绝**共用同一份判据**；
+  其中 `ReflectedAccessor` 那句「数组与多态段响亮拒绝」此前只是文档里的承诺
+  （数组那条有实现有用例，多态那条两样都没有），本轮才补上。
+  **教训与既有的「判据与注入必须看同一处」同源**：一条判据写在没人会走到的位置上，
+  它与真话的区别要等到出事那天才看得出来。
 
 ### 遗留
 

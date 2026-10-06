@@ -110,6 +110,68 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 多态引用（<c>[SerializeReference]</c>）不展开——那是 L7 那条产品线。
+        /// </summary>
+        /// <remarks>
+        /// 字段的类型与下面那个会展开的 <c>stats</c> **一模一样**：不展开只可能是因为多态这一条，
+        /// 不是因为「这个类型里没有本包特性」。
+        /// </remarks>
+        [Test]
+        public void 多态引用不展开()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var payload = Find(tree.Root, "payload");
+
+                Assert.That(payload.Children.Count, Is.EqualTo(0), "多态引用的成员进不了树。");
+                Assert.That(
+                    payload.Chain.Entries[payload.Chain.Count - 1].Drawer,
+                    Is.InstanceOf<UnityFallbackDrawer>(),
+                    "整份交给 Unity——与「没用到本包的类型外观不变」同款。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 测量：<c>[SerializeReference]</c> 的字段在序列化属性上是 <c>ManagedReference</c>，
+        /// 因此本来就过不了展开判据里「要求 Generic」那一关。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 记下这条是为了说明「另一条判据为什么长年没生效也没出事」：展开判据里那句
+        /// 「<c>[SerializeReference]</c> 不展开」原先写成看**类型**，而那个特性的用法声明是
+        /// <c>AttributeTargets.Field</c>——**恒为假**。2026-10-06 改成看字段，从此两道闸
+        /// 说的是同一件事。
+        /// </para>
+        /// <para>
+        /// Unity 哪天换了行为这条先红：那时字段判据就是唯一的那道闸。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void 多态引用的序列化属性是托管引用()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
+            try
+            {
+                var serializedObject = new SerializedObject(target);
+                var property = serializedObject.FindProperty("payload");
+
+                Assert.That(property, Is.Not.Null, "多态引用照样在序列化数据里（否则判据根本见不到它）。");
+                Assert.That(property.propertyType, Is.EqualTo(SerializedPropertyType.ManagedReference));
+                Assert.That(property.isArray, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region 子节点的形状
@@ -373,6 +435,13 @@ namespace XInspector.Tests.Editor
 
         /// <summary>数组不展开。</summary>
         public NestedStats[] array;
+
+        /// <summary>
+        /// 多态引用不展开（L7 那条产品线）。类型与上面那个**会展开**的 <c>stats</c> 相同——
+        /// 于是这条用例钉住的只可能是「多态」这一个理由。
+        /// </summary>
+        [SerializeReference]
+        public NestedStats payload;
 
         /// <summary>根上的同名选项来源——用来验证「先同级后根」。</summary>
         public int[] options = { 9 };

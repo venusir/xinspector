@@ -352,6 +352,23 @@ namespace XInspector.Tests.Editor
             Assert.That(reason, Does.Contain("数组"));
         }
 
+        /// <summary>
+        /// 多态引用段被**响亮拒绝**——展开判据不给它开半扇门，路径也就不该穿过它。
+        /// </summary>
+        /// <remarks>
+        /// 今天走不到这里（展开判据根本不展开这类字段，所以没有哪条节点的路径会穿过它），
+        /// 留着的是给那天的接口：真走到了要有话说，而不是「在 X 上找不到名为 Y 的字段」
+        /// 这种答非所问的原因。两条判据同源（<c>IsPolymorphicReference</c>）。
+        /// </remarks>
+        [Test]
+        public void 多态引用段被拒绝()
+        {
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Payload.Hp", out var accessor, out var reason), Is.False);
+            Assert.That(accessor, Is.Null);
+            Assert.That(reason, Does.Contain("多态引用"));
+        }
+
         /// <summary>路径超过深度上限被拒绝。</summary>
         [Test]
         public void 路径超过深度上限被拒绝()
@@ -507,6 +524,10 @@ namespace XInspector.Tests.Editor
 
         /// <summary>数组——路径里的 <c>Array</c> 段必须被拒绝。</summary>
         public int[] Items = { 1, 2, 3 };
+
+        /// <summary>多态引用——路径穿过它必须被拒绝。</summary>
+        [UnityEngine.SerializeReference]
+        public PathStats Payload;
 
         /// <summary>撞深度上限用的长链（<c>Deep.B.C.D.E</c> 是五段）。</summary>
         public DeepA Deep = new DeepA();

@@ -184,7 +184,33 @@ namespace XInspector.Editor
             }
 
             // [SerializeReference] 的多态引用是 L7 那条产品线——别在这里开半扇门。
-            return !member.Type.IsDefined(typeof(SerializeReference), true);
+            // 判据落在**字段**上（见 IsPolymorphicReference）：今天这类字段在序列化属性上是
+            // ManagedReference，本来就过不了上面「要求 Generic」那一关，但两道闸说的是同一件事——
+            // 哪道闸先变（Unity 改了 propertyType、或者判据被挪了位置）都不该由我们赌。
+            return !IsPolymorphicReference(member.Member as FieldInfo);
+        }
+
+        /// <summary>
+        /// 这个字段是不是多态引用（<c>[SerializeReference]</c>）。
+        /// </summary>
+        /// <param name="field">字段；传 <c>null</c> 时返回 <c>false</c>。</param>
+        /// <returns>是返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>要看的是字段，不是它的声明类型。</b> <c>[SerializeReference]</c> 的用法声明就是
+        /// <c>AttributeTargets.Field</c>，写成「类型上有没有它」是一句**恒为假**的判据
+        /// （2026-10-06 核出来并改正：那句话在展开判据里挂了很久，靠另一道闸才没出事）。
+        /// </para>
+        /// <para>
+        /// 今天真正挡住这类字段的是「序列化属性必须是 Generic」那一关
+        /// （它们在 Unity 里报 <c>ManagedReference</c>）。这条判据仍然留着：
+        /// 展开判据、搜索的构建期告警、路径访问器三处问的是同一个问题，
+        /// 答案只该有一份——三处各写一遍的话，迟早有一处先漂。
+        /// </para>
+        /// </remarks>
+        public static bool IsPolymorphicReference(FieldInfo field)
+        {
+            return field != null && field.IsDefined(typeof(SerializeReference), true);
         }
 
         /// <summary>
