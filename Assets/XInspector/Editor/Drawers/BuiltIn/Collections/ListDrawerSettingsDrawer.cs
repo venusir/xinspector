@@ -216,6 +216,7 @@ namespace XInspector.Editor
             }
 
             var count = array.arraySize;
+            var disableContent = CollectionDrawerLayout.DisableRowContent(property);
 
             for (var i = 0; i < count; i++)
             {
@@ -224,7 +225,7 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                DrawRow(array.GetArrayElementAtIndex(i), attribute, state, i, canResize, ref removeIndex);
+                DrawRow(array.GetArrayElementAtIndex(i), attribute, state, i, canResize, disableContent, ref removeIndex);
             }
 
             return removeIndex;
@@ -256,11 +257,18 @@ namespace XInspector.Editor
         /// <param name="state">每属性状态（行标签缓存）。</param>
         /// <param name="index">元素下标。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
+        /// <param name="disableContent">行内容是否进只读罩（见 <see cref="CollectionDrawerLayout.DisableRowContent"/>）。</param>
         /// <param name="removeIndex">请求删除的下标（原地更新）。</param>
         /// <remarks>
+        /// <para>
         /// <b>不用水平布局。</b> 复合元素展开时子字段会被水平组挤成半宽——本仓在
         /// <c>[SuffixLabel]</c> 那里已经踩过并记下了这条。这里用 <c>GetControlRect</c> 切矩形：
         /// 行内容占满整行，行尾的按钮单独切一块。
+        /// </para>
+        /// <para>
+        /// <b>只读罩只罩值，不罩折叠三角。</b> 复合元素的折叠头留在罩外——与
+        /// <c>CompositeMemberTerminalDrawer</c> 同款：只读说的是「不能改」，不是「不能看」。
+        /// </para>
         /// </remarks>
         private static void DrawRow(
             SerializedProperty element,
@@ -268,6 +276,7 @@ namespace XInspector.Editor
             CollectionDrawerState state,
             int index,
             bool canResize,
+            bool disableContent,
             ref int removeIndex)
         {
             var isCompound = element.propertyType == SerializedPropertyType.Generic && element.hasVisibleChildren;
@@ -286,13 +295,17 @@ namespace XInspector.Editor
             if (isCompound)
             {
                 // 复合元素：折叠头由我们画，展开的子字段在行**外**缩进逐个画。
+                // 折叠头留在只读罩外（能看不能改）。
                 element.isExpanded = EditorGUI.Foldout(row, element.isExpanded, label, true);
             }
             else
             {
                 // 单值元素：原生控件占满剩下的行宽。判据要有 Generic——向量也有可见子级，
                 // 只看 hasVisibleChildren 会把 Vector3 画成「折叠头 + x/y/z 三行」，与原生不一致。
-                EditorGUI.PropertyField(row, element, label, false);
+                using (new EditorGUI.DisabledScope(disableContent))
+                {
+                    EditorGUI.PropertyField(row, element, label, false);
+                }
             }
 
             if (showRemove)
@@ -314,7 +327,10 @@ namespace XInspector.Editor
             EditorGUI.indentLevel++;
             try
             {
-                CollectionRows.DrawChildren(element);
+                using (new EditorGUI.DisabledScope(disableContent))
+                {
+                    CollectionRows.DrawChildren(element);
+                }
             }
             finally
             {
@@ -346,6 +362,30 @@ namespace XInspector.Editor
             return serializedProperty != null
                 && serializedProperty.isArray
                 && serializedProperty.propertyType != SerializedPropertyType.String;
+        }
+
+        /// <summary>
+        /// 行内容此刻是否该画成禁用（只读罩）。
+        /// </summary>
+        /// <param name="property">集合节点。</param>
+        /// <returns>该禁用返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>判据只有 <c>State.IsReadOnly</c>，与 <c>[ListDrawerSettings(IsReadOnly = true)]</c>
+        /// 无关。</b> 后者只管容器自己的增删按钮（灰而不隐），元素内容照常可编辑——
+        /// 「与 <c>[ReadOnly]</c> 的差别」正在那后半句。两者各管各的，别混。
+        /// </para>
+        /// <para>
+        /// <b>为什么要在这里表态。</b> 集合绘制器是**替换型**（画完不调下一个），因此绕过了
+        /// 末端那层只读罩——<c>UnityFallbackDrawer</c> 与 <c>CompositeMemberTerminalDrawer</c>
+        /// 里的 <c>DisabledScope</c> 照不到这里，得自己来。漏了的症状是「<c>[ReadOnly]</c> 的集合
+        /// 元素仍可编辑」，<c>[DisableIf]</c> 一族同病（它们装的是同一个解析器）。
+        /// </para>
+        /// <para>单独成函数是为了可无头断言：罩子本身是 IMGUI（本仓不测），判据可以测。</para>
+        /// </remarks>
+        public static bool DisableRowContent(InspectorProperty property)
+        {
+            return property != null && property.State.IsReadOnly;
         }
 
         /// <summary>

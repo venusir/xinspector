@@ -120,6 +120,7 @@ namespace XInspector.Editor
             }
 
             var widths = AllocateWidths(available, model.Columns, model.ShowIndexLabels);
+            var disableContent = CollectionDrawerLayout.DisableRowContent(property);
 
             DrawHeaderRow(model, widths);
 
@@ -131,7 +132,9 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                DrawRow(property, array.GetArrayElementAtIndex(i), model, widths, i, showRemove, canResize, ref removeIndex);
+                DrawRow(
+                    property, array.GetArrayElementAtIndex(i), model, widths, i, showRemove, canResize, disableContent,
+                    ref removeIndex);
             }
         }
 
@@ -171,6 +174,7 @@ namespace XInspector.Editor
         /// <param name="index">元素下标。</param>
         /// <param name="showRemove">是否画删除按钮。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
+        /// <param name="disableContent">单元格是否进只读罩（见 <see cref="CollectionDrawerLayout.DisableRowContent"/>）。</param>
         /// <param name="removeIndex">请求删除的下标（原地更新）。</param>
         private static void DrawRow(
             InspectorProperty property,
@@ -180,6 +184,7 @@ namespace XInspector.Editor
             int index,
             bool showRemove,
             bool canResize,
+            bool disableContent,
             ref int removeIndex)
         {
             var row = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
@@ -196,7 +201,7 @@ namespace XInspector.Editor
             for (var i = 0; i < model.Columns.Length; i++)
             {
                 var rect = new Rect(x, row.y, widths[offset + i], row.height);
-                DrawCell(property, element, model.Columns[i], rect, index);
+                DrawCell(property, element, model.Columns[i], rect, index, disableContent);
                 x += widths[offset + i] + CellSpacing;
             }
 
@@ -219,8 +224,14 @@ namespace XInspector.Editor
         /// <param name="column">这一列。</param>
         /// <param name="rect">该格的矩形。</param>
         /// <param name="index">元素下标（告警文案用）。</param>
+        /// <param name="disableContent">该格是否进只读罩。</param>
         private static void DrawCell(
-            InspectorProperty property, SerializedProperty element, TableColumn column, Rect rect, int index)
+            InspectorProperty property,
+            SerializedProperty element,
+            TableColumn column,
+            Rect rect,
+            int index,
+            bool disableContent)
         {
             var cell = element.FindPropertyRelative(column.Name);
 
@@ -248,7 +259,10 @@ namespace XInspector.Editor
                 return;
             }
 
-            EditorGUI.PropertyField(rect, cell, GUIContent.none, false);
+            using (new EditorGUI.DisabledScope(disableContent))
+            {
+                EditorGUI.PropertyField(rect, cell, GUIContent.none, false);
+            }
         }
 
         #endregion

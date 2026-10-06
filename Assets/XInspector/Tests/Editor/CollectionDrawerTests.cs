@@ -103,6 +103,58 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 只读罩
+
+        /// <summary>
+        /// <c>[ReadOnly]</c> 标在集合上时，**行内容**也要走禁用罩——集合绘制器是替换型
+        /// （画完不调下一个），绕过了末端那层罩，得自己在判据上表态。
+        /// 判据可无头断言；罩子本身是 IMGUI，只能目视（沙盒的只读列表演示）。
+        /// </summary>
+        [Test]
+        public void 只读罩_ReadOnly_罩住元素内容()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "locked");
+
+                Assert.That(node.State.IsReadOnly, Is.True, "[ReadOnly] 装的是只读解析器。");
+                Assert.That(
+                    CollectionDrawerLayout.DisableRowContent(node),
+                    Is.True,
+                    "解析器为真时行内容就该进罩——这正是本包对 [ReadOnly] 的承诺。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 容器自己的 <c>IsReadOnly</c> 旋钮**不属于**只读罩：它只关增删按钮，元素内容照常可编辑
+        /// ——「与 <c>[ReadOnly]</c> 的差别」正在那后半句（官方语义，展示台 README 同款口径）。
+        /// </summary>
+        [Test]
+        public void 只读罩_容器旋钮不罩元素内容()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "knobsOnly");
+
+                Assert.That(node.State.IsReadOnly, Is.False, "旋钮改的是容器的编辑能力，不是成员的只读状态。");
+                Assert.That(CollectionDrawerLayout.DisableRowContent(node), Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region 增删配方
 
         /// <summary>
@@ -261,5 +313,14 @@ namespace XInspector.Tests.Editor
         /// <summary>引用类型数组——删除配方的对照（第一下只清引用）。</summary>
         [ListDrawerSettings]
         public string[] texts = { "a", "b", "c" };
+
+        /// <summary><c>[ReadOnly]</c> 标在集合上：整块内容都不该能编辑（行只读罩的判据）。</summary>
+        [ReadOnly]
+        [ListDrawerSettings]
+        public int[] locked = { 1, 2 };
+
+        /// <summary>容器旋钮的对照：只关按钮，元素内容照常可编辑。</summary>
+        [ListDrawerSettings(IsReadOnly = true)]
+        public int[] knobsOnly = { 3 };
     }
 }
