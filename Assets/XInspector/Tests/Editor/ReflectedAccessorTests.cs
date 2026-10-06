@@ -289,6 +289,40 @@ namespace XInspector.Tests.Editor
             Assert.That(accessor.Read(fixture), Is.EqualTo("内层"));
         }
 
+        /// <summary>
+        /// 中间段为 <c>null</c> 时整条链给 <c>null</c>，**不抛**。
+        /// </summary>
+        /// <remarks>
+        /// 托管对象与序列化数据不同：<c>public Inner inner;</c> 可以真的是 null
+        /// （序列化那条路上 Unity 总会补出一个实例）。没有空传播的话，条件求值器会**每帧**
+        /// 抛一次 NullReferenceException——而它跑在绘制路径上。
+        /// </remarks>
+        [Test]
+        public void 路径中间段为null时给null()
+        {
+            var fixture = new PathFixture { Stats = new PathStats { Inner = null } };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Stats.Inner.Name", out var accessor, out var reason), Is.True, reason);
+
+            Assert.That(accessor.Read(fixture), Is.Null, "中间段是 null，整条链给 null。");
+
+            fixture.Stats.Inner = new PathInner { Name = "回来了" };
+            Assert.That(accessor.Read(fixture), Is.EqualTo("回来了"), "补回实例后立刻又能读到。");
+        }
+
+        /// <summary>中间段为 <c>null</c> 且字段是值类型时给默认值，同样不抛。</summary>
+        [Test]
+        public void 路径中间段为null时值类型给默认值()
+        {
+            var fixture = new PathFixture { Holder = null };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Holder.Value.Number", out var accessor, out var reason), Is.True, reason);
+
+            Assert.That(accessor.Read(fixture), Is.EqualTo(0));
+        }
+
         /// <summary>路径段解析不到时给得出原因，不抛。</summary>
         [Test]
         public void 路径段解析不到时给原因()

@@ -139,13 +139,28 @@ namespace XInspector.Editor
         /// </remarks>
         public static SerializedProperty FindNestedScope(InspectorProperty property)
         {
+            return FindNestedScopeNode(property)?.ValueEntry?.SerializedProperty;
+        }
+
+        /// <summary>
+        /// 取「最近的复合成员容器」**节点**——沿父链上溯、跳过分组节点。
+        /// </summary>
+        /// <param name="property">起点。</param>
+        /// <returns>容器节点；没有则返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// 与 <see cref="FindNestedScope"/> 是同一件事的两种出口：那个给序列化属性（按名找成员用），
+        /// 这个给节点本身——嵌套层的**读路径**要拿它的 <see cref="InspectorProperty.Type"/> 与
+        /// <see cref="InspectorProperty.Path"/> 才能编译出访问器。
+        /// </remarks>
+        public static InspectorProperty FindNestedScopeNode(InspectorProperty property)
+        {
             var parent = property?.Parent;
 
             while (parent != null)
             {
                 if (parent.Kind == InspectorPropertyKind.Member)
                 {
-                    return parent.ValueEntry?.SerializedProperty;
+                    return parent;
                 }
 
                 if (parent.Kind == InspectorPropertyKind.Root)

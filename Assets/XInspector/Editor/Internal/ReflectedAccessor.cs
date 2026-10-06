@@ -231,9 +231,18 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                body = body == null
-                    ? Expression.Field(Convert(instance, field.DeclaringType), field)
-                    : Expression.Field(body, field);
+                var source = body ?? Convert(instance, field.DeclaringType);
+
+                // **空传播**：中间段为 null 时整条链给 null，而不是每帧抛 NullReferenceException。
+                // 托管对象与序列化数据不同——`public Inner inner;` 可以真的是 null
+                // （序列化那条路上 Unity 总会补出一个实例，托管这条不会）。
+                // 值类型的段没有「null」可言，直接取字段。
+                body = source.Type.IsValueType
+                    ? Expression.Field(source, field)
+                    : Expression.Condition(
+                        Expression.ReferenceEqual(source, Expression.Constant(null, source.Type)),
+                        Expression.Default(field.FieldType),
+                        Expression.Field(source, field));
 
                 current = field.FieldType;
                 last = field;
