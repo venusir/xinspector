@@ -241,6 +241,42 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 嵌套层的成员引用
+
+        /// <summary>
+        /// 按名找成员的特性（<c>[ValueDropdown]</c> 的数据源、<c>[MinMaxSlider]</c> 的边界、
+        /// <c>[ToggleGroup]</c> 的开关）在嵌套层**先找同层、再回落根上的绝对名**。
+        /// </summary>
+        /// <remarks>
+        /// 与条件族同一条口径。不这么做的话，嵌套层里写 <c>[ValueDropdown("options")]</c>
+        /// 会**静默地**绑定到根上的同名成员——取的是另一个对象的值，极难归因。
+        /// </remarks>
+        [Test]
+        public void 嵌套层的成员引用优先解析同级()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var picked = Find(Find(tree.Root, "valueSource"), "valueSource.picked");
+                var state = picked.State.Get<ValueDropdownState>();
+
+                Assert.That(state, Is.Not.Null, "构建期应当已经解析过选项来源。");
+                Assert.That(state.Resolved, Is.True);
+                Assert.That(state.Source, Is.Not.Null);
+                Assert.That(
+                    state.Source.propertyPath,
+                    Is.EqualTo("valueSource.options"),
+                    "嵌套层里的成员引用指的是**同层**的 options，不是根上的同名成员。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>构建被测的树。</summary>
@@ -337,5 +373,23 @@ namespace XInspector.Tests.Editor
 
         /// <summary>数组不展开。</summary>
         public NestedStats[] array;
+
+        /// <summary>根上的同名选项来源——用来验证「先同级后根」。</summary>
+        public int[] options = { 9 };
+
+        /// <summary>嵌套层里带成员引用的复合字段。</summary>
+        public NestedValueSource valueSource = new NestedValueSource();
+    }
+
+    /// <summary>嵌套层里的成员引用：同层与根上各有一个同名来源。</summary>
+    [Serializable]
+    internal class NestedValueSource
+    {
+        /// <summary>同层的选项来源（与根上那个同名、内容不同）。</summary>
+        public int[] options = { 1, 2, 3 };
+
+        /// <summary>成员引用应解析到**同层**的 <c>options</c>。</summary>
+        [ValueDropdown(nameof(options))]
+        public int picked;
     }
 }

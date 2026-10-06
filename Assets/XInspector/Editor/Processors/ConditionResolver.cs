@@ -96,7 +96,10 @@ namespace XInspector.Editor
             // 顶层成员没有这一级——它的父节点是根而不是成员——因此对既有行为**零变化**。
             // 顺序是刻意的：嵌套层里写 [ShowIf("flag")] 指的是同层的 flag；
             // 只有当同层没有它时，才回落到根上的绝对名。
-            var container = NestedScopeOf(property);
+            //
+            // 容器由 SerializedMemberResolver 提供（它会**跳过分组节点**上溯）——
+            // 与 [ToggleGroup] / 值绘制器的成员引用共用同一条规则，只留一份实现。
+            var container = SerializedMemberResolver.FindNestedScope(property);
             if (container != null)
             {
                 var sibling = container.FindPropertyRelative(conditionName);
@@ -161,20 +164,6 @@ namespace XInspector.Editor
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// 取「同一嵌套对象」的序列化属性——嵌套成员的父节点是另一个成员时才有。
-        /// </summary>
-        /// <param name="property">目标属性。</param>
-        /// <returns>嵌套容器的序列化属性；顶层成员返回 <c>null</c>。</returns>
-        private static SerializedProperty NestedScopeOf(InspectorProperty property)
-        {
-            var parent = property?.Parent;
-
-            return parent != null && parent.Kind == InspectorPropertyKind.Member
-                ? parent.ValueEntry?.SerializedProperty
-                : null;
         }
 
         /// <summary>

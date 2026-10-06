@@ -7,7 +7,15 @@ namespace XInspector.Editor
     /// </summary>
     internal enum SerializedMemberScope
     {
-        /// <summary>在属性所属的序列化对象上按属性路径查找（支持 <c>a.b</c> 点分路径）。</summary>
+        /// <summary>
+        /// 就近查找：**先**在「最近的复合成员容器」里找（即同层的兄弟成员），
+        /// **找不到再回落**到属性所属序列化对象上的绝对路径（支持 <c>a.b</c> 点分路径）。
+        /// </summary>
+        /// <remarks>
+        /// 两级顺序与条件族同款（见 <c>ConditionResolver</c>）：嵌套层里写 <c>[ToggleGroup("flag")]</c>
+        /// 指的是**同层的** <c>flag</c>，指错了「看的是一个对象、取的是另一个对象」——
+        /// 静默且极难归因。顶层成员与顶层分组没有嵌套容器，两级恒等，故对既有行为零变化。
+        /// </remarks>
         Object = 0,
 
         /// <summary>在属性自己的值对象内部查找（如 <c>[Toggle]</c> 的开关字段）。</summary>
@@ -104,6 +112,48 @@ namespace XInspector.Editor
                 {
                     return found;
                 }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 取「最近的复合成员容器」的序列化属性——沿父链上溯、**跳过分组节点**。
+        /// </summary>
+        /// <param name="property">起点。</param>
+        /// <returns>容器的序列化属性；没有则返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 用途是「嵌套层里的成员引用优先解析到同层」：嵌套层里写 <c>[ShowIf("flag")]</c>
+        /// 或 <c>[ToggleGroup("flag")]</c> 指的是**同层的** <c>flag</c>。
+        /// </para>
+        /// <para>
+        /// <b>必须跳过分组节点。</b> 分组节点把成员包在中间（嵌套层里尤其如此：
+        /// <c>stats/组/条件组</c> 的父节点就是分组节点），只看直接父节点会返回 <c>null</c>，
+        /// 于是回落到「根上的绝对名」——**静默地看错了对象**。
+        /// </para>
+        /// <para>
+        /// 上溯到根就停：顶层成员与顶层分组都没有嵌套容器，返回 <c>null</c> 即「按绝对名走」，
+        /// 与从前逐字一致。
+        /// </para>
+        /// </remarks>
+        public static SerializedProperty FindNestedScope(InspectorProperty property)
+        {
+            var parent = property?.Parent;
+
+            while (parent != null)
+            {
+                if (parent.Kind == InspectorPropertyKind.Member)
+                {
+                    return parent.ValueEntry?.SerializedProperty;
+                }
+
+                if (parent.Kind == InspectorPropertyKind.Root)
+                {
+                    return null;
+                }
+
+                parent = parent.Parent;
             }
 
             return null;
@@ -234,6 +284,19 @@ namespace XInspector.Editor
                 }
 
                 return relative;
+            }
+
+            // 第 0 级（**只在嵌套层生效**）：最近的复合成员容器里的同层成员。
+            // 找到了就用——哪怕类型不符也不继续往下找，与条件族同款：继续找会报第二次警，
+            // 而两条消息互相矛盾（一句说「找到了但类型不对」、一句说「找不到」）。
+            var container = FindNestedScope(property);
+            if (container != null)
+            {
+                var sibling = container.FindPropertyRelative(memberName);
+                if (sibling != null)
+                {
+                    return sibling;
+                }
             }
 
             var serializedObject = FindSerializedObject(property);
