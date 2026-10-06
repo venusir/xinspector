@@ -279,6 +279,74 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 根与嵌套层各挂一份**同名**的类级条件声明：各跟各的开关——嵌套组不被根上那份劫持，
+        /// 根上的组也不受嵌套层影响。
+        /// </summary>
+        [Test]
+        public void 类级条件不误配根上同名的声明()
+        {
+            var target = ScriptableObject.CreateInstance<SameNameConditionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                // 根上的类级分组把成员都收进了「闸门」——nested 也在里面。
+                var rootGroup = Find(tree.Root, "闸门");
+                var nestedGroup = Find(Find(rootGroup, "nested"), "nested/闸门");
+
+                SetBool(target, tree, "nested.nestedGate", false);
+
+                Assert.That(nestedGroup.IsVisible, Is.False, "嵌套组跟随**嵌套层**的开关。");
+                Assert.That(rootGroup.IsVisible, Is.True, "根上的组不受影响。");
+
+                SetBool(target, tree, "nested.nestedGate", true);
+                SetBool(target, tree, "rootGate", false);
+
+                Assert.That(rootGroup.IsVisible, Is.False, "根上的组跟随根上的开关。");
+                Assert.That(nestedGroup.IsVisible, Is.True, "嵌套组不被根上的同名声明改掉可见性。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 成员**全部**自带分组时，类级条件到不了任何节点——靠**容器链回退**照样生效。
+        /// <para>
+        /// 这是根上那条回退（<c>类级声明经根上回退生效</c>）在嵌套层的复刻：判据从
+        /// 「根的 <c>GroupID == 节点路径</c>」推广成「容器路径 + 声明路径 == 节点路径」。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void 成员全部自带分组时类级条件仍生效()
+        {
+            var target = ScriptableObject.CreateInstance<AllOwnGroupsFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var group = Find(Find(tree.Root, "nested"), "nested/闸门");
+
+                Assert.That(group.Kind, Is.EqualTo(InspectorPropertyKind.Group));
+                Assert.That(
+                    group.Attributes.Has<ShowIfGroupAttribute>(),
+                    Is.False,
+                    "前提：自有分组那条分支只改写路径前缀，类级特性本身到不了节点。");
+
+                SetBool(target, tree, "nested.gate", false);
+
+                Assert.That(
+                    group.IsVisible,
+                    Is.False,
+                    "条件作为数据没丢——从**容器的声明类型**上取到的那份生效了。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         /// <summary>类级 <c>[TabGroup]</c> 经嵌套层前缀改写后仍是容器（页容器判定扛得住前缀叠加）。</summary>
         [Test]
         public void 类级页签加前缀后仍是容器()
@@ -692,6 +760,51 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>类型上挂着两个类级分组。</summary>
         public TwoClassGroupsNested stats = new TwoClassGroupsNested();
+    }
+
+    /// <summary>根与嵌套层各挂一份同名类级条件声明——就近优先、不互相劫持。</summary>
+    [ShowIfGroup("闸门", Condition = nameof(rootGate))]
+    internal sealed class SameNameConditionFixture : ScriptableObject
+    {
+        /// <summary>根上的开关。</summary>
+        public bool rootGate = true;
+
+        /// <summary>嵌套层：类型自己也有一份「闸门」声明。</summary>
+        public NestedSameNameGate nested = new NestedSameNameGate();
+    }
+
+    /// <summary>嵌套层自己的同名条件声明。</summary>
+    [Serializable]
+    [ShowIfGroup("闸门", Condition = nameof(nestedGate))]
+    internal class NestedSameNameGate
+    {
+        /// <summary>嵌套层的开关。</summary>
+        public bool nestedGate = true;
+
+        /// <summary>组内成员。</summary>
+        public int hp = 10;
+    }
+
+    /// <summary>成员**全部**自带分组：类级条件到不了任何节点，靠容器回退生效。</summary>
+    [Serializable]
+    [ShowIfGroup("闸门", Condition = nameof(gate))]
+    internal class AllOwnGroupsNested
+    {
+        /// <summary>开关自己也带一个自有分组（于是类级那份只能当路径前缀）。</summary>
+        [BoxGroup("自有")]
+        public bool gate = true;
+
+        /// <summary>同样自带分组。</summary>
+        [BoxGroup("自有")]
+        public int hp = 10;
+    }
+
+    /// <summary>全部自带分组的对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class AllOwnGroupsFixture : ScriptableObject
+    {
+        /// <summary>嵌套层：类级条件 + 成员全部自带分组。</summary>
+        public AllOwnGroupsNested nested = new AllOwnGroupsNested();
     }
 
     /// <summary>元素类型上带类级分组（成员一个特性都没有）。</summary>
