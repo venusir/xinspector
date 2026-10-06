@@ -50,6 +50,8 @@
 |---|---|
 | `[DisplayAsString]` | 值画成只读文本，可选中复制，不带可编辑控件 |
 | `[DisplayAsString(true)]` | 文本折行显示全，而不是裁成一行 |
+| `[DisplayAsString(20)]` | 字号 20（`0` ＝ 编辑器默认字号）；行高跟着长，但**不撑开留白** |
+| `[DisplayAsString(16, true)]` | 富文本：`<b>`、`<color>`、`<i>` 这些标签真的会被解析 |
 | `[ToggleLeft]` | bool 的开关在左、标签在右（与 Unity 默认相反） |
 | `[ProgressBar(0, 100)]` | 数值画成进度条，点击或拖动条子即可改值 |
 | `[ProgressBar(..., Segmented = true)]` | 四段刻度 + 自定义填充色；数值文本画在条上 |

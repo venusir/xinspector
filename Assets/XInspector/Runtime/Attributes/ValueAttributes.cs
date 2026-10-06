@@ -17,9 +17,11 @@ namespace XInspector
     /// 与其发明一种，不如不做。
     /// </para>
     /// <para>
-    /// 与 Odin 的差异：官方另有 14 个重载，其中 8 个带 <c>TextAlignment</c>（Unity 类型，
-    /// 本包 Runtime 零 Unity 依赖，**永久不做**）；<c>fontSize</c> / <c>enableRichText</c>
-    /// 的重载推迟。
+    /// 与 Odin 的差异：官方 14 个重载里，**8 个带 <c>TextAlignment</c>**（Unity 类型，
+    /// 本包 Runtime 零 Unity 依赖，**永久不做**）；其余 6 个本包都声明了
+    /// （`()`、`(bool)` 与四个带 <c>fontSize</c> / <c>enableRichText</c> 的组合）。
+    /// 官方另有一个 <c>Format</c> 字段（字符串）**不声明**——它的语义只核到一句
+    /// 「值要能格式化」，确切含义没核清，按「不猜形状」的先例不做。
     /// </para>
     /// </remarks>
     /// <example>
@@ -51,9 +53,67 @@ namespace XInspector
         }
 
         /// <summary>
+        /// 以字号构造。
+        /// </summary>
+        /// <param name="fontSize">字号；<c>0</c> 表示用编辑器默认字号。</param>
+        public DisplayAsStringAttribute(int fontSize)
+        {
+            FontSize = fontSize;
+        }
+
+        /// <summary>
+        /// 以「是否允许溢出」与字号构造。
+        /// </summary>
+        /// <param name="overflow">为 <c>true</c> 时文本可以折行溢出（多行显示）。</param>
+        /// <param name="fontSize">字号；<c>0</c> 表示用编辑器默认字号。</param>
+        public DisplayAsStringAttribute(bool overflow, int fontSize)
+        {
+            Overflow = overflow;
+            FontSize = fontSize;
+        }
+
+        /// <summary>
+        /// 以字号与「是否启用富文本」构造。
+        /// </summary>
+        /// <param name="fontSize">字号；<c>0</c> 表示用编辑器默认字号。</param>
+        /// <param name="enableRichText">为 <c>true</c> 时文本按富文本解析（<c>&lt;b&gt;</c>、<c>&lt;color&gt;</c> 等标签生效）。</param>
+        public DisplayAsStringAttribute(int fontSize, bool enableRichText)
+        {
+            FontSize = fontSize;
+            EnableRichText = enableRichText;
+        }
+
+        /// <summary>
+        /// 以三个选项构造。
+        /// </summary>
+        /// <param name="overflow">为 <c>true</c> 时文本可以折行溢出（多行显示）。</param>
+        /// <param name="fontSize">字号；<c>0</c> 表示用编辑器默认字号。</param>
+        /// <param name="enableRichText">为 <c>true</c> 时文本按富文本解析。</param>
+        public DisplayAsStringAttribute(bool overflow, int fontSize, bool enableRichText)
+        {
+            Overflow = overflow;
+            FontSize = fontSize;
+            EnableRichText = enableRichText;
+        }
+
+        /// <summary>
         /// 文本是否允许溢出到多行，默认 <c>false</c>（裁到一行）。
         /// </summary>
         public bool Overflow { get; }
+
+        /// <summary>
+        /// 字号；<c>0</c> 表示用编辑器默认字号（默认值）。
+        /// </summary>
+        /// <remarks>
+        /// 它只影响这一行的字号，不影响行高与留白——「把字放大」不该顺带把整个 Inspector 撑开。
+        /// </remarks>
+        public int FontSize { get; }
+
+        /// <summary>
+        /// 文本是否按富文本解析（<c>&lt;b&gt;</c>、<c>&lt;color&gt;</c>、<c>&lt;size&gt;</c> 等标签生效）。
+        /// 默认 <c>false</c>。
+        /// </summary>
+        public bool EnableRichText { get; }
     }
 
     /// <summary>

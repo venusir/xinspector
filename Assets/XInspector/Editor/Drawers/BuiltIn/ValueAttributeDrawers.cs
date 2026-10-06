@@ -52,15 +52,32 @@ namespace XInspector.Editor
                     EditorGUILayout.PrefixLabel(label);
                 }
 
+                if (attribute.FontSize <= 0 && !attribute.EnableRichText)
+                {
+                    // 没提字号与富文本：**逐字沿用从前的两条路**（共享静态样式、零额外分配）。
+                    if (attribute.Overflow)
+                    {
+                        EditorGUILayout.LabelField(new GUIContent(text), WrappedLabel);
+                    }
+                    else
+                    {
+                        // 可选中复制；高度限定为一行，长文本被裁切（而不是撑开排布）。
+                        EditorGUILayout.SelectableLabel(
+                            text, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                    }
+
+                    return;
+                }
+
+                var style = StyleFor(property, attribute);
+
                 if (attribute.Overflow)
                 {
-                    EditorGUILayout.LabelField(new GUIContent(text), WrappedLabel);
+                    EditorGUILayout.LabelField(new GUIContent(text), style);
                 }
                 else
                 {
-                    // 可选中复制；高度限定为一行，长文本被裁切（而不是撑开排布）。
-                    EditorGUILayout.SelectableLabel(
-                        text, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                    EditorGUILayout.SelectableLabel(text, style, GUILayout.Height(RowHeightOf(style)));
                 }
             }
         }
@@ -76,7 +93,71 @@ namespace XInspector.Editor
         /// </remarks>
         private static GUIStyle WrappedLabel => _wrappedLabel ??= new GUIStyle(EditorStyles.label) { wordWrap = true };
 
+        /// <summary>
+        /// 取这一行该用的样式（带字号 / 富文本的那两条路）。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="attribute">特性实例。</param>
+        /// <returns>样式。</returns>
+        /// <remarks>
+        /// <b>样式缓存在 <see cref="PropertyState"/> 上，不放绘制器字段</b>——绘制器是无状态共享
+        /// 单例（本包硬约束），放字段的症状是「改一个字段的字号、别的字段跟着变」。
+        /// 字号/富文本与缓存不符时重建：同一属性上换了特性参数（重建树）要跟着走。
+        /// </remarks>
+        private static GUIStyle StyleFor(InspectorProperty property, DisplayAsStringAttribute attribute)
+        {
+            var state = property.State.GetOrCreate<DisplayAsStringState>();
+
+            if (state.Style == null || state.FontSize != attribute.FontSize ||
+                state.RichText != attribute.EnableRichText || state.Wrapped != attribute.Overflow)
+            {
+                state.Style = new GUIStyle(EditorStyles.label)
+                {
+                    fontSize = attribute.FontSize, // 0 ＝ 用编辑器默认字号，正是 GUIStyle 的语义
+                    richText = attribute.EnableRichText,
+                    wordWrap = attribute.Overflow,
+                };
+                state.FontSize = attribute.FontSize;
+                state.RichText = attribute.EnableRichText;
+                state.Wrapped = attribute.Overflow;
+            }
+
+            return state.Style;
+        }
+
+        /// <summary>这一行要多高：字号放大时行高跟着长，但**不小于**默认单行高。</summary>
+        /// <param name="style">这一行用的样式。</param>
+        /// <returns>像素高度。</returns>
+        private static float RowHeightOf(GUIStyle style)
+        {
+            return style.fontSize > 0
+                ? Mathf.Max(EditorGUIUtility.singleLineHeight, style.fontSize * 1.4f)
+                : EditorGUIUtility.singleLineHeight;
+        }
+
         #endregion
+    }
+
+    /// <summary>
+    /// <c>[DisplayAsString]</c> 的每属性状态：按字号 / 富文本缓存的标签样式。
+    /// </summary>
+    /// <remarks>
+    /// 默认路径（不指定字号也不开富文本）**不走这里**——那时用的是共享静态样式，
+    /// 与从前逐字一致；这个状态只为「提了要求」的那些属性而建。
+    /// </remarks>
+    internal sealed class DisplayAsStringState
+    {
+        /// <summary>缓存的样式；尚未建过为 <c>null</c>。</summary>
+        public GUIStyle Style;
+
+        /// <summary>建这份样式时的字号。</summary>
+        public int FontSize;
+
+        /// <summary>建这份样式时的富文本开关。</summary>
+        public bool RichText;
+
+        /// <summary>建这份样式时的折行开关。</summary>
+        public bool Wrapped;
     }
 
     /// <summary>

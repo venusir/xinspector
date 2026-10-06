@@ -30,6 +30,61 @@ namespace XInspector.Tests
             Assert.That(new DisplayAsStringAttribute(false).Overflow, Is.False);
         }
 
+        /// <summary>
+        /// 重载集合与官方一致（14 个里除去 8 个带 <c>TextAlignment</c> 的）。
+        /// </summary>
+        /// <remarks>
+        /// 官网 2026-10-07 核过：`()`、`(bool)`、`(int)`、`(bool, int)`、`(int, bool)`、
+        /// `(bool, int, bool)` 正是全部不带 Unity 类型的重载。
+        /// 守卫按**参数形状的集合**比，而不是构造器个数——将来加一个别的形状时照样红。
+        /// </remarks>
+        [Test]
+        public void DisplayAsString_重载集合与官方一致()
+        {
+            var shapes = new System.Collections.Generic.List<string>();
+
+            foreach (var constructor in typeof(DisplayAsStringAttribute).GetConstructors())
+            {
+                shapes.Add(string.Join(",", Array.ConvertAll(constructor.GetParameters(), p => p.ParameterType.Name)));
+            }
+
+            shapes.Sort(StringComparer.Ordinal);
+
+            Assert.That(
+                shapes,
+                Is.EqualTo(new System.Collections.Generic.List<string>
+                {
+                    string.Empty,
+                    "Boolean",
+                    "Boolean,Int32",
+                    "Boolean,Int32,Boolean",
+                    "Int32",
+                    "Int32,Boolean",
+                }),
+                "多一个少一个都要红——带 TextAlignment 的那 8 个永久不做（Runtime 零 Unity 依赖）。");
+        }
+
+        /// <summary>三个选项各自进属性，且都有默认值。</summary>
+        [Test]
+        public void DisplayAsString_字号与富文本进属性()
+        {
+            var plain = new DisplayAsStringAttribute();
+            Assert.That(plain.FontSize, Is.EqualTo(0), "0 ＝ 编辑器默认字号。");
+            Assert.That(plain.EnableRichText, Is.False);
+
+            var sized = new DisplayAsStringAttribute(20);
+            Assert.That(sized.FontSize, Is.EqualTo(20));
+            Assert.That(sized.Overflow, Is.False);
+
+            var full = new DisplayAsStringAttribute(true, 20, true);
+            Assert.That(full.Overflow, Is.True);
+            Assert.That(full.FontSize, Is.EqualTo(20));
+            Assert.That(full.EnableRichText, Is.True);
+
+            Assert.That(new DisplayAsStringAttribute(20, true).EnableRichText, Is.True);
+            Assert.That(new DisplayAsStringAttribute(false, 20).Overflow, Is.False);
+        }
+
         /// <summary>仅用于成员且不可重复。</summary>
         [Test]
         public void DisplayAsString_仅成员且不可重复()

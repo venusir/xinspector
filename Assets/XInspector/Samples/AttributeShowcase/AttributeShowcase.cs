@@ -138,6 +138,14 @@ namespace XInspector.Samples
         [DisplayAsString(true)]
         public string longDescription = "这一行刻意写得比较长，用来对比「裁到一行」与「折行显示全」两种模式在展示台里的差别。";
 
+        /// <summary>字号放大（<c>0</c> ＝ 编辑器默认字号）——行高跟着长，但不撑开留白。</summary>
+        [DisplayAsString(20)]
+        public string sizedText = "这行字号 20";
+
+        /// <summary>富文本：标签真的会被解析（不开的话原样显示尖括号）。</summary>
+        [DisplayAsString(16, true)]
+        public string richText = "富文本：<b>粗体</b>、<color=#ff8800>橙色</color>、<i>斜体</i>";
+
         /// <summary>bool 画成「开关在左、标签在右」——比 Unity 默认的排布更贴近一列复选框的读法。</summary>
         [ToggleLeft]
         public bool enableTracing = true;
