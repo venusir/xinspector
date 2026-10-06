@@ -38,18 +38,6 @@ namespace XInspector.Editor
         /// <summary>方法节点路径的后缀。C# 标识符不含圆括号，故它与任何字段路径都不可能相撞。</summary>
         private const string MethodPathSuffix = "()";
 
-        /// <summary>
-        /// 会生成方法节点的特性类型。
-        /// </summary>
-        /// <remarks>
-        /// 新增一个标在**方法**上的特性时往这里加一项——收集、交错、分组装配、处理器都会自动覆盖。
-        /// </remarks>
-        private static readonly Type[] MethodNodeAttributes =
-        {
-            typeof(ButtonAttribute),
-            typeof(OnInspectorGUIAttribute),
-        };
-
         /// <summary>按元数据令牌比较两个方法，用于把声明顺序稳定下来。</summary>
         /// <remarks>
         /// <c>GetMethods</c> 的返回顺序在 .NET 上**不保证**是声明顺序，不排的话按钮的先后
@@ -347,6 +335,10 @@ namespace XInspector.Editor
                 next = child.NextVisible(false) && child.depth == depth;
             }
 
+            // 嵌套层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀。
+            // 排在序列化子节点之后——与顶层的三段顺序（序列化 → 反射 → 方法）一致。
+            AppendNestedReflectedMembers(serializedObject, parent);
+
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
@@ -363,10 +355,6 @@ namespace XInspector.Editor
         /// <summary>
         /// 为带 <c>[ShowInInspector]</c> 的成员建节点——那些 Unity 不会序列化的成员。
         /// </summary>
-        /// <param name="targets">目标对象数组，逐目标各解析一个取值访问器。</param>
-        /// <param name="targetType">目标对象的运行时类型。</param>
-        /// <param name="serializedMembers">序列化通道**已经收进树**的成员，用来判重。</param>
-        /// <returns>反射成员节点列表，尚未挂到任何父节点上。</returns>
         /// <remarks>
         /// <para>
         /// <b>判重看的是「树里有没有它」，不是「Unity 会不会序列化它」。</b> 两者不等价，
@@ -383,20 +371,34 @@ namespace XInspector.Editor
         /// <b>排序与去重照抄方法节点那套两段式</b>：先按最派生到最基类逐层收集、按名字去重保最派生，
         /// 再整体翻转成基类在前。层内字段按令牌排完再排属性（两张表不可比）。
         /// </para>
+        /// <para>
+        /// 顶层与嵌套层共用这一段：<paramref name="scopes"/> 为 <c>null</c> 时取值对象就是目标自身、
+        /// <paramref name="pathPrefix"/> 为空时路径就是成员名——**顶层逐字不变**。
+        /// </para>
         /// </remarks>
+        /// <param name="targets">目标对象数组。</param>
+        /// <param name="targetType">在哪个类型上收（顶层是目标类型，嵌套层是复合字段的声明类型）。</param>
+        /// <param name="serializedMembers">已经进树的兄弟节点，用来判重。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源；顶层为 <c>null</c>。</param>
+        /// <param name="pathPrefix">路径前缀（以 <c>.</c> 结尾）；顶层为空。</param>
+        /// <returns>成员节点列表，尚未挂到任何父节点上。</returns>
         private static List<InspectorProperty> CollectReflectedMembers(
             object[] targets,
             Type targetType,
-            List<InspectorProperty> serializedMembers)
+            List<InspectorProperty> serializedMembers,
+            ReflectedAccessor[] scopes = null,
+            string pathPrefix = null)
         {
             const BindingFlags Flags =
                 BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
                 BindingFlags.DeclaredOnly;
 
+            // 判重用**名字**而不是路径：顶层两者相同，嵌套层只有名字才是「重复」的判据
+            // （同层的兄弟节点共享父前缀）。
             var taken = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < serializedMembers.Count; i++)
             {
-                taken.Add(serializedMembers[i].Path);
+                taken.Add(serializedMembers[i].Name);
             }
 
             var seenNames = new HashSet<string>(StringComparer.Ordinal);
@@ -418,7 +420,7 @@ namespace XInspector.Editor
                         continue;
                     }
 
-                    var node = CreateReflectedMember(targets, field);
+                    var node = CreateReflectedMember(targets, field, scopes, pathPrefix);
                     if (node != null)
                     {
                         level.Add(node);
@@ -440,7 +442,7 @@ namespace XInspector.Editor
                         continue;
                     }
 
-                    var node = CreateReflectedMember(targets, property);
+                    var node = CreateReflectedMember(targets, property, scopes, pathPrefix);
                     if (node != null)
                     {
                         level.Add(node);
@@ -462,13 +464,9 @@ namespace XInspector.Editor
         /// <summary>成员身上有没有 <c>[ShowInInspector]</c>。</summary>
         /// <param name="member">成员。</param>
         /// <returns>有返回 <c>true</c>。</returns>
-        /// <remarks>
-        /// 不继承（<c>inherit: false</c>）：逐层收集已经让基类声明的那一份自己出现，
-        /// 这里再继承会把覆写与声明算成两条。
-        /// </remarks>
         private static bool CarriesShowInInspector(MemberInfo member)
         {
-            return member.GetCustomAttributes(typeof(ShowInInspectorAttribute), false).Length > 0;
+            return MemberNodeCriteria.CarriesShowInInspector(member);
         }
 
         /// <summary>
@@ -476,15 +474,21 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="targets">目标对象数组。</param>
         /// <param name="member">字段或属性。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源；顶层为 <c>null</c>。</param>
+        /// <param name="pathPrefix">路径前缀（以 <c>.</c> 结尾）；顶层为空。</param>
         /// <returns>建好的节点；取值访问器编译不出来时返回 <c>null</c>（已告警）。</returns>
         /// <remarks>
         /// <b>值入口在这里就装好，不等树构造。</b> 处理器在挂链之前跑，而条件族之外还有
         /// <c>[Toggle]</c> 一族要经 <c>ValueEntry</c> 找「另一个成员」——晚一步装，
         /// 拿到这些成员的那些处理器就会静默落空。
         /// </remarks>
-        private static InspectorProperty CreateReflectedMember(object[] targets, MemberInfo member)
+        private static InspectorProperty CreateReflectedMember(
+            object[] targets,
+            MemberInfo member,
+            ReflectedAccessor[] scopes = null,
+            string pathPrefix = null)
         {
-            var accessors = ResolveAccessors(targets, member, out var reason);
+            var accessors = ResolveAccessors(targets, member, scopes, out var reason);
             if (accessors == null)
             {
                 Debug.LogWarning(
@@ -494,14 +498,19 @@ namespace XInspector.Editor
 
             var valueType = member is FieldInfo field ? field.FieldType : ((PropertyInfo)member).PropertyType;
 
+            // 嵌套层的路径带父前缀（`stats.Total`）——它是**合成路径**，不是序列化路径，
+            // 因此节点种类必须是 ReflectedMember（那条「Member 的路径可交给序列化系统」的
+            // 不变量只在 Kind.Member 上成立；按路径重置也只收 Kind.Member）。
+            var path = string.IsNullOrEmpty(pathPrefix) ? member.Name : pathPrefix + member.Name;
+
             return new InspectorProperty(
                 member.Name,
-                member.Name,
+                path,
                 valueType,
                 InspectorPropertyKind.ReflectedMember,
                 new PropertyAttributes(CollectMemberAttributes(member)))
             {
-                ValueEntry = new ReflectedValueEntry(targets, accessors, valueType),
+                ValueEntry = new ReflectedValueEntry(targets, accessors, valueType, scopes),
                 Member = member,
             };
         }
@@ -511,6 +520,7 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="targets">目标对象数组。</param>
         /// <param name="primary">主目标上解析出的成员。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源；顶层为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>逐目标的访问器；主目标上都编译不出来时返回 <c>null</c>。</returns>
         /// <remarks>
@@ -520,6 +530,7 @@ namespace XInspector.Editor
         private static ReflectedAccessor[] ResolveAccessors(
             object[] targets,
             MemberInfo primary,
+            ReflectedAccessor[] scopes,
             out string reason)
         {
             if (!ReflectedAccessor.TryCreate(primary, out var primaryAccessor, out reason))
@@ -535,7 +546,12 @@ namespace XInspector.Editor
 
             for (var i = 1; i < targets.Length; i++)
             {
-                var type = targets[i]?.GetType();
+                // 顶层按**目标自身**的类型重解析；嵌套层按**实例**的类型
+                // （那条字段链的末端类型，多目标可以各不相同）。
+                var type = scopes == null
+                    ? targets[i]?.GetType()
+                    : (i < scopes.Length ? scopes[i]?.ValueType : null);
+
                 if (type == null)
                 {
                     continue;
@@ -713,21 +729,12 @@ namespace XInspector.Editor
         /// <param name="method">候选方法。</param>
         /// <returns>该建节点返回 <c>true</c>。</returns>
         /// <remarks>
-        /// 新增一个标在方法上的特性时，把它加进 <see cref="MethodNodeAttributes"/> 即可——
-        /// 收集、交错、分组装配、处理器都会自动覆盖到。
+        /// 判据本身在 <see cref="MemberNodeCriteria.CreatesMethodNode"/>（收集通道与展开判据
+        /// 共用那一份）——新增标在方法上的特性时改那里，收集、交错、分组装配、处理器都会自动覆盖。
         /// </remarks>
         private static bool CreatesMethodNode(MethodInfo method)
         {
-            for (var i = 0; i < MethodNodeAttributes.Length; i++)
-            {
-                // 不继承：特性自己声明了 Inherited = false，这里跟着走才不会把覆写重复收一遍。
-                if (method.GetCustomAttributes(MethodNodeAttributes[i], false).Length > 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return MemberNodeCriteria.CreatesMethodNode(method);
         }
 
         /// <summary>
@@ -1029,6 +1036,59 @@ namespace XInspector.Editor
                 EnsureMemberGroupAttributes(
                     container, groups, member, groupAttribute.GroupID, prefixSegments);
                 groups[groupAttribute.GroupID].AddChild(member);
+            }
+        }
+
+        /// <summary>
+        /// 把嵌套类型里带 <c>[ShowInInspector]</c> 的成员收进**复合父节点**之下。
+        /// </summary>
+        /// <param name="serializedObject">底层序列化对象（目标列表由它给出）。</param>
+        /// <param name="parent">复合成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 取值对象是**同一个嵌套实例**，由一条构建期编译的字段链每帧现读
+        /// （见 <see cref="ReflectedAccessor.TryCreatePath"/>）——不是绑死的实例，
+        /// 因此父字段被重新赋值之后取值跟着走。
+        /// </para>
+        /// <para>
+        /// 路径带父前缀（<c>stats.Total</c>），节点种类是 <see cref="InspectorPropertyKind.ReflectedMember"/>
+        /// ——这个路径是**合成的**，不是序列化路径，两者绝不能混（见 <c>Kind.Member</c> 的不变量）。
+        /// </para>
+        /// </remarks>
+        private static void AppendNestedReflectedMembers(SerializedObject serializedObject, InspectorProperty parent)
+        {
+            if (parent.Type == null)
+            {
+                return;
+            }
+
+            var targets = serializedObject.targetObjects;
+            var scopes = new ReflectedAccessor[targets.Length];
+            var usable = 0;
+
+            for (var i = 0; i < targets.Length; i++)
+            {
+                if (targets[i] != null &&
+                    ReflectedAccessor.TryCreatePath(targets[i].GetType(), parent.Path, out var scope, out _))
+                {
+                    scopes[i] = scope;
+                    usable++;
+                }
+            }
+
+            // 一个目标的实例都取不到：这一层不加反射成员。
+            // （字段链取不到通常意味着路径段不是实例字段——条件族那条路会各自告警，这里不重复刷屏。）
+            if (usable == 0)
+            {
+                return;
+            }
+
+            var members = CollectReflectedMembers(
+                targets, parent.Type, parent.RawChildren, scopes, parent.Path + ".");
+
+            for (var i = 0; i < members.Count; i++)
+            {
+                parent.AddChild(members[i]);
             }
         }
 

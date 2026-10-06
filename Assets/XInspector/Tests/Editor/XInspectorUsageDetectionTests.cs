@@ -171,13 +171,30 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 控制项：**嵌套类型上挂着别的本包特性**不算——那些特性在嵌套层是惰性的
-        /// （嵌套字段不进管线），算进来就是「过度接管」，与漏接管同属静默。
+        /// **只把 <c>[ShowInInspector]</c> 挂在嵌套类型里**的类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 与「只标在嵌套层成员上」同一条腿，但落点不同：那个夹具挂的是条件族，走的是
+        /// <c>SerializedProperty</c> 迭代器那一半判据；这个挂的是**非序列化**成员，
+        /// 迭代器根本看不见它——判据若只扫可序列化字段，这种类型不会被接管，
+        /// 而那时嵌套层展开与否也就无从谈起，症状是**零告警**。
+        /// </para>
         /// </summary>
         [Test]
-        public void IsUsedBy_嵌套类型上的其它支持特性不算()
+        public void IsUsedBy_嵌套类型里只挂反射成员为真()
         {
-            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NestedOtherAttributeUsageFixture)), Is.False);
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(NestedInspectedOnlyUsageFixture)),
+                Is.True,
+                "判据要看得见嵌套类型里的非序列化成员。");
+        }
+
+        /// <summary>
+        /// 控制项：嵌套类型上只挂**类级**特性、内部一个成员特性都没有时不算——它不触发展开。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_嵌套类型只有类级特性不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NestedTypeLevelOnlyUsageFixture)), Is.False);
         }
 
         /// <summary>
@@ -395,10 +412,26 @@ namespace XInspector.Tests.Editor
     }
 
     /// <summary>嵌套类型上挂着别的本包特性的资产。</summary>
-    internal sealed class NestedOtherAttributeUsageFixture : ScriptableObject
+    internal sealed class NestedInspectedOnlyUsageFixture : ScriptableObject
     {
-        /// <summary>嵌套类型上有 <c>[Title]</c>——它在嵌套层进不了管线。</summary>
+        /// <summary>嵌套类型里只挂着一个 <c>[ShowInInspector]</c> 属性。</summary>
+        public InspectedOnlyNested value = new InspectedOnlyNested();
+    }
+
+    /// <summary>嵌套类型上挂着**类级** <c>[Title]</c>——类级特性只在被检视类型上生效。</summary>
+    internal sealed class NestedTypeLevelOnlyUsageFixture : ScriptableObject
+    {
+        /// <summary>嵌套类型上有类级特性，且它内部一个成员特性都没有。</summary>
         public TitledNestedType value;
+    }
+
+    /// <summary>只放一个非序列化反射成员的嵌套类型。</summary>
+    [Serializable]
+    internal class InspectedOnlyNested
+    {
+        /// <summary>非序列化属性——序列化迭代器看不见它。</summary>
+        [ShowInInspector]
+        public int Tag => 1;
     }
 
     /// <summary>只挂表格特性的资产。</summary>

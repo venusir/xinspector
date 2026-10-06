@@ -157,13 +157,66 @@ namespace XInspector.Editor
             }
 
             // 数组/列表是元素节点化的领域（动态形状），不在这里展开。
-            if (property.isArray || !property.hasVisibleChildren)
+            if (property.isArray)
+            {
+                return false;
+            }
+
+            // 没有可见的序列化子字段时，只有**声明类型里还有非序列化的本包成员**才值得展开
+            // （典型的是「只放了一个 [ShowInInspector] 属性」的嵌套类型）。
+            // 不加这条：那种类型整份交回 Unity，里面的特性永远没机会生效。
+            if (!property.hasVisibleChildren && !HasNonSerializedNodeMember(member.Type))
             {
                 return false;
             }
 
             // [SerializeReference] 的多态引用是 L7 那条产品线——别在这里开半扇门。
             return !member.Type.IsDefined(typeof(SerializeReference), true);
+        }
+
+        /// <summary>
+        /// 这个类型（含继承链）上有没有**序列化迭代器看不见**、但会变成节点的成员。
+        /// </summary>
+        /// <param name="type">类型。</param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 展开判据的两条腿：序列化那一半由调用方沿 <c>SerializedProperty</c> 迭代器扫，
+        /// 这里管的是迭代器**看不见**的那一半——<c>[ShowInInspector]</c> 的字段与属性。
+        /// 只看序列化那一半的话，「只放了一个 <c>[ShowInInspector]</c> 属性」的嵌套类型
+        /// 永远不会展开，那个特性永远没机会生效——而这是**没有告警**的。
+        /// </para>
+        /// <para>
+        /// 序列化字段跳过：它们由迭代器那条腿扫，两边都算会让判据的语义含混。
+        /// </para>
+        /// </remarks>
+        public static bool HasNonSerializedNodeMember(Type type)
+        {
+            const BindingFlags Flags =
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+            {
+                foreach (var field in current.GetFields(Flags))
+                {
+                    if (!IsSerializableField(field) && MemberNodeCriteria.CarriesShowInInspector(field))
+                    {
+                        return true;
+                    }
+                }
+
+                foreach (var property in current.GetProperties(Flags))
+                {
+                    // 索引器没有「一个目标对应一个值」的语义，收集通道也不收它。
+                    if (property.GetIndexParameters().Length == 0 &&
+                        MemberNodeCriteria.CarriesShowInInspector(property))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -235,6 +288,12 @@ namespace XInspector.Editor
                 return false;
             }
 
+            // 先看**迭代器看不见**的那一半（[ShowInInspector] 的字段与属性）。
+            if (HasNonSerializedNodeMember(declaringType))
+            {
+                return true;
+            }
+
             var child = property.Copy();
             var childDepth = property.depth + 1;
             var next = child.NextVisible(true) && child.depth == childDepth;
@@ -275,6 +334,12 @@ namespace XInspector.Editor
             if (type == null || depth > MaxDepth || !visited.Add(type))
             {
                 return false;
+            }
+
+            // 与 HasSupportedMember 同一条腿：迭代器看不见的那些成员。
+            if (HasNonSerializedNodeMember(type))
+            {
+                return true;
             }
 
             const BindingFlags Flags =

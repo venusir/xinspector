@@ -70,9 +70,12 @@ namespace XInspector.Editor
                     // 而注入处理器（ClassLevelInlinePropertyProcessor）看的正是同一处，
                     // 判据与注入必须对齐，否则类型不被接管、内联**静默失效**。
                     //
-                    // 只认 [InlineProperty]：字段类型上的其它本包特性在现有管线里是**惰性**的
-                    // （嵌套字段不进管线），把它们算进来会让没真正用到本插件的容器被接管——
-                    // 那是「过度接管」，与漏接管方向相反但同属静默。
+                    // 这里只认 [InlineProperty]：**其它类级特性**在嵌套类型上仍不生效
+                    // （类级特性只在被检视的最外层类型上收集），算进来会让没真正用到本插件的容器
+                    // 被接管——那是「过度接管」，与漏接管方向相反但同属静默。
+                    //
+                    // 字段类型**内部成员**上的特性另走下面那条 WouldExpand 分支——嵌套字段
+                    // 自 2026-10-06 起会按需进管线，别把两件事混起来看。
                     if (fields[i].FieldType != null &&
                         fields[i].FieldType.GetCustomAttribute<InlinePropertyAttribute>(inherit: false) != null)
                     {

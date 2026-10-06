@@ -151,7 +151,139 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 嵌套层的 [ShowInInspector]
+
+        /// <summary>嵌套层里带 <c>[ShowInInspector]</c> 的成员成为节点，路径带父前缀。</summary>
+        [Test]
+        public void 嵌套层的反射成员成为节点()
+        {
+            var target = ScriptableObject.CreateInstance<NestedReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "inspected.Doubled");
+
+                Assert.That(node.Kind, Is.EqualTo(InspectorPropertyKind.ReflectedMember));
+                Assert.That(node.Parent.Path, Is.EqualTo("inspected"), "挂在复合成员之下。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 取值读的是**嵌套实例**，不是根对象，且跟着实例走。
+        /// </summary>
+        [Test]
+        public void 嵌套反射成员读的是嵌套实例()
+        {
+            var target = ScriptableObject.CreateInstance<NestedReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "inspected.Doubled");
+
+                Assert.That(Read(node), Is.EqualTo(4), "value 为 2，Doubled 应当是 4。");
+
+                SetInt(target, tree, "inspected.value", 5);
+                Assert.That(Read(node), Is.EqualTo(10), "改嵌套实例里的字段，读到的值应当跟着变。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **只放** <c>[ShowInInspector]</c> 的嵌套类型也会展开——它一个可见的序列化子字段都没有。
+        /// </summary>
+        /// <remarks>
+        /// 这条钉住的是「第三道闸」：展开判据里那条 <c>hasVisibleChildren</c> 若不放宽，
+        /// 这种类型连门都进不了，里面的特性永远没机会生效——而且**没有告警**。
+        /// </remarks>
+        [Test]
+        public void 只放反射成员的嵌套类型也会展开()
+        {
+            var target = ScriptableObject.CreateInstance<NestedReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "onlyInspected.Tag");
+
+                Assert.That(node.Kind, Is.EqualTo(InspectorPropertyKind.ReflectedMember));
+                Assert.That(Read(node), Is.EqualTo(7));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>嵌套反射成员仍是只读的——写入口恒抛（与根层同一条承诺）。</summary>
+        [Test]
+        public void 嵌套反射成员不可写()
+        {
+            var target = ScriptableObject.CreateInstance<NestedReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "inspected.Doubled");
+
+                Assert.That(node.ValueEntry.IsUnityBacked, Is.False);
+                Assert.That(node.ValueEntry.SerializedProperty, Is.Null);
+                Assert.Throws<NotSupportedException>(() => node.ValueEntry.SetValue(node.ValueEntry.GetValue()));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 嵌套反射成员的路径**不是序列化路径**——按路径重置那一条通道不该收它。
+        /// </summary>
+        /// <remarks>
+        /// 成员路径与分组前缀那条不变量（<c>Kind.Member</c> 的路径可以交给序列化系统）只在
+        /// <c>Kind.Member</c> 上成立；让合成路径流进去的症状是**静默漏项**。
+        /// </remarks>
+        [Test]
+        public void 嵌套反射成员不进按路径重置()
+        {
+            var target = ScriptableObject.CreateInstance<NestedReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var paths = PropertyTreeReset.CollectMemberPaths(tree);
+
+                Assert.That(paths, Does.Contain("inspected.value"));
+                Assert.That(
+                    paths,
+                    Has.None.Contains("Doubled"),
+                    "反射成员是合成路径，不该被当成可重置的序列化路径。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
+
+        /// <summary>读一次反射成员的显示值。</summary>
+        /// <param name="node">反射成员节点。</param>
+        /// <returns>读到的值。</returns>
+        private static object Read(InspectorProperty node)
+        {
+            var entry = node.ValueEntry as ReflectedValueEntry;
+            Assert.That(entry, Is.Not.Null, $"{node.Path} 不是反射成员节点。");
+
+            Assert.That(entry.TryGetDisplayValue(out var value, out var mixed, out var error), Is.True, error);
+            Assert.That(mixed, Is.False);
+            return value;
+        }
 
         /// <summary>构建被测的树。</summary>
         /// <param name="target">目标资产。</param>
@@ -254,6 +386,35 @@ namespace XInspector.Tests.Editor
         public int gatedBySibling;
     }
 
+    /// <summary>嵌套层里带 <c>[ShowInInspector]</c> 的类型——反射成员与序列化字段混在一起。</summary>
+    [Serializable]
+    internal class NestedInspected
+    {
+        /// <summary>序列化字段。</summary>
+        public int value = 2;
+
+        /// <summary>非序列化属性——只有 <c>[ShowInInspector]</c> 才看得到它。</summary>
+        [ShowInInspector]
+        public int Doubled => value * 2;
+
+        /// <summary>私有的非序列化字段——反射成员存在的理由。</summary>
+        [ShowInInspector]
+        private string _secret = "内层";
+
+        /// <summary>给测试读一下私有字段。</summary>
+        /// <returns>私有字段的值。</returns>
+        public string Secret() => _secret;
+    }
+
+    /// <summary>**只放**反射成员的嵌套类型——一个可见的序列化子字段都没有。</summary>
+    [Serializable]
+    internal class NestedOnlyInspected
+    {
+        /// <summary>非序列化属性。</summary>
+        [ShowInInspector]
+        public int Tag => 7;
+    }
+
     /// <summary>嵌套层反射条件的对照资产。</summary>
     [HideMonoScript]
     internal sealed class NestedReflectionFixture : ScriptableObject
@@ -266,5 +427,11 @@ namespace XInspector.Tests.Editor
 
         /// <summary>嵌套层。</summary>
         public NestedReflected nested = new NestedReflected();
+
+        /// <summary>嵌套层：反射成员与序列化字段混在一起。</summary>
+        public NestedInspected inspected = new NestedInspected();
+
+        /// <summary>嵌套层：只放反射成员，一个可见的序列化子字段都没有。</summary>
+        public NestedOnlyInspected onlyInspected = new NestedOnlyInspected();
     }
 }

@@ -28,6 +28,16 @@ namespace XInspector.Editor
         /// <summary>逐目标的取值访问器；某个目标上没有这个成员时该格为 <c>null</c>。</summary>
         private readonly ReflectedAccessor[] _accessors;
 
+        /// <summary>
+        /// 逐目标的**嵌套实例**来源；顶层成员为 <c>null</c>。
+        /// </summary>
+        /// <remarks>
+        /// 非 null 时，取值是 <c>访问器(实例(目标))</c> 而不是 <c>访问器(目标)</c>——
+        /// 实例由一条构建期编译的字段链每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath"/>），
+        /// 因此父字段被重新赋值之后跟着走。
+        /// </remarks>
+        private readonly ReflectedAccessor[] _scopes;
+
         /// <summary>成员的值类型。</summary>
         private readonly Type _valueType;
 
@@ -44,15 +54,23 @@ namespace XInspector.Editor
         /// <param name="targets">目标对象数组。</param>
         /// <param name="accessors">逐目标的取值访问器，与 <paramref name="targets"/> 同长。</param>
         /// <param name="valueType">成员的值类型。</param>
+        /// <param name="scopes">
+        /// 逐目标的**嵌套实例**来源，与 <paramref name="targets"/> 同长；顶层成员传 <c>null</c>。
+        /// </param>
         /// <remarks>
         /// <b>逐目标各一个访问器</b>而不是共用一个：多选下的目标未必是同一个类型，
         /// 而同一个成员名在不同类型上可能是不同的 <c>MemberInfo</c>。
         /// 某个目标解析不到就是 <c>null</c>，读取时算「不一致」——我们确实不知道它的值。
         /// </remarks>
-        public ReflectedValueEntry(object[] targets, ReflectedAccessor[] accessors, Type valueType)
+        public ReflectedValueEntry(
+            object[] targets,
+            ReflectedAccessor[] accessors,
+            Type valueType,
+            ReflectedAccessor[] scopes = null)
         {
             _targets = targets ?? Array.Empty<object>();
             _accessors = accessors ?? Array.Empty<ReflectedAccessor>();
+            _scopes = scopes;
             _valueType = valueType ?? typeof(object);
 
             for (var i = 0; i < _accessors.Length; i++)
@@ -86,6 +104,25 @@ namespace XInspector.Editor
         /// 依赖它的绘制器（绝大多数值绘制器）会据此退让，由反射成员的末端绘制器接管。
         /// </remarks>
         public override SerializedProperty SerializedProperty => null;
+
+        /// <summary>
+        /// 取第 <paramref name="index"/> 个目标上的**取值对象**——顶层是目标本身，
+        /// 嵌套层是沿字段链现读到的那个实例。
+        /// </summary>
+        /// <param name="index">目标下标。</param>
+        /// <returns>取值对象；嵌套实例取不到时返回 <c>null</c>。</returns>
+        private object ResolveInstance(int index)
+        {
+            var target = index < _targets.Length ? _targets[index] : null;
+
+            if (_scopes == null)
+            {
+                return target;
+            }
+
+            var scope = index < _scopes.Length ? _scopes[index] : null;
+            return scope?.Read(target);
+        }
 
         /// <summary>
         /// 多目标编辑时各目标的值是否不一致。
@@ -203,7 +240,17 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                var target = i < _targets.Length ? _targets[i] : null;
+                var target = ResolveInstance(i);
+
+                // 嵌套实例取不到（父字段为空）：给不出一个诚实的值，按「不一致」处置——
+                // 与「某个目标上没有这个成员」同款，终端会画「—」。
+                if (_scopes != null && target == null)
+                {
+                    mixed = true;
+                    value = null;
+                    return false;
+                }
+
                 if (!TryRead(accessor, target, out var current, ref error))
                 {
                     value = null;
