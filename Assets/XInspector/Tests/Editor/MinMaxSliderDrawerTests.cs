@@ -99,7 +99,7 @@ namespace XInspector.Tests.Editor
             Assert.That(state.UsesDynamicBounds, Is.True);
             Assert.That(state.Resolved, Is.True);
             Assert.That(state.MinMaxGetter, Is.Not.Null);
-            Assert.That(state.MinMaxGetter.propertyPath, Is.EqualTo("dynamicRange"));
+            Assert.That(state.MinMaxGetter(), Is.EqualTo(new Vector2(5f, 50f)), "绑的是 dynamicRange。");
 
             // 覆盖语义：即使字面量还在，也要读成员的 Vector2。
             var attribute = Attribute("byVector");
@@ -116,8 +116,8 @@ namespace XInspector.Tests.Editor
             var attribute = Attribute("byMembers");
 
             Assert.That(state.Resolved, Is.True);
-            Assert.That(state.MinGetter.propertyPath, Is.EqualTo("lo"));
-            Assert.That(state.MaxGetter.propertyPath, Is.EqualTo("hi"));
+            Assert.That(state.MinGetter(), Is.EqualTo(-2f), "绑的是 lo。");
+            Assert.That(state.MaxGetter(), Is.EqualTo(8f), "绑的是 hi。");
 
             Assert.That(MinMaxRange.TryReadBounds(attribute, state, out var lower, out var upper), Is.True);
             Assert.That(lower, Is.EqualTo(-2f));
@@ -168,6 +168,32 @@ namespace XInspector.Tests.Editor
             Assert.That(state.MinMaxGetter, Is.Null);
         }
 
+        /// <summary>
+        /// 边界可以指向**反射成员**——非序列化属性与无参方法各一条。
+        /// </summary>
+        /// <remarks>
+        /// 2026-10-06「成员引用收成一层」带来的：此前这一格只认序列化成员，
+        /// 撞上反射边界只有一条告警 + 退回普通绘制。
+        /// </remarks>
+        [Test]
+        public void 边界可指向反射成员()
+        {
+            var byProperty = State("byReflected");
+            Assert.That(byProperty.Resolved, Is.True, "解析成功才谈得上画滑块。");
+            Assert.That(
+                MinMaxRange.TryReadBounds(Attribute("byReflected"), byProperty, out var lower, out var upper),
+                Is.True);
+            Assert.That(lower, Is.EqualTo(-5f));
+            Assert.That(upper, Is.EqualTo(5f), "读的是那个非序列化属性。");
+
+            var byMethod = State("byMethod");
+            Assert.That(
+                MinMaxRange.TryReadBounds(Attribute("byMethod"), byMethod, out var methodLower, out var methodUpper),
+                Is.True);
+            Assert.That(methodLower, Is.EqualTo(0f));
+            Assert.That(methodUpper, Is.EqualTo(100f), "读的是那个无参方法。");
+        }
+
         #endregion
 
         #region 夹取数学
@@ -212,7 +238,7 @@ namespace XInspector.Tests.Editor
             bounds.vector2Value = new Vector2(50f, 5f);
 
             var attribute = new MinMaxSliderAttribute("dynamicRange", true);
-            state.MinMaxGetter = bounds;
+            state.MinMaxGetter = () => bounds.vector2Value;
 
             Assert.That(MinMaxRange.TryReadBounds(attribute, state, out var lower, out var upper), Is.True);
             Assert.That(lower, Is.EqualTo(5f));
@@ -335,6 +361,24 @@ namespace XInspector.Tests.Editor
             /// <summary>成员存在但类型不对（要 Vector2，给的是 float）。</summary>
             [MinMaxSlider("aFloat", true)]
             public Vector2 wrongType;
+
+            /// <summary>非序列化的边界（普通属性）——只有反射那一级看得到它。</summary>
+            public Vector2 ReflectedRange => new Vector2(-5f, 5f);
+
+            /// <summary>边界指向一个非序列化属性。</summary>
+            [MinMaxSlider(nameof(ReflectedRange), true)]
+            public Vector2 byReflected;
+
+            /// <summary>非序列化的边界（无参方法）。</summary>
+            /// <returns>恒为 <c>(0, 100)</c>。</returns>
+            public Vector2 RangeByMethod()
+            {
+                return new Vector2(0f, 100f);
+            }
+
+            /// <summary>边界指向一个无参方法。</summary>
+            [MinMaxSlider(nameof(RangeByMethod), true)]
+            public Vector2 byMethod;
         }
     }
 }

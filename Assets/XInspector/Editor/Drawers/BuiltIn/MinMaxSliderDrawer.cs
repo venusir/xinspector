@@ -173,13 +173,19 @@ namespace XInspector.Editor
         /// 读取当前边界。
         /// </summary>
         /// <param name="attribute">特性（提供字面量形态的上下界）。</param>
-        /// <param name="state">构建期解析出的成员句柄。</param>
+        /// <param name="state">构建期解析出的成员读取器。</param>
         /// <param name="lower">下界。</param>
         /// <param name="upper">上界。</param>
         /// <returns>边界可用返回 <c>true</c>；包含非有限值或上下限倒置/相等时返回 <c>false</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 与字面量形态的构造期校验不同，**动态边界没法在构造期验**（值要到绘制期才知道），
         /// 故这里统一兜底：不猜、不夹、直接判为不可用，由调用方退回普通绘制。
+        /// </para>
+        /// <para>
+        /// <b>反射边界取不到实例时给的是 NaN</b>（见 <c>MemberReferenceResolver</c>），
+        /// 于是落在上面那条兜底里——与「成员被别处改成了非有限值」同一条路，不必另立分支。
+        /// </para>
         /// </remarks>
         public static bool TryReadBounds(
             MinMaxSliderAttribute attribute, MinMaxSliderState state, out float lower, out float upper)
@@ -194,14 +200,14 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                var bounds = state.MinMaxGetter.vector2Value;
+                var bounds = state.MinMaxGetter();
                 lower = bounds.x;
                 upper = bounds.y;
             }
             else
             {
-                lower = state.MinGetter != null ? state.MinGetter.floatValue : attribute.MinValue;
-                upper = state.MaxGetter != null ? state.MaxGetter.floatValue : attribute.MaxValue;
+                lower = state.MinGetter != null ? state.MinGetter() : attribute.MinValue;
+                upper = state.MaxGetter != null ? state.MaxGetter() : attribute.MaxValue;
             }
 
             if (float.IsNaN(lower) || float.IsNaN(upper) ||

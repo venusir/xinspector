@@ -10,7 +10,8 @@ namespace XInspector.Editor
     /// <para>
     /// 解析一次、绘制期每帧只读值——与条件族同一条分工。成员特性不存在
     /// <c>[ToggleGroup]</c> 那个「分组节点在处理器阶段还不存在」的问题，
-    /// 故不需要退到绘制期解析。
+    /// 故不需要退到绘制期解析。解析本身走 <see cref="MemberReferenceResolver"/>
+    /// （四级阶梯），边界因此也可以指向普通字段/属性或无参方法。
     /// </para>
     /// </summary>
     internal sealed class MinMaxSliderProcessor : AttributeProcessor<MinMaxSliderAttribute>
@@ -40,41 +41,40 @@ namespace XInspector.Editor
             if (attribute.MinMaxValueGetter != null)
             {
                 // 官方语义：这一个非 null 时覆盖其余四个。
-                state.MinMaxGetter = Resolve(
-                    property, attribute.MinMaxValueGetter, MemberKind.Vector2, out var reason);
-
-                if (state.MinMaxGetter == null)
+                if (!MemberReferenceResolver.TryResolveVector2(
+                        property, attribute.MinMaxValueGetter, out var bounds, out var reason))
                 {
                     Warn(property, attribute.MinMaxValueGetter, reason);
                     return;
                 }
 
+                state.MinMaxGetter = bounds;
                 state.Resolved = true;
                 return;
             }
 
             if (attribute.MinValueGetter != null)
             {
-                state.MinGetter = Resolve(
-                    property, attribute.MinValueGetter, MemberKind.Float, out var minReason);
-
-                if (state.MinGetter == null)
+                if (!MemberReferenceResolver.TryResolveFloat(
+                        property, attribute.MinValueGetter, out var min, out var minReason))
                 {
                     Warn(property, attribute.MinValueGetter, minReason);
                     return;
                 }
+
+                state.MinGetter = min;
             }
 
             if (attribute.MaxValueGetter != null)
             {
-                state.MaxGetter = Resolve(
-                    property, attribute.MaxValueGetter, MemberKind.Float, out var maxReason);
-
-                if (state.MaxGetter == null)
+                if (!MemberReferenceResolver.TryResolveFloat(
+                        property, attribute.MaxValueGetter, out var max, out var maxReason))
                 {
                     Warn(property, attribute.MaxValueGetter, maxReason);
                     return;
                 }
+
+                state.MaxGetter = max;
             }
 
             state.Resolved = true;
@@ -83,22 +83,6 @@ namespace XInspector.Editor
         #endregion
 
         #region Private Helpers
-
-        /// <summary>
-        /// 按名字与类型解析成员（同一个序列化对象上）。
-        /// </summary>
-        /// <param name="property">目标属性。</param>
-        /// <param name="memberName">成员名。</param>
-        /// <param name="kind">要求的类型。</param>
-        /// <param name="reason">失败原因。</param>
-        /// <returns>序列化属性；失败返回 <c>null</c>。</returns>
-        private static SerializedProperty Resolve(
-            InspectorProperty property, string memberName, MemberKind kind, out string reason)
-        {
-            SerializedMemberResolver.TryResolve(
-                property, memberName, MemberScope.Object, kind, out var member, out reason);
-            return member;
-        }
 
         /// <summary>
         /// 记一条解析失败的构建期告警。
@@ -111,8 +95,8 @@ namespace XInspector.Editor
             Debug.LogWarning(
                 $"[XInspector] 属性「{property.Path}」上的 [MinMaxSlider] 边界「{memberName}」无法解析：{reason}。" +
                 "该特性的动态边界已忽略，字段退回普通绘制。" +
-                "注意边界成员必须是**序列化**成员，且 [MinMaxSlider] 的字符串参数只认序列化成员名" +
-                "（Odin 的 $/@ 表达式与方法调用本包不做）。");
+                "边界可以是序列化成员、普通字段/属性，或无参返回 float / Vector2 的方法" +
+                "（Odin 的 $/@ 表达式语言本包不做）。");
         }
 
         #endregion
@@ -175,16 +159,21 @@ namespace XInspector.Editor
     /// <summary>
     /// <see cref="MinMaxSliderAttribute"/> 的解析结果，挂在 <see cref="PropertyState"/> 上。
     /// </summary>
+    /// <remarks>
+    /// 三个读取器都是**每帧现读**的委托：序列化成员绑的是活句柄，反射成员绑的是构建期编译出来的
+    /// 访问器（<b>不装箱</b>——边界在绘制路径上每帧读一次）。两者对绘制器没有差别，
+    /// 这正是它不再存 <see cref="SerializedProperty"/> 的原因。
+    /// </remarks>
     internal sealed class MinMaxSliderState
     {
         /// <summary>同时提供上下界的成员（<c>Vector2</c>）；未使用或解析失败为 <c>null</c>。</summary>
-        public SerializedProperty MinMaxGetter;
+        public Func<Vector2> MinMaxGetter;
 
         /// <summary>提供下界的成员（<c>float</c>）；未使用或解析失败为 <c>null</c>。</summary>
-        public SerializedProperty MinGetter;
+        public Func<float> MinGetter;
 
         /// <summary>提供上界的成员（<c>float</c>）；未使用或解析失败为 <c>null</c>。</summary>
-        public SerializedProperty MaxGetter;
+        public Func<float> MaxGetter;
 
         /// <summary>特性是否用了任一个「取自成员」的形态。</summary>
         public bool UsesDynamicBounds;
