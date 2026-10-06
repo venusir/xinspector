@@ -242,6 +242,30 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>**值类型元素**上的行内按钮：同一条拒绝，原因同样写在 Tooltip 上。</summary>
+        /// <remarks>元素层让 <c>List&lt;结构体&gt;</c> 变得常见，这条拒绝要有元素版用例。</remarks>
+        [Test]
+        public void 值类型元素上的行内按钮被拒绝()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("值类型"));
+
+            var target = ScriptableObject.CreateInstance<InlineButtonStructElementFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var state = StateOf(tree, "items.Array.data[0].pressed");
+
+                    Assert.That(state.Methods[0], Is.Null, "值类型元素上不解析方法。");
+                    Assert.That(state.Labels[0].tooltip, Does.Contain("值类型"), "原因要写在脸上。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region Private Helpers
@@ -417,6 +441,29 @@ namespace XInspector.Tests.Editor
         public int pressed;
 
         /// <summary>值类型上的方法。</summary>
+        public void OnPressed()
+        {
+        }
+    }
+
+    /// <summary>值类型**元素**上的行内按钮。</summary>
+    [HideMonoScript]
+    internal sealed class InlineButtonStructElementFixture : ScriptableObject
+    {
+        /// <summary>元素是值类型——层照建，但行内按钮被拒绝。</summary>
+        [ListDrawerSettings]
+        public List<InlineStructElement> items = new List<InlineStructElement> { new InlineStructElement() };
+    }
+
+    /// <summary>值类型元素——行内按钮的方法调用会改到装箱副本上。</summary>
+    [Serializable]
+    internal struct InlineStructElement
+    {
+        /// <summary>行内按钮。</summary>
+        [InlineButton(nameof(OnPressed))]
+        public int pressed;
+
+        /// <summary>值类型元素上的方法。</summary>
         public void OnPressed()
         {
         }

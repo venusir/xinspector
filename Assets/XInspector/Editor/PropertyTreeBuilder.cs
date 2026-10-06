@@ -306,14 +306,12 @@ namespace XInspector.Editor
         /// </remarks>
         /// <param name="serializedObject">底层序列化对象。</param>
         /// <param name="parent">复合父节点。</param>
-        /// <param name="withReflectedMembers">
-        /// 要不要收 <c>[ShowInInspector]</c> 的成员与方法节点。嵌套类型是 <c>true</c>；
-        /// **元素层是 <c>false</c>**——元素里的实例读路径（<c>Array.data[i]</c> 段）
-        /// 留给下一轮，收了也取不到实例（<see cref="ReflectedAccessor.TryCreatePath"/> 会拒绝）。
-        /// 该开关沿递归传播：元素子树里的**每一层**都取不到实例。
-        /// </param>
-        private static void ExpandChildren(
-            SerializedObject serializedObject, InspectorProperty parent, bool withReflectedMembers = true)
+        /// <remarks>
+        /// 反射成员与方法节点**一律收**（嵌套层与元素层同）：元素路径
+        /// （<c>items.Array.data[i]</c>）自 2026-10-06 起被
+        /// <see cref="ReflectedAccessor.TryCreatePath"/> 认，取实例的那条链照样成立。
+        /// </remarks>
+        private static void ExpandChildren(SerializedObject serializedObject, InspectorProperty parent)
         {
             var property = parent.ValueEntry?.SerializedProperty;
             if (property == null)
@@ -347,30 +345,29 @@ namespace XInspector.Editor
 
                 if (node.Member != null && NestedMemberExpansion.ShouldExpand(node, stableProperty))
                 {
-                    ExpandChildren(serializedObject, node, withReflectedMembers);
+                    ExpandChildren(serializedObject, node);
                 }
 
                 next = child.NextVisible(false) && child.depth == depth;
             }
 
-            if (withReflectedMembers)
-            {
-                // 嵌套层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀。
-                // 嵌套层里的方法节点同理。两段都排在序列化子节点之后——与顶层的三段顺序
-                // （序列化 → 反射 → 方法）一致；也都排在下面的排序之前，嵌套层的
-                // [PropertyOrder] 因此同样能排到按钮。
-                AppendNestedReflectedMembers(serializedObject, parent);
-                AppendNestedMethodMembers(parent);
-            }
+            // 嵌套层与元素层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀
+            // （元素层是 `items.Array.data[0].`，同一套机制）。方法节点同理。两段都排在序列化
+            // 子节点之后——与顶层的三段顺序（序列化 → 反射 → 方法）一致；也都排在下面的排序
+            // 之前，嵌套层/元素层的 [PropertyOrder] 因此同样能排到按钮。
+            AppendNestedReflectedMembers(serializedObject, parent);
+            AppendNestedMethodMembers(parent);
 
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
 
-            if (withReflectedMembers)
+            // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
+            // 这里只管**类级**那条仍然失效的路径，别让它静默。**元素子树除外**：元素类型上的
+            // 类级分组由集合级扫描报一次（CollectionElementExpansion.FindUnsupportedInElement），
+            // 在这里报会按元素刷屏。
+            if (!CollectionElementExpansion.HasElementLayerAncestor(parent))
             {
-                // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
-                // 这里只管**类级**那条仍然失效的路径，别让它静默。
                 NestedMemberExpansion.WarnAboutInertTypeGroups(parent);
             }
         }
@@ -448,16 +445,16 @@ namespace XInspector.Editor
             // （注入的分组特性要被装配看见）。父 / 根钩子不重跑——它们对集合节点自己已经跑过。
             RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
 
-            // 用到了本包、但本轮**做不了**的那些用法（元素里的读路径、类级分组），报一次——
-            // 报在集合上：按元素报会把同一件事刷十遍。第三类（元素里的集合）由构建期的
+            // 用到了本包、却**用不了**的那些用法（现在只剩「类型上的类级分组」一类），报一次——
+            // 报在集合上：按元素报会把同一件事刷十遍。另一类（元素里的集合）由构建期的
             // 树遍历顺带报，它们自己在树上。
             var unsupported = CollectionElementExpansion.FindUnsupportedInElement(
                 CollectionElementExpansion.ElementTypeOf(collection));
             if (unsupported != null)
             {
                 DrawerWarnings.Once(collection, nameof(CreateElementLayer) + ".元素里的边界",
-                    $"[XInspector] 属性「{collection.Path}」的元素类型里有一处本轮不支持的用法：" +
-                    $"{unsupported}。它不会生效——这是元素层本轮划的边界（见包 README 的已知限制）。");
+                    $"[XInspector] 属性「{collection.Path}」的元素类型里有一处用不了的用法：" +
+                    $"{unsupported}。它不会生效——这是本包划的边界（见包 README 的已知限制）。");
             }
 
             // 登记进对账名单：此后每趟绘制之前 CollectionElementSync 都会看它一眼。
@@ -484,6 +481,12 @@ namespace XInspector.Editor
         /// <see cref="CreateMember"/> 同款）——<c>GetArrayElementAtIndex</c> 的句柄
         /// 会随结构变更作废，路径不会。
         /// </para>
+        /// <para>
+        /// <b>元素子树里也收反射成员与方法节点</b>（自 2026-10-06）：取值/调用的实例由
+        /// <c>ReflectedAccessor.TryCreatePath</c> 按 <c>items.Array.data[i]</c> 这条路径
+        /// 每帧现读——索引段是它认得的路径转义，取不到（越界、空集合、元素为 null）时
+        /// 消费者落到既有的「取不到实例」语义。
+        /// </para>
         /// </remarks>
         private static InspectorProperty CreateElementNode(
             SerializedObject serializedObject, InspectorProperty collection, int index)
@@ -506,7 +509,7 @@ namespace XInspector.Editor
 
             collection.AddChild(node);
 
-            ExpandChildren(serializedObject, node, withReflectedMembers: false);
+            ExpandChildren(serializedObject, node);
 
             return node;
         }
@@ -1293,19 +1296,27 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 把嵌套类型里带 <c>[ShowInInspector]</c> 的成员收进**复合父节点**之下。
+        /// 把嵌套类型（或集合元素类型）里带 <c>[ShowInInspector]</c> 的成员收进**复合父节点**之下。
         /// </summary>
         /// <param name="serializedObject">底层序列化对象（目标列表由它给出）。</param>
-        /// <param name="parent">复合成员节点。</param>
+        /// <param name="parent">复合成员节点（嵌套层的复合成员，或元素节点）。</param>
         /// <remarks>
         /// <para>
-        /// 取值对象是**同一个嵌套实例**，由一条构建期编译的字段链每帧现读
-        /// （见 <see cref="ReflectedAccessor.TryCreatePath"/>）——不是绑死的实例，
-        /// 因此父字段被重新赋值之后取值跟着走。
+        /// 取值对象是**同一个嵌套实例**（元素层是**那个元素**），由一条构建期编译的字段链
+        /// 每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath"/>）——不是绑死的实例，
+        /// 因此父字段被重新赋值之后取值跟着走。逐目标的访问器编译走
+        /// <see cref="NestedInstanceScope.Compile"/>：与条件族、按名回调族**同一份实现**
+        /// （此前这里自有一份逐目标循环，是天然的漂移点）。
         /// </para>
         /// <para>
-        /// 路径带父前缀（<c>stats.Total</c>），节点种类是 <see cref="InspectorPropertyKind.ReflectedMember"/>
-        /// ——这个路径是**合成的**，不是序列化路径，两者绝不能混（见 <c>Kind.Member</c> 的不变量）。
+        /// 路径带父前缀（<c>stats.Total</c>、元素层是 <c>items.Array.data[0].Tag</c>），
+        /// 节点种类是 <see cref="InspectorPropertyKind.ReflectedMember"/>——这个路径是**合成的**，
+        /// 不是序列化路径，两者绝不能混（见 <c>Kind.Member</c> 的不变量）。
+        /// </para>
+        /// <para>
+        /// <b>一格都编译不出来时不静默</b>：这个类型上确实有会变成节点的成员就说一句
+        /// （条件族那条路会各自告警，但反射成员这条没有别的出口——症状会是「写了
+        /// <c>[ShowInInspector]</c> 却什么都不出现」）。
         /// </para>
         /// </remarks>
         private static void AppendNestedReflectedMembers(SerializedObject serializedObject, InspectorProperty parent)
@@ -1316,23 +1327,27 @@ namespace XInspector.Editor
             }
 
             var targets = serializedObject.targetObjects;
-            var scopes = new ReflectedAccessor[targets.Length];
+            var scopes = NestedInstanceScope.Compile(targets, parent.Path);
             var usable = 0;
 
-            for (var i = 0; i < targets.Length; i++)
+            for (var i = 0; scopes != null && i < scopes.Length; i++)
             {
-                if (targets[i] != null &&
-                    ReflectedAccessor.TryCreatePath(targets[i].GetType(), parent.Path, out var scope, out _))
+                if (scopes[i] != null)
                 {
-                    scopes[i] = scope;
                     usable++;
                 }
             }
 
-            // 一个目标的实例都取不到：这一层不加反射成员。
-            // （字段链取不到通常意味着路径段不是实例字段——条件族那条路会各自告警，这里不重复刷屏。）
+            // 一个目标的实例都取不到：这一层不加反射成员——但**不许静默**（见 remarks）。
             if (usable == 0)
             {
+                if (NestedMemberExpansion.HasNonSerializedNodeMember(parent.Type))
+                {
+                    DrawerWarnings.Once(parent, nameof(AppendNestedReflectedMembers) + ".取不到实例",
+                        $"[XInspector] 属性「{parent.Path}」取不到取值实例，"
+                        + $"「{parent.Type.Name}」里的 [ShowInInspector] 一族已跳过。");
+                }
+
                 return;
             }
 

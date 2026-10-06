@@ -398,6 +398,41 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 元素层
+
+        /// <summary>
+        /// **值类型元素**上的按钮一律拒绝：按索引取出来的是装箱副本，调用改的是副本，
+        /// 改动**静默丢弃**——与其做一个「点了没反应」的按钮，不如明说。
+        /// </summary>
+        /// <remarks>
+        /// 元素层让 <c>List&lt;结构体&gt;</c> 变得常见（嵌套层少见得多），
+        /// 这一族拒绝点在元素侧要单独钉一条。
+        /// </remarks>
+        [Test]
+        public void 值类型元素上的按钮被拒绝()
+        {
+            var target = ScriptableObject.CreateInstance<StructElementMethodFixture>();
+            try
+            {
+                using (var tree = Build(target))
+                {
+                    var node = Find(tree, "items.Array.data[0].Heal()");
+
+                    Assert.That(node, Is.Not.Null, "方法节点本身要出现（拒绝的是「调得动吗」）。");
+
+                    var state = node.State.Get<ButtonState>();
+                    Assert.That(state.Reason, Does.Contain("值类型"));
+                    Assert.That(state.Methods, Is.Null, "拒绝时不解析可调用的方法。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>建一棵树。</summary>
@@ -640,6 +675,31 @@ namespace XInspector.Tests.Editor
         [Button]
         public void Ping()
         {
+        }
+    }
+
+    /// <summary>值类型元素的对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class StructElementMethodFixture : ScriptableObject
+    {
+        /// <summary>元素是值类型——层照建（按钮那条腿触发），但按钮被拒绝。</summary>
+        [ListDrawerSettings]
+        public List<StructElementMethod> items =
+            new List<StructElementMethod> { new StructElementMethod { hp = 5 } };
+    }
+
+    /// <summary>值类型元素——方法调用改的是装箱副本，改动会丢。</summary>
+    [Serializable]
+    internal struct StructElementMethod
+    {
+        /// <summary>按钮要改的字段。</summary>
+        public int hp;
+
+        /// <summary>值类型元素上的按钮。</summary>
+        [Button("满血")]
+        public void Heal()
+        {
+            hp = 100;
         }
     }
 }

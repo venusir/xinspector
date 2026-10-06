@@ -233,6 +233,32 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// **值类型元素**上的按名回调同样拒绝（原因进告警），不解析可调用的方法。
+        /// </summary>
+        /// <remarks>元素层让 <c>List&lt;结构体&gt;</c> 变得常见，这条拒绝要有元素版用例。</remarks>
+        [Test]
+        public void 值类型元素上的回调被拒绝()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("值类型"));
+
+            var target = ScriptableObject.CreateInstance<StructElementCallbackFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var state = Find(tree, "items.Array.data[0].watched").State.Get<ValueChangedState>();
+
+                    Assert.That(state.Entries.Count, Is.EqualTo(1), "条目照建，只是解析不出方法。");
+                    Assert.That(state.Entries[0].Methods, Is.Null, "拒绝时不解析可调用的方法。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         /// <summary>值真的变了才判定为变。</summary>
         [Test]
         public void 值快照察觉变化()
@@ -393,6 +419,29 @@ namespace XInspector.Tests.Editor
 
         /// <summary>真正该被调用的那个。</summary>
         public void OnNestedChanged()
+        {
+        }
+    }
+
+    /// <summary>值类型**元素**上的按名回调。</summary>
+    [HideMonoScript]
+    internal sealed class StructElementCallbackFixture : ScriptableObject
+    {
+        /// <summary>元素是值类型——层照建，但回调被拒绝。</summary>
+        [ListDrawerSettings]
+        public List<StructElementCallback> items = new List<StructElementCallback> { new StructElementCallback() };
+    }
+
+    /// <summary>值类型元素——回调的方法调用会改到装箱副本上。</summary>
+    [Serializable]
+    internal struct StructElementCallback
+    {
+        /// <summary>带回调的字段。</summary>
+        [OnValueChanged(nameof(OnChanged))]
+        public int watched;
+
+        /// <summary>回调方法（无参、非泛型——解析器认的形状）。</summary>
+        public void OnChanged()
         {
         }
     }

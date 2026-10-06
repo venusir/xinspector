@@ -55,9 +55,6 @@ namespace XInspector.Editor
 
             /// <summary>用到了，但它在元素层里面——元素层只做一层。</summary>
             Nested,
-
-            /// <summary>元素类型里用到的**只有**反射成员 / 方法节点——元素里的读路径留下一轮。</summary>
-            ReadPathOnly,
         }
 
         #endregion
@@ -87,16 +84,13 @@ namespace XInspector.Editor
 
             var elementType = ElementTypeOf(collection);
 
-            // 元素阀：元素类型（含深层）的可序列化字段上有本包支持的特性。
-            // **不含**迭代器看不见的那一半（[ShowInInspector] / [Button]）——元素里的读路径
-            // 留下一轮，算进来等于「展开了却什么都画不出来」。
+            // 元素阀：元素类型（含深层）里有没有本包用得上的东西——**两条腿都算**
+            // （可序列化字段上的特性，以及 [ShowInInspector] / [Button] 一族）。
+            // 后者的消费者自 2026-10-06（元素层的读路径）起就在了：判据放开而消费者没到位，
+            // 等于「展开了却什么都画不出来」，比不展开更糟。
             if (!UsesPackageInElement(elementType))
             {
-                // 宽判据为真而窄判据为假 = 用到的**只有**那一半。不建层，但也不许静默：
-                // 用户写了 [ShowInInspector] 却什么都不出现，是「零告警」那一类最难归因的现象。
-                return NestedMemberExpansion.ContainsSupportedFields(elementType, includeNonSerializedMembers: true)
-                    ? ElementLayerDecision.ReadPathOnly
-                    : ElementLayerDecision.Inert;
+                return ElementLayerDecision.Inert;
             }
 
             // 表格形态本轮不节点化：单元格画法逐字不变（那是另一种容器呈现，不是元素层）。
@@ -121,7 +115,7 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 这个类型里的**可序列化字段**（含深层，到 <c>MaxDepth</c>）用不用得到本包。
+        /// 这个类型（含深层，到 <c>MaxDepth</c>）用不用得到本包。
         /// </summary>
         /// <param name="elementType">元素类型。</param>
         /// <returns>用得到返回 <c>true</c>。</returns>
@@ -140,7 +134,7 @@ namespace XInspector.Editor
                 return false;
             }
 
-            return NestedMemberExpansion.ContainsSupportedFields(elementType, includeNonSerializedMembers: false);
+            return NestedMemberExpansion.ContainsSupportedFields(elementType);
         }
 
         /// <summary>这个节点是不是落在某个元素层**里面**（深度判据）。</summary>
@@ -228,10 +222,6 @@ namespace XInspector.Editor
                 case ElementLayerDecision.Nested:
                     tail = "它在元素层里面——元素层只做一层（内层跟着递归会让节点数随外层元素个数乘性放大）";
                     break;
-                case ElementLayerDecision.ReadPathOnly:
-                    tail = "元素类型里用到的只有 [ShowInInspector] / [Button] 一族，" +
-                           "而元素里的读路径留下一轮（它需要按 Array.data[i] 段取实例）";
-                    break;
                 default:
                     return;
             }
@@ -242,18 +232,18 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 元素类型（含深层）里有没有**本轮做不了**的用法；有则返回一句人话，没有返回 <c>null</c>。
+        /// 元素类型（含深层）里有没有**用不了**的用法；有则返回一句人话，没有返回 <c>null</c>。
         /// </summary>
         /// <param name="elementType">元素类型。</param>
-        /// <returns>第一处边界的人话描述；没有返回 <c>null</c>。</returns>
+        /// <returns>边界的人话描述；没有返回 <c>null</c>。</returns>
         /// <remarks>
         /// <para>
-        /// 一次扫描答两类问题，都只在**会建元素层的集合**上跑一遍（构建期、深度受
+        /// 只在**会建元素层的集合**上跑一遍（构建期、深度受
         /// <see cref="NestedMemberExpansion.MaxDepth"/> 约束），报在**集合**节点上——
         /// 按元素报会把十个元素的同一件事刷十遍。
         /// </para>
         /// <para>
-        /// 第三类边界（元素里的集合）由构建期的树遍历顺带报：那些集合自己在树上，
+        /// 另一类边界（元素里的集合）由构建期的树遍历顺带报：那些集合自己在树上，
         /// 走到它们时判据给出 <see cref="ElementLayerDecision.Nested"/>。
         /// </para>
         /// </remarks>
@@ -266,11 +256,11 @@ namespace XInspector.Editor
 
         #region Private Helpers
 
-        /// <summary>递归扫描：类级分组特性、迭代器看不见的节点成员。</summary>
+        /// <summary>递归扫描：类型上的**类级**分组特性（只有它仍不生效）。</summary>
         /// <param name="type">类型。</param>
         /// <param name="visited">已访问的类型（挡环形引用）。</param>
         /// <param name="depth">当前深度。</param>
-        /// <returns>第一处边界的人话描述；没有返回 <c>null</c>。</returns>
+        /// <returns>边界的人话描述；没有返回 <c>null</c>。</returns>
         private static string Scan(Type type, HashSet<Type> visited, int depth)
         {
             if (type == null || depth > NestedMemberExpansion.MaxDepth || !visited.Add(type))
@@ -285,11 +275,6 @@ namespace XInspector.Editor
                     return $"类级分组特性（[{group.GetType().Name}(\"{group.GroupID}\")]）" +
                            "只在被检视的最外层类型上收集";
                 }
-            }
-
-            if (NestedMemberExpansion.HasNonSerializedNodeMember(type))
-            {
-                return "[ShowInInspector] / [Button] 一族——元素里的读路径留下一轮";
             }
 
             const BindingFlags Flags =

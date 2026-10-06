@@ -323,20 +323,28 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 元素类型里**只有** <c>[ShowInInspector]</c> / <c>[Button]</c> 时：层不建（窄判据为假），
-        /// 但也不许静默——告警一次说明读路径留下一轮。
+        /// 元素类型里**只有** <c>[ShowInInspector]</c> / <c>[Button]</c> 时**也建层**——
+        /// 元素阀自 2026-10-06（读路径落地）起两条腿都数。
         /// </summary>
+        /// <remarks>
+        /// 2026-10-06 之前这一条断言的是「不建层 + 告警读路径留下一轮」：那会儿元素里的
+        /// 反射成员取不到实例，建了层等于「展开了却什么都画不出来」。读路径落地后判据与
+        /// 消费者同批放开，这条就反了过来。
+        /// </remarks>
         [Test]
-        public void 元素里只有反射成员时不建层并告警()
+        public void 元素里只有反射成员也建层()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("读路径留下一轮"));
-
             var target = ScriptableObject.CreateInstance<ReflectedOnlyElementFixture>();
             try
             {
                 var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
 
-                Assert.That(Find(tree.Root, "items").Children.Count, Is.EqualTo(0));
+                Assert.That(items.Children.Count, Is.EqualTo(1), "元素类型用到了本包 → 建层。");
+                Assert.That(
+                    Find(items.Children[0], "items.Array.data[0].Tag"),
+                    Is.Not.Null,
+                    "只放反射成员的元素类型也会展开（与嵌套层的第三道闸同款）。");
             }
             finally
             {
@@ -345,30 +353,45 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 元素类型里**另有**序列化字段的特性时层照建，但元素里的反射成员不会出现——
-        /// 这个「展开过却少画了几样」的缺口要告警一次，不许静默。
+        /// 元素类型里**另有**序列化字段的特性时层照建，反射成员**也照样出现**——
+        /// 「展开过却少画了几样」的那个缺口自 2026-10-06（读路径落地）起关上了。
         /// </summary>
         [Test]
-        public void 元素里的反射成员不出现并告警()
+        public void 元素里的反射成员出现()
         {
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[ShowInInspector\] / \[Button\] 一族"));
-
             var target = ScriptableObject.CreateInstance<InspectedElementFixture>();
             try
             {
                 var tree = BuildTree(target);
                 var items = Find(tree.Root, "items");
+                var element = items.Children[0];
 
                 Assert.That(items.Children.Count, Is.EqualTo(1), "序列化字段那一半照常节点化。");
-                Assert.That(Find(items.Children[0], "items.Array.data[0].hp"), Is.Not.Null);
+                Assert.That(Find(element, "items.Array.data[0].hp"), Is.Not.Null);
 
-                foreach (var child in items.Children[0].Children)
-                {
-                    Assert.That(
-                        child.Kind,
-                        Is.Not.EqualTo(InspectorPropertyKind.ReflectedMember),
-                        "元素里的读路径留下一轮：ReflectedMember 节点不该出现。");
-                }
+                var tag = Find(element, "items.Array.data[0].Tag");
+                Assert.That(tag.Kind, Is.EqualTo(InspectorPropertyKind.ReflectedMember));
+                Assert.That(tag.Parent, Is.SameAs(element), "反射成员挂在**那个元素**之下。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素里的方法节点同样出现，挂在元素之下（路径带元素前缀）。</summary>
+        [Test]
+        public void 元素里的方法节点出现()
+        {
+            var target = ScriptableObject.CreateInstance<InspectedElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var element = Find(tree.Root, "items").Children[0];
+
+                Assert.That(
+                    Find(element, "items.Array.data[0].Refresh()").Kind,
+                    Is.EqualTo(InspectorPropertyKind.Method));
             }
             finally
             {
@@ -460,7 +483,7 @@ namespace XInspector.Tests.Editor
         public List<ElementItem> inner = new List<ElementItem> { new ElementItem() };
     }
 
-    /// <summary>元素类型里只有反射成员——窄判据为假（读路径留下一轮）。</summary>
+    /// <summary>元素类型里只有反射成员——元素阀两条腿都数，照样建层。</summary>
     [Serializable]
     internal class ReflectedOnlyItem
     {
@@ -472,20 +495,27 @@ namespace XInspector.Tests.Editor
         public int Tag => plain;
     }
 
-    /// <summary>元素类型里既有序列化字段的特性、也有反射成员（后者本轮不出现）。</summary>
+    /// <summary>元素类型里既有序列化字段的特性、也有反射成员与按钮（现在都生效）。</summary>
     [Serializable]
     internal class InspectedElementItem
     {
         /// <summary>条件开关。</summary>
         public bool alive = true;
 
-        /// <summary>序列化字段上的特性——这一半照常生效。</summary>
+        /// <summary>序列化字段上的特性——这一半一直生效。</summary>
         [ShowIf(nameof(alive))]
         public int hp = 10;
 
-        /// <summary>反射成员——元素里的读路径留下一轮。</summary>
+        /// <summary>反射成员——元素里的读路径自 2026-10-06 起生效。</summary>
         [ShowInInspector]
         public int Tag => hp;
+
+        /// <summary>元素里的按钮——调的是**那个元素实例**上的方法。</summary>
+        [Button("元素里的按钮：满血")]
+        private void Refresh()
+        {
+            hp = 100;
+        }
     }
 
     /// <summary>嵌套类型里带一个集合——这个集合照样节点化（祖先链里没有元素层）。</summary>
@@ -546,7 +576,7 @@ namespace XInspector.Tests.Editor
         public List<OuterWithCollection> outer = new List<OuterWithCollection> { new OuterWithCollection() };
     }
 
-    /// <summary>元素类型里只有反射成员——层不建，但要告警。</summary>
+    /// <summary>元素类型里只有反射成员——与嵌套层的「只放反射成员也会展开」同款。</summary>
     [HideMonoScript]
     internal sealed class ReflectedOnlyElementFixture : ScriptableObject
     {
@@ -555,11 +585,11 @@ namespace XInspector.Tests.Editor
         public List<ReflectedOnlyItem> items = new List<ReflectedOnlyItem> { new ReflectedOnlyItem() };
     }
 
-    /// <summary>元素类型里既有序列化字段的特性、也有反射成员。</summary>
+    /// <summary>元素类型里既有序列化字段的特性、也有反射成员与按钮——三样都画得出来。</summary>
     [HideMonoScript]
     internal sealed class InspectedElementFixture : ScriptableObject
     {
-        /// <summary>层照建，但元素里的反射成员不出现（告警一次）。</summary>
+        /// <summary>层照建，反射成员与方法节点都收进来。</summary>
         [ListDrawerSettings]
         public List<InspectedElementItem> items = new List<InspectedElementItem> { new InspectedElementItem() };
     }
