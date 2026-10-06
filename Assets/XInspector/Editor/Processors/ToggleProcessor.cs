@@ -10,8 +10,14 @@ namespace XInspector.Editor
     /// <see cref="PropertyState.ReadOnlyResolver"/>。
     /// <para>
     /// <b>解析在构建期一次、求值每帧</b>——与条件族同一条分工。处理器拿得到成员节点的
-    /// 值入口（成员节点在处理器阶段已经带上了 <c>ValueEntry</c>），故
-    /// <c>FindPropertyRelative</c> 在构建期就能做完，绘制期只剩「读一个 bool」。
+    /// 值入口（成员节点在处理器阶段已经带上了 <c>ValueEntry</c>），故解析在构建期就能做完，
+    /// 绘制期只剩「读一个 bool」。解析本身走 <see cref="MemberReferenceResolver"/>，
+    /// 与条件族、<c>[ToggleGroup]</c>、<c>[MinMaxSlider]</c> 共用同一层。
+    /// </para>
+    /// <para>
+    /// <b>范围是 <see cref="MemberScope.Relative"/></b>：官方示例确认被指的 bool 在**值对象内部**
+    /// （<c>t.Enabled</c> 那种）。这一格**没有反射腿**——值对象只有一个
+    /// <see cref="UnityEditor.SerializedProperty"/>，没有实例句柄可以下钻。
     /// </para>
     /// </summary>
     internal sealed class ToggleProcessor : AttributeProcessor<ToggleAttribute>
@@ -35,9 +41,10 @@ namespace XInspector.Editor
             IList<Attribute> attributes)
         {
             var state = property.State.GetOrCreate<ToggleState>();
-            state.Toggle = Resolve(property, attribute.ToggleMemberName, out var reason);
 
-            if (state.Toggle == null)
+            if (!MemberReferenceResolver.TryResolveBoolean(
+                    property, attribute.ToggleMemberName, MemberScope.Relative,
+                    out var read, out var toggle, out var reason))
             {
                 Debug.LogWarning(
                     $"[XInspector] 属性「{property.Path}」上的 [Toggle] 开关「{attribute.ToggleMemberName}」" +
@@ -45,29 +52,11 @@ namespace XInspector.Editor
                 return;
             }
 
+            // 绘制器要用句柄画那个**可写**的开关（相对范围只有序列化那一格，故它恒非 null）。
+            state.Toggle = toggle;
+
             // 闭包只在这里分配一次（构建期）；绘制期每帧只是读一个 bool。
-            var toggle = state.Toggle;
-            property.State.ReadOnlyResolver = () => !toggle.boolValue;
-        }
-
-        #endregion
-
-        #region Private Helpers
-
-        /// <summary>
-        /// 在成员的值对象内部解析指定 bool 成员。
-        /// </summary>
-        /// <param name="property">目标属性。</param>
-        /// <param name="memberName">相对路径。</param>
-        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
-        /// <returns>序列化属性；失败返回 <c>null</c>。</returns>
-        private static SerializedProperty Resolve(InspectorProperty property, string memberName, out string reason)
-        {
-            // 相对范围：官方示例确认被指的 bool 在**值对象内部**（如 t.Enabled）。
-            SerializedMemberResolver.TryResolve(
-                property, memberName, MemberScope.Relative, MemberKind.Boolean,
-                out var toggle, out reason);
-            return toggle;
+            property.State.ReadOnlyResolver = () => !read();
         }
 
         #endregion

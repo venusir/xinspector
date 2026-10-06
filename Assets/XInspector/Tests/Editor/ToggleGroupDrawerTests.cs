@@ -87,9 +87,40 @@ namespace XInspector.Tests.Editor
             var flag = ToggleGroupFlag.Resolve(group, "showAdvanced", out var reason);
 
             Assert.That(reason, Is.Null);
-            Assert.That(flag, Is.Not.Null);
-            Assert.That(flag.propertyType, Is.EqualTo(SerializedPropertyType.Boolean));
-            Assert.That(flag.boolValue, Is.False, "夹具里它是 false。");
+            Assert.That(flag.Serialized, Is.Not.Null, "序列化开关有可写句柄。");
+            Assert.That(flag.Serialized.propertyType, Is.EqualTo(SerializedPropertyType.Boolean));
+            Assert.That(flag.Read(), Is.False, "夹具里它是 false。");
+        }
+
+        /// <summary>
+        /// 开关是**反射成员**（非序列化属性）时解析成读取器：没有可写句柄，值每帧现读。
+        /// </summary>
+        /// <remarks>
+        /// 这一格是 2026-10-06「成员引用收成一层」带来的：此前它只认序列化成员，
+        /// 撞上反射开关就一路告警放弃。
+        /// </remarks>
+        [Test]
+        public void 反射开关解析成读取器()
+        {
+            var group = FindGroup(nameof(ToggleGroupFixture.ComputedFlag));
+            var flag = ToggleGroupFlag.Resolve(group, nameof(ToggleGroupFixture.ComputedFlag), out var reason);
+
+            Assert.That(reason, Is.Null);
+            Assert.That(flag.Serialized, Is.Null, "反射开关没有可写句柄——绘制器据此画禁用复选框。");
+            Assert.That(flag.Read(), Is.True);
+
+            _target.computedSource = false;
+
+            Assert.That(flag.Read(), Is.False, "每帧现读，改值之后不必重新解析。");
+        }
+
+        /// <summary>反射开关也带一句说明（标题 Tooltip），解释它为什么点不动。</summary>
+        [Test]
+        public void 反射开关带只读说明()
+        {
+            Assert.That(
+                ToggleGroupFlag.ReadOnlyTooltip("ComputedFlag"),
+                Does.Contain("反射成员").And.Contain("不会随存档保存"));
         }
 
         /// <summary>
@@ -107,20 +138,51 @@ namespace XInspector.Tests.Editor
                 "前提：第一个孩子是分组节点（它没有值入口）。");
 
             var flag = ToggleGroupFlag.Resolve(group, "nestedFlag", out var reason);
-            Assert.That(flag, Is.Not.Null, reason);
+            Assert.That(flag.Read, Is.Not.Null, reason);
         }
 
-        /// <summary>名字不存在、类型不是 bool 都返回 null 并给出原因。</summary>
+        /// <summary>名字不存在、类型不是 bool 都返回空结果并给出原因。</summary>
         [Test]
         public void 解析失败的两种原因()
         {
             var group = FindGroup("showAdvanced");
 
-            Assert.That(ToggleGroupFlag.Resolve(group, "missing", out var missingReason), Is.Null);
+            var missing = ToggleGroupFlag.Resolve(group, "missing", out var missingReason);
+            Assert.That(missing.Read, Is.Null);
             Assert.That(missingReason, Does.Contain("找不到"));
 
-            Assert.That(ToggleGroupFlag.Resolve(group, "number", out var typeReason), Is.Null);
+            var wrongType = ToggleGroupFlag.Resolve(group, "number", out var typeReason);
+            Assert.That(wrongType.Read, Is.Null);
             Assert.That(typeReason, Does.Contain("不是 bool"));
+        }
+
+        /// <summary>
+        /// 普通对象（POCO）树上的开关分组：整棵树没有序列化对象，开关走根上那一格反射。
+        /// </summary>
+        /// <remarks>
+        /// 此前这类树上 <c>[ToggleGroup]</c> 只有一条「取不到序列化对象」的告警——
+        /// 分组框照画、开关永远不出现。
+        /// </remarks>
+        [Test]
+        public void 反射树上的开关分组也解析得出来()
+        {
+            var poco = new ToggleGroupPoco();
+
+            using (var tree = PropertyTree.CreateReflected(poco))
+            {
+                var group = SearchGroup(tree.Root, nameof(ToggleGroupPoco.flag));
+                Assert.That(group, Is.Not.Null, "分组节点应当装配出来。");
+
+                var flag = ToggleGroupFlag.Resolve(group, nameof(ToggleGroupPoco.flag), out var reason);
+
+                Assert.That(flag.Read, Is.Not.Null, reason);
+                Assert.That(flag.Serialized, Is.Null);
+                Assert.That(flag.Read(), Is.True);
+
+                poco.flag = false;
+
+                Assert.That(flag.Read(), Is.False);
+            }
         }
 
         #endregion
@@ -255,5 +317,27 @@ namespace XInspector.Tests.Editor
         [ToggleGroup("frameFlag")]
         [BoxGroup("frameFlag")]
         public int framed;
+
+        /// <summary>反射开关的取值来源。</summary>
+        public bool computedSource = true;
+
+        /// <summary>非序列化的开关——只有反射那一级看得到它（普通属性，不是字段）。</summary>
+        public bool ComputedFlag => computedSource;
+
+        /// <summary>开关指向一个**非序列化**属性。</summary>
+        [ToggleGroup(nameof(ComputedFlag))]
+        public int computed;
+    }
+
+    /// <summary>普通对象树上的开关分组：整棵树没有序列化对象，开关只能靠反射那一级。</summary>
+    internal sealed class ToggleGroupPoco
+    {
+        /// <summary>开关。</summary>
+        public bool flag = true;
+
+        /// <summary>被门控的成员。</summary>
+        [ShowInInspector]
+        [ToggleGroup(nameof(flag))]
+        public int gated = 1;
     }
 }
