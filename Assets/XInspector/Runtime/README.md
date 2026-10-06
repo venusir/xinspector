@@ -233,7 +233,7 @@ public static string BuildTag = "静态成员也可以标";
 
 | 行为 | 说明 |
 |---|---|
-| **只作用于单个成员值** | 标在**数组/`List` 字段本身**上时不支持——那个字段整个交给 Unity 展开。元素**类型里面**的字段不受此限（元素节点化，见「集合与表格」）。`[ValueDropdown]` 与 `[AssetSelector]` 那几个只对列表有意义的选项因此**不声明**（写了编译不过） |
+| **只作用于单个成员值** | 标在**数组/`List` 字段本身**上时不支持——那个字段整个交给 Unity 展开。元素**类型里面**的字段不受此限（元素节点化，见「集合与表格」）；**`[AssetList]` 是例外**——它同时支持列表与单值两个形态（见同节）。`[ValueDropdown]` 与 `[AssetSelector]` 那几个只对列表有意义的选项因此**不声明**（写了编译不过） |
 | **参数只认字面量与序列化成员名** | `[ValueDropdown("x")]` 的 `x`、`[MinMaxSlider("r")]` 的 `r` 必须是**序列化字段**；Odin 的 `$` 成员引用、`@` 表达式、方法调用**都不做**。名字解析失败时**告警并退回普通绘制** |
 | 路径怎么存 | `[FilePath]`/`[FolderPath]` 默认存**工程相对**路径（`Assets/…` 开头）；`ParentFolder` 之下则存相对它的路径；`AbsolutePath = true` 存绝对路径。选中的文件若不在基准目录之下（工程外），存绝对路径而不是悄悄改成别的 |
 | `Extensions` 只过滤对话框 | 不校验手填的值，也不拦已选的值——标错了不该让字段用不了 |
@@ -369,6 +369,15 @@ private void After(CollectionChangeInfo info, object value) { }
 [RequiredListLength(3)]
 public string[] team;                                  // 长度校验（只读 arraySize，不需要自绘）
 
+[AssetList]
+public List<Material> materials;                       // 资产列表：缩略图行 + 拖放 + 过滤选择
+
+[AssetList(Path = "Assets/Art", AssetNamePrefix = "Rock")]
+public Texture2D[] rocks;                              // 限定目录与名字前缀
+
+[AssetList]
+public Texture2D single;                               // 单元素形态：预览 + 对象字段 + 选择
+
 [Serializable]
 public class EnemyWave
 {
@@ -394,7 +403,12 @@ public class EnemyWave
 | `[OnCollectionChanged]` | 集合**在 Inspector 里被增删**时调用指定方法：`(string before, string after)`，两个方向都可省。方法两种形状：`()` 或 `(CollectionChangeInfo info, object value)`（后者第二个参数就是 `info.Value`） |
 | `[OnCollectionChanged]` 的时机 | 两个回调夹住的是「**写进序列化数据**」那一步（官方那句 *through the inspector*）。**成对与否的判据是长度真的变了**：长度不可变的数组删不掉／加不进时只有改动前、没有改动后 |
 | `[OnCollectionChanged]` 的边界 | **回调触发时目标对象上的托管集合仍是旧的**（绘制路径只改内存副本，落盘在宿主这一帧绘制之后）；窗口工具栏的「重置为默认值」不经过集合绘制器，**不触发**；字段没有 `[ListDrawerSettings]` 时构建期补一份（同 `[TableList]`）；标在非集合上时告警并忽略 |
-| 不做 | 拖拽排序、多选、分页、滚动、列宽拖拽、`CustomAddFunction` 一族、用元素成员的值当行标签、字典、`[TableMatrix]`、`[AssetList]`、类型级的 `[Searchable]`——**旋钮一律不声明**（写了会编译不过，而不是静默无效） |
+| `[AssetList]` 的两个形态 | **列表/数组**：每行缩略图（16 像素，本包自定值）+ 原生对象字段 + 「−」；标题行「+」与「选择」（按类型过滤的资产菜单）；**整块接受拖放**。**单个对象字段**：预览块（64 像素、在左，与 `[PreviewField]` 同款）+ 原生对象字段 + 「选择」。官方明说两半**行为不同**，本包两半都做 |
+| `[AssetList]` 的旋钮 | 只两个：`Path`（`\|` 分隔、工程相对；**兼容官方样例的前导 `/`**）与 `AssetNamePrefix`（**本包自定语义**：不含扩展名、大小写不敏感）。官方另外四个不声明：`AutoPopulate`（绘制即搜工程 + 绘制即改数据）、`Tags`/`LayerNames`（说的是 GameObject 的标签与层，不是资产标签）、`CustomFilterMethod`（方法名——本包只认序列化成员名） |
+| `[AssetList]` 的拖放规则 | **本包自定**：拖放**去重**（已在列表里的不再加）、**只收工程资产**（场景对象会被拒并告警）、载荷内重复只收一个。类型过滤串（`t:`）只是**启发式收窄**——抽象类型可能搜不到（菜单会空并告警），**正确性由落值前的类型校验保证** |
+| `[AssetList]` 与其它容器的关系 | 与 `[TableList]` 同标在列表上时**让位**（构建期告警一次，表格行为不变）；列表形态会在构建期补一份 `[ListDrawerSettings]`（同 `[TableList]`）；元素类型不是 `UnityEngine.Object` 派生时告警并退回普通列表绘制 |
+| `[AssetList]` 的批量追加 | 一次拖入 / 一次选中多个 = **一对** `[OnCollectionChanged]` 回调（`Index` 是**第一个**新元素，`Value` 仍为 `null`——追加本来就不报新元素的值） |
+| 不做 | 拖拽排序、多选、分页、滚动、列宽拖拽、`CustomAddFunction` 一族、用元素成员的值当行标签、字典、`[TableMatrix]`、类型级的 `[Searchable]`——**旋钮一律不声明**（写了会编译不过，而不是静默无效） |
 
 ### 按钮族
 

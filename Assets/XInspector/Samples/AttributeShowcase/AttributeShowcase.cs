@@ -398,6 +398,13 @@ namespace XInspector.Samples
         [AssetSelector(Paths = "Assets/XInspector", Filter = "t:Material", FlattenTreeView = true)]
         public Material scopedMaterial;
 
+        /// <summary>
+        /// **资产列表的单元素形态**：预览块（64 像素、在左，与 `[PreviewField]` 同款）+ 原生对象字段
+        /// + 右侧「▼」（按类型过滤的资产菜单）。列表形态见下面的「集合与表格」一段。
+        /// </summary>
+        [AssetList]
+        public Texture2D assetListSingle;
+
         #endregion
 
         #region 预览
@@ -803,6 +810,22 @@ namespace XInspector.Samples
         [ReadOnly]
         [ListDrawerSettings]
         public float[] lockedWeights = { 0.5f, 1.5f };
+
+        /// <summary>
+        /// **资产列表（列表形态）**：一行一个缩略图（16 像素）+ 原生对象字段 + 「−」；
+        /// 标题行有「+」与「选择」。**从工程窗口拖几个材质进来试试**（一次拖多个也行——
+        /// 重复的、场景对象、类型不符的会被拒并各有一条告警）；空列表时有一行灰字提示。
+        /// </summary>
+        [AssetList]
+        public List<Material> assetMaterials = new List<Material>();
+
+        /// <summary>
+        /// 限定目录与名字前缀的对照：`Path` 与 `[AssetSelector.Paths]` 同语义（`|` 分隔、工程相对；
+        /// **也认官方样例那种前导 `/` 的写法**）；`AssetNamePrefix` 比的是**不含扩展名**的文件名
+        /// （本包自定语义）。这里限定本包根目录、文件名以 `pack` 开头的文本资产（`package.json`）。
+        /// </summary>
+        [AssetList(Path = "Assets/XInspector", AssetNamePrefix = "pack")]
+        public List<TextAsset> assetTexts = new List<TextAsset>();
 
         #endregion
 
