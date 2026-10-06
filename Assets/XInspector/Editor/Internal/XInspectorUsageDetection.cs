@@ -76,8 +76,10 @@ namespace XInspector.Editor
                     //
                     // 字段类型**内部成员**上的特性另走下面那条 WouldExpand 分支——嵌套字段
                     // 自 2026-10-06 起会按需进管线，别把两件事混起来看。
-                    if (fields[i].FieldType != null &&
-                        fields[i].FieldType.GetCustomAttribute<InlinePropertyAttribute>(inherit: false) != null)
+                    //
+                    // 判据**共用一份**（NestedMemberExpansion.IsClassLevelInlineMarked）：
+                    // 展开判据、两条递归判据、这里，四处问的是同一个问题，各写一遍迟早有一处先漂。
+                    if (NestedMemberExpansion.IsClassLevelInlineMarked(fields[i].FieldType))
                     {
                         return true;
                     }

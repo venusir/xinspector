@@ -171,6 +171,16 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 内联标注在**深一层**的字段类型上时同样算：外层类型要为它展开，
+        /// 而「展开」正是判据与注入必须对齐的那处（判据看不见，类型就不被接管、内联静默失效）。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_深层嵌套里的内联标注为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(InlineNestedUsageFixture)), Is.True);
+        }
+
+        /// <summary>
         /// **只把 <c>[ShowInInspector]</c> 挂在嵌套类型里**的类型必须被判为「用到了本插件」。
         /// <para>
         /// 与「只标在嵌套层成员上」同一条腿，但落点不同：那个夹具挂的是条件族，走的是
@@ -422,6 +432,21 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>数组元素类型有标记，数组本身没有——判据刻意不认这一处。</summary>
         public InlineMarkedType[] items;
+    }
+
+    /// <summary>内联标在**深一层**字段类型上的资产。</summary>
+    internal sealed class InlineNestedUsageFixture : ScriptableObject
+    {
+        /// <summary>直接字段的类型没标记，标记在它**内部**的字段类型上。</summary>
+        public InlineNestedUsageHolder value;
+    }
+
+    /// <summary>内部字段的声明类型带内联标记——外层类型因此值得被接管。</summary>
+    [Serializable]
+    internal sealed class InlineNestedUsageHolder
+    {
+        /// <summary>声明类型带标记。</summary>
+        public InlineMarkedType inner;
     }
 
     /// <summary>嵌套类型上挂着别的本包特性的资产。</summary>

@@ -126,7 +126,7 @@ namespace XInspector.Editor
             }
 
             // 声明类型上标了内联（官方的类级形态；Inherited = false，只看声明类型自身）。
-            if (member.Type.IsDefined(typeof(InlinePropertyAttribute), false))
+            if (IsClassLevelInlineMarked(member.Type))
             {
                 return true;
             }
@@ -188,6 +188,28 @@ namespace XInspector.Editor
             // ManagedReference，本来就过不了上面「要求 Generic」那一关，但两道闸说的是同一件事——
             // 哪道闸先变（Unity 改了 propertyType、或者判据被挪了位置）都不该由我们赌。
             return !IsPolymorphicReference(member.Member as FieldInfo);
+        }
+
+        /// <summary>
+        /// 这个类型（作为字段的**声明类型**）上有没有类级 <see cref="InlinePropertyAttribute"/>。
+        /// </summary>
+        /// <param name="declaredType">字段的声明类型。</param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 官方的类级形态：标在类上 → 该类型的字段一律内联（<c>Inherited = false</c>，
+        /// 只看声明类型自身）。消费者是 <c>ClassLevelInlinePropertyProcessor</c>——它把类型上那份
+        /// **注入**到字段身上；判据因此必须在**每一个看字段的地方**都问这一句。
+        /// </para>
+        /// <para>
+        /// <b>判据只此一份</b>：展开判据（<see cref="ShouldExpand"/>）、两条递归判据
+        /// （<see cref="HasSupportedMember"/> / <see cref="HasSupportedField"/>）与自动接管判据
+        /// （<c>XInspectorUsageDetection</c>）四处共用。
+        /// </para>
+        /// </remarks>
+        public static bool IsClassLevelInlineMarked(Type declaredType)
+        {
+            return declaredType != null && declaredType.IsDefined(typeof(InlinePropertyAttribute), false);
         }
 
         /// <summary>
@@ -362,6 +384,13 @@ namespace XInspector.Editor
                         return true;
                     }
 
+                    // 声明类型上的类级内联：注入（ClassLevelInlinePropertyProcessor）真的会发生，
+                    // 判据看不见它就成了「消费者在等、判据没放开」——内联静默失效。
+                    if (IsClassLevelInlineMarked(field.FieldType))
+                    {
+                        return true;
+                    }
+
                     // 再往下一层看：孙辈带特性时，这一层也得展开，否则它进不了树。
                     if (child.hasVisibleChildren && HasSupportedMember(child, field.FieldType, depth + 1))
                     {
@@ -408,6 +437,12 @@ namespace XInspector.Editor
                     }
 
                     if (XInspectorUsageDetection.HasSupportedAttribute(field.GetCustomAttributes(true)))
+                    {
+                        return true;
+                    }
+
+                    // 与 HasSupportedMember 同一条腿：声明类型上的类级内联也算数。
+                    if (IsClassLevelInlineMarked(field.FieldType))
                     {
                         return true;
                     }

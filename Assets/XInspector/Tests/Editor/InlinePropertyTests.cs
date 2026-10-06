@@ -240,6 +240,37 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 类级内联标在**深一层**的字段类型上时，外层的容器也要跟着展开。
+        /// <para>
+        /// 这条原先会红：注入是真的会发生（处理器只看「父节点是不是成员」），可**展开判据**
+        /// 的递归那一半只看成员级特性——外层容器不开，内层字段根本进不了树，
+        /// 类级内联**静默失效**。判据与注入看的是同一处，修法是让递归判据也问这一句
+        /// （<c>NestedMemberExpansion.IsClassLevelInlineMarked</c>，四处共用一份）。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void 类级内联在深层嵌套里也触发展开()
+        {
+            var target = ScriptableObject.CreateInstance<InlineNestedHolderFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var outer = Find(tree.Root, "outer");
+                var inner = Find(outer, "outer.inner");
+
+                Assert.That(inner.Attributes.Has<InlinePropertyAttribute>(), Is.True, "注入本身照常发生。");
+                Assert.That(
+                    IndexOf<InlinePropertyDrawer>(inner),
+                    Is.GreaterThanOrEqualTo(0),
+                    "外层展开了，内层的内联才轮到生效。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region Private Helpers
@@ -334,6 +365,22 @@ namespace XInspector.Tests.Editor
         /// <summary>自己标了内联，声明类型上也标了——不该被注入两次。</summary>
         [InlineProperty]
         public InlineMarkedType both;
+    }
+
+    /// <summary>类级内联标在**深一层**字段类型上的对照：外层类型自己一个特性都没有。</summary>
+    [HideMonoScript]
+    internal sealed class InlineNestedHolderFixture : ScriptableObject
+    {
+        /// <summary>展开与否只看它**内部**有没有用得上的东西。</summary>
+        public InlineNestedOuter outer;
+    }
+
+    /// <summary>内部字段的声明类型带内联标记——外层必须为它展开。</summary>
+    [Serializable]
+    internal sealed class InlineNestedOuter
+    {
+        /// <summary>声明类型带标记。</summary>
+        public InlineMarkedType inner;
     }
 
     /// <summary>带标记的复合类型：标在类型上 → 该类型的字段一律内联。</summary>
