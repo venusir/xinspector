@@ -35,8 +35,9 @@ namespace XInspector.Editor
         /// <remarks>
         /// 与 <c>[InlineEditor]</c> 的递归上限同档取 <c>4</c>：本包自定值，写进文档。
         /// 序列化属性那条路 Unity 自己会截断，纯反射这条路不会，故必须自己挡。
+        /// <c>ReflectedAccessor</c> 的路径访问器也用它——同一条路径，同一个上限。
         /// </remarks>
-        private const int MaxDepth = 4;
+        internal const int MaxDepth = 4;
 
         #endregion
 
@@ -316,11 +317,16 @@ namespace XInspector.Editor
             return field.IsPublic || field.IsDefined(typeof(SerializeField), true);
         }
 
-        /// <summary>在该类型及其基类上找同名字段（<c>DeclaredOnly</c> 逐级上溯）。</summary>
+        /// <summary>在该类型及其基类上找同名**实例**字段（<c>DeclaredOnly</c> 逐级上溯）。</summary>
         /// <param name="type">起始类型。</param>
         /// <param name="name">字段名。</param>
         /// <returns>字段；找不到返回 <c>null</c>。</returns>
-        private static FieldInfo FindDeclaredField(Type type, string name)
+        /// <remarks>
+        /// <b>只看实例字段</b>（<see cref="BindingFlags"/> 里没有 <c>Static</c>）：路径表达的是
+        /// 「从这个实例往下走」，静态成员不在实例里，够不着也不该够着。
+        /// <see cref="ReflectedAccessor.TryCreatePath"/> 也用本方法，两条路对「哪些段认得」必须一致。
+        /// </remarks>
+        internal static FieldInfo FindDeclaredField(Type type, string name)
         {
             const BindingFlags Flags =
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;

@@ -228,6 +228,139 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 路径访问器（嵌套层的读路径）
+
+        /// <summary>点分路径逐段下钻，读到嵌套实例里的值。</summary>
+        [Test]
+        public void 路径读到嵌套值()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Stats.Hp", out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(10));
+            Assert.That(accessor.ValueType, Is.EqualTo(typeof(int)));
+        }
+
+        /// <summary>
+        /// 读到的是**活值**——链每次穿过字段，而不是某个时刻的快照。
+        /// </summary>
+        /// <remarks>
+        /// 这条是「绑实例」那条被否决方案的反面：绑定的实例在父字段被重新赋值（`Stats = new …`、
+        /// Undo、预制体 revert）之后就是旧对象，读出来会**静默地是陈旧的**。
+        /// </remarks>
+        [Test]
+        public void 路径读到的是活值()
+        {
+            var fixture = new PathFixture();
+            ReflectedAccessor.TryCreatePath(typeof(PathFixture), "Stats.Hp", out var accessor, out _);
+
+            fixture.Stats.Hp = 99;
+            Assert.That(accessor.Read(fixture), Is.EqualTo(99), "改嵌套实例里的字段，应当立刻读到。");
+
+            fixture.Stats = new PathStats { Hp = 7 };
+            Assert.That(accessor.Read(fixture), Is.EqualTo(7), "换掉整个嵌套实例，同样应当读到。");
+        }
+
+        /// <summary>中段是值类型（struct）也读得到，且读到的是当前值。</summary>
+        [Test]
+        public void 路径的中段是值类型也读得到()
+        {
+            var fixture = new PathFixture();
+            fixture.Holder.Value.Number = 3;
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Holder.Value.Number", out var accessor, out var reason),
+                Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(3));
+
+            fixture.Holder.Value.Number = 8;
+            Assert.That(accessor.Read(fixture), Is.EqualTo(8), "值类型中段的改动同样应当立刻读到。");
+        }
+
+        /// <summary>深层路径读得到（三段以上）。</summary>
+        [Test]
+        public void 深层路径读得到()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Stats.Inner.Name", out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo("内层"));
+        }
+
+        /// <summary>路径段解析不到时给得出原因，不抛。</summary>
+        [Test]
+        public void 路径段解析不到时给原因()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                Assert.That(ReflectedAccessor.TryCreatePath(
+                    typeof(PathFixture), "Stats.Missing", out var accessor, out var reason), Is.False);
+                Assert.That(accessor, Is.Null);
+                Assert.That(reason, Does.Contain("Missing"));
+            });
+        }
+
+        /// <summary>
+        /// 数组段被**响亮拒绝**——按元素取实例是元素节点化的领域。
+        /// </summary>
+        /// <remarks>
+        /// 拒绝而不是静默错读：`Items.Array.data[0]` 若被当成普通字段去解析，
+        /// 结果会是「在 Int32[] 上找不到名为 Array 的字段」这种答非所问的原因。
+        /// </remarks>
+        [Test]
+        public void 数组段被拒绝()
+        {
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Items.Array.data[0]", out var accessor, out var reason), Is.False);
+            Assert.That(accessor, Is.Null);
+            Assert.That(reason, Does.Contain("数组"));
+        }
+
+        /// <summary>路径超过深度上限被拒绝。</summary>
+        [Test]
+        public void 路径超过深度上限被拒绝()
+        {
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Deep.B.C.D.E", out var accessor, out var reason), Is.False);
+            Assert.That(accessor, Is.Null);
+            Assert.That(reason, Does.Contain("4"));
+        }
+
+        /// <summary>
+        /// 属性段不被接受——路径的每一段都必须是**实例字段**。
+        /// </summary>
+        /// <remarks>
+        /// 嵌套层的成员本来就全是字段（来自 Unity 的序列化迭代器），故这条收窄不影响用途；
+        /// 要认属性就用单段版的 <c>TryCreate</c>。
+        /// </remarks>
+        [Test]
+        public void 属性段不被接受()
+        {
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Stats.Doubled", out var accessor, out var reason), Is.False);
+            Assert.That(accessor, Is.Null);
+            Assert.That(reason, Does.Contain("实例字段"));
+        }
+
+        /// <summary>空路径与空类型被拒绝，不抛。</summary>
+        [Test]
+        public void 空路径被拒绝()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                Assert.That(ReflectedAccessor.TryCreatePath(
+                    typeof(PathFixture), null, out _, out var reason), Is.False);
+                Assert.That(reason, Is.Not.Null.And.Not.Empty);
+
+                Assert.That(ReflectedAccessor.TryCreatePath(
+                    null, "Stats", out _, out _), Is.False);
+            });
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>按名取夹具上的成员并试着编译。</summary>
@@ -327,5 +460,83 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>一个普通字段。</summary>
         public int Value;
+    }
+
+    /// <summary>路径访问器的夹具：两层嵌套、值类型中段、数组、以及一条撞深度上限的长链。</summary>
+    internal sealed class PathFixture
+    {
+        /// <summary>一层嵌套。</summary>
+        public PathStats Stats = new PathStats();
+
+        /// <summary>中段是值类型的嵌套。</summary>
+        public PathHolder Holder = new PathHolder();
+
+        /// <summary>数组——路径里的 <c>Array</c> 段必须被拒绝。</summary>
+        public int[] Items = { 1, 2, 3 };
+
+        /// <summary>撞深度上限用的长链（<c>Deep.B.C.D.E</c> 是五段）。</summary>
+        public DeepA Deep = new DeepA();
+    }
+
+    /// <summary>路径夹具的一层嵌套。</summary>
+    internal sealed class PathStats
+    {
+        /// <summary>一个值。</summary>
+        public int Hp = 10;
+
+        /// <summary>再深一层。</summary>
+        public PathInner Inner = new PathInner();
+
+        /// <summary>属性——路径段必须是**字段**，故它读不到。</summary>
+        public int Doubled => Hp * 2;
+    }
+
+    /// <summary>路径夹具的深层。</summary>
+    internal sealed class PathInner
+    {
+        /// <summary>一个值。</summary>
+        public string Name = "内层";
+    }
+
+    /// <summary>值类型成员——中段是 struct 时的读法。</summary>
+    internal struct PathValue
+    {
+        /// <summary>一个值。</summary>
+        public int Number;
+    }
+
+    /// <summary>持有值类型成员的复合类型。</summary>
+    internal sealed class PathHolder
+    {
+        /// <summary>值类型成员。</summary>
+        public PathValue Value;
+    }
+
+    /// <summary>深度链的第一节。</summary>
+    internal sealed class DeepA
+    {
+        /// <summary>下一节。</summary>
+        public DeepB B = new DeepB();
+    }
+
+    /// <summary>深度链的第二节。</summary>
+    internal sealed class DeepB
+    {
+        /// <summary>下一节。</summary>
+        public DeepC C = new DeepC();
+    }
+
+    /// <summary>深度链的第三节。</summary>
+    internal sealed class DeepC
+    {
+        /// <summary>下一节。</summary>
+        public DeepD D = new DeepD();
+    }
+
+    /// <summary>深度链的第四节。</summary>
+    internal sealed class DeepD
+    {
+        /// <summary>末端。</summary>
+        public int E;
     }
 }

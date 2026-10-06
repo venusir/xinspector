@@ -152,6 +152,125 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 把一条**点分序列化路径**编译成「读一个根目标、得到路径末端当前值」的委托。
+        /// </summary>
+        /// <param name="rootType">根目标的类型（被检视对象的类型）。</param>
+        /// <param name="path">点分路径，如 <c>stats.hp</c>。</param>
+        /// <param name="accessor">编译出的访问器；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因（中文，可直接拼进告警）；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>它是「嵌套层的读路径」。</b> Unity 没有公开 API 从 <c>SerializedProperty</c> 拿到
+        /// 嵌套托管实例——<c>boxedValue</c> 只是**序列化数据的装箱快照**，读不到非序列化成员
+        /// （而那正是 <c>[ShowInInspector]</c> 存在的理由），也给不出可调用的活实例。
+        /// 于是唯一可行的路是「根目标 + 按路径逐段下钻」，编译成一条委托链。
+        /// 嵌套成员节点的 <c>Path</c> 恰好就是绝对序列化路径，不必另拼。
+        /// </para>
+        /// <para>
+        /// <b>每一段都必须是实例字段。</b> 本工厂不认属性、不认静态成员——嵌套层的成员本来就
+        /// 全是字段（它们来自 Unity 的序列化迭代器）。要认属性与静态成员就用
+        /// <see cref="TryCreate"/>（单段版）。两条路对「哪些段认得」必须一致，
+        /// 故段解析共用 <c>NestedMemberExpansion.FindDeclaredField</c>。
+        /// </para>
+        /// <para>
+        /// <b>链只在末端转一次 <c>object</c></b>，中间段不逐个装箱。
+        /// </para>
+        /// <para>
+        /// <b>数组与多态段响亮拒绝，不静默错读。</b> 展开判据本来就不展开数组与
+        /// <c>[SerializeReference]</c>，所以今天走不到那里；拒绝是给元素节点化那天留的接口。
+        /// </para>
+        /// </remarks>
+        public static bool TryCreatePath(
+            Type rootType, string path, out ReflectedAccessor accessor, out string reason)
+        {
+            accessor = null;
+
+            if (rootType == null || string.IsNullOrEmpty(path))
+            {
+                reason = "起点类型或路径为空";
+                return false;
+            }
+
+            var instance = Expression.Parameter(typeof(object), "target");
+            Expression body = null;
+            var current = rootType;
+            var last = (FieldInfo)null;
+            var depth = 0;
+            var start = 0;
+
+            while (start < path.Length)
+            {
+                var separator = path.IndexOf('.', start);
+                var name = separator < 0 ? path.Substring(start) : path.Substring(start, separator - start);
+
+                if (name.Length == 0)
+                {
+                    reason = "路径里有空段";
+                    return false;
+                }
+
+                if (string.Equals(name, "Array", StringComparison.Ordinal) || name.IndexOf('[') >= 0)
+                {
+                    reason =
+                        $"路径段「{name}」是数组/列表的段——按元素取实例是「元素节点化」的领域，" +
+                        "本包还没有那条路";
+                    return false;
+                }
+
+                if (++depth > NestedMemberExpansion.MaxDepth)
+                {
+                    reason = $"路径超过 {NestedMemberExpansion.MaxDepth} 层";
+                    return false;
+                }
+
+                var field = NestedMemberExpansion.FindDeclaredField(current, name);
+                if (field == null)
+                {
+                    reason = $"在 {current.Name} 上找不到名为「{name}」的实例字段";
+                    return false;
+                }
+
+                body = body == null
+                    ? Expression.Field(Convert(instance, field.DeclaringType), field)
+                    : Expression.Field(body, field);
+
+                current = field.FieldType;
+                last = field;
+
+                if (separator < 0)
+                {
+                    break;
+                }
+
+                start = separator + 1;
+            }
+
+            if (last == null)
+            {
+                reason = "路径不含任何有效段";
+                return false;
+            }
+
+            try
+            {
+                var lambda = Expression.Lambda<Func<object, object>>(
+                    Expression.Convert(body, typeof(object)), instance);
+
+                // 恒为 false：段解析只看实例字段（静态成员够不着，见 FindDeclaredField 的说明），
+                // 故整条链一定依赖目标对象。
+                accessor = new ReflectedAccessor(last, lambda.Compile(), last.FieldType, false);
+                reason = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                reason = Describe(exception);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 读一次值。
         /// </summary>
         /// <param name="target">目标对象；静态成员忽略它，可以传 <c>null</c>。</param>
