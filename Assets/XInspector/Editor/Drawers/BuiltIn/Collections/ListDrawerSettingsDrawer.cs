@@ -79,13 +79,22 @@ namespace XInspector.Editor
                 return;
             }
 
+            // 搜索框由**宿主自己**画（状态在这里按需建出来，子节点只往上找），
+            // 且画在只读罩之外——只读的列表也要能搜（输入框本身不是数据）。
+            if (property.Attributes.Has<SearchableAttribute>())
+            {
+                SearchBox.Draw(property);
+            }
+
+            var scope = SearchScope.Find(property);
+
             // 结构性修改**攒到这里、趟末统一施加**：循环里改会让同帧后续事件看到不同的行数。
             var removeIndex = -1;
 
             EditorGUI.indentLevel++;
             try
             {
-                removeIndex = DrawRows(property, serializedProperty, attribute, state, canResize);
+                removeIndex = DrawRows(property, serializedProperty, attribute, state, canResize, scope);
 
                 if (removeIndex >= 0)
                 {
@@ -178,21 +187,31 @@ namespace XInspector.Editor
         /// <param name="attribute">特性实例。</param>
         /// <param name="state">每属性状态（行标签缓存）。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
+        /// <param name="scope">搜索作用域；在过滤时按行掩码跳过（下标仍是**真实下标**）。</param>
         /// <returns>请求删除的下标；没有请求时为 <c>-1</c>。</returns>
         private static int DrawRows(
             InspectorProperty property,
             SerializedProperty array,
             ListDrawerSettingsAttribute attribute,
             CollectionDrawerState state,
-            bool canResize)
+            bool canResize,
+            SearchScope scope)
         {
             var removeIndex = -1;
             var model = property.State.Get<TableModel>();
+            var rows = RowsOf(scope, array, model);
+
+            if (scope.IsActive && !SearchMatcher.HasAnyRow(rows))
+            {
+                // 一行都没命中：留一句提示，而不是留一块空白（后者最难归因）。
+                SearchBox.DrawNoMatchHint();
+                return removeIndex;
+            }
 
             if (model != null)
             {
                 // 表格形态：模型是构建期建好的（见 TableListProcessor），绘制路径不反射。
-                TableLayout.DrawRows(property, array, attribute, model, canResize, ref removeIndex);
+                TableLayout.DrawRows(property, array, attribute, model, canResize, rows, ref removeIndex);
                 return removeIndex;
             }
 
@@ -200,10 +219,35 @@ namespace XInspector.Editor
 
             for (var i = 0; i < count; i++)
             {
+                if (rows != null && !rows[i])
+                {
+                    continue;
+                }
+
                 DrawRow(array.GetArrayElementAtIndex(i), attribute, state, i, canResize, ref removeIndex);
             }
 
             return removeIndex;
+        }
+
+        /// <summary>这次搜索下的行掩码；没在搜索时为 <c>null</c>（等于不过滤）。</summary>
+        /// <param name="scope">搜索作用域。</param>
+        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="model">表格模型；不是表格时为 <c>null</c>。</param>
+        /// <returns>逐行的掩码或 <c>null</c>。</returns>
+        /// <remarks>
+        /// 表格按**任一单元格的值**匹配（用户搜的是看得见的东西），列表按**元素自己的值**
+        /// （含复合元素下面任意一层的叶子）匹配——元素标签是 <c>Element 3</c> 那种索引名，
+        /// 让它参与等于全中。
+        /// </remarks>
+        private static bool[] RowsOf(SearchScope scope, SerializedProperty array, TableModel model)
+        {
+            if (!scope.IsActive)
+            {
+                return null;
+            }
+
+            return model != null ? scope.State.EnsureTableRows(array, model.Columns) : scope.State.EnsureListRows(array);
         }
 
         /// <summary>画一行：复合元素自己画折叠头、单值元素交给原生控件，行尾是可选的「−」。</summary>

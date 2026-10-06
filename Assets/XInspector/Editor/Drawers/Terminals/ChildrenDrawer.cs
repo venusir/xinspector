@@ -40,14 +40,21 @@ namespace XInspector.Editor
         /// 分组绘制器可以先把一份 <see cref="GroupChildrenLayout"/> 装进属性状态，
         /// 再调到这里——水平分组与页签就是这样改变「内侧怎么画」的。
         /// 没装策略时走原路径（画全部子节点）。
+        /// <para>
+        /// <b>搜索（<see cref="SearchScope"/>）与布局策略是两件事，都要认。</b> 分组节点在
+        /// 一棵可搜索的子树里同样由这里画子节点——不认搜索的话，一个靠后代命中活下来的分组
+        /// 会把**不命中的成员一起画出来**（嵌套层的分组装配会把成员节点的子节点换成分组节点，
+        /// 所以这条路是常走的，不是边角）。
+        /// </para>
         /// </remarks>
         public override void DrawPropertyLayout(InspectorProperty property, Attribute attribute, GUIContent label)
         {
+            var scope = SearchScope.Find(property);
             var layout = property.State.Get<GroupChildrenLayout>();
 
             if (layout == null || !layout.HasPolicy)
             {
-                property.DrawChildren();
+                DrawAllOrFiltered(property, scope);
                 return;
             }
 
@@ -57,7 +64,7 @@ namespace XInspector.Editor
             // 故这一模式下由末端自己开——见 GroupChildrenLayout.RowsManagedByTerminal。
             if (layout.RowsManagedByTerminal && layout.CellRows != null && layout.RowCount > 0)
             {
-                DrawRows(children, layout);
+                DrawRows(children, layout, scope);
                 return;
             }
 
@@ -70,11 +77,11 @@ namespace XInspector.Editor
                     DrawerWarnings.Once(property, nameof(ChildrenDrawer) + ".选页越界",
                         $"[XInspector] 分组「{property.Path}」的选中页（{layout.OnlyChildIndex}）越界，" +
                         "已回退为画出全部子节点。");
-                    property.DrawChildren();
+                    DrawAllOrFiltered(property, scope);
                     return;
                 }
 
-                DrawCell(children[layout.OnlyChildIndex], layout, layout.OnlyChildIndex);
+                DrawCell(children[layout.OnlyChildIndex], layout, layout.OnlyChildIndex, scope);
                 return;
             }
 
@@ -85,7 +92,7 @@ namespace XInspector.Editor
                     GUILayout.Space(layout.CellGap);
                 }
 
-                DrawCell(children[i], layout, i);
+                DrawCell(children[i], layout, i, scope);
             }
         }
 
@@ -93,9 +100,38 @@ namespace XInspector.Editor
 
         #region Private Helpers
 
+        /// <summary>画全部子节点；有搜索在过滤时只画命中的那些。</summary>
+        /// <param name="property">容器节点。</param>
+        /// <param name="scope">搜索作用域。</param>
+        /// <remarks>
+        /// 走 <see cref="InspectorProperty.DrawChildren"/> 那条原路径得先确认没有过滤——
+        /// 它画的是全部子节点，与过滤是互斥的两件事。
+        /// </remarks>
+        private static void DrawAllOrFiltered(InspectorProperty property, SearchScope scope)
+        {
+            if (!scope.IsActive)
+            {
+                property.DrawChildren();
+                return;
+            }
+
+            var children = property.Children;
+
+            // 一个都没命中是**正常的**（这一组整体不匹配），故不在这里留提示——
+            // 提示归宿主那一层说一次，每个分组各说一句会变成一屏灰字。
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (scope.ShouldDraw(children[i]))
+                {
+                    children[i].Draw();
+                }
+            }
+        }
+
         /// <summary>按行画：行号一变就换一个水平作用域。</summary>
         /// <param name="children">子节点。</param>
         /// <param name="layout">分组装下的策略，行号来自 <see cref="GroupChildrenLayout.CellRows"/>。</param>
+        /// <param name="scope">搜索作用域。</param>
         /// <remarks>
         /// 手写 <c>BeginHorizontal</c>/<c>EndHorizontal</c> 而不是 <c>using</c> 作用域：
         /// 作用域要跨循环迭代，<c>using</c> 表达不了。收尾放在循环之后，
@@ -103,7 +139,7 @@ namespace XInspector.Editor
         /// 下一帧重新开始，不会累积。
         /// </remarks>
         private static void DrawRows(System.Collections.Generic.IReadOnlyList<InspectorProperty> children,
-            GroupChildrenLayout layout)
+            GroupChildrenLayout layout, SearchScope scope)
         {
             var currentRow = -1;
 
@@ -126,7 +162,7 @@ namespace XInspector.Editor
                     GUILayout.Space(layout.CellGap);
                 }
 
-                DrawCell(children[i], layout, i);
+                DrawCell(children[i], layout, i, scope);
             }
 
             if (currentRow >= 0)
@@ -139,13 +175,19 @@ namespace XInspector.Editor
         /// <param name="child">子节点。</param>
         /// <param name="layout">分组装下的策略。</param>
         /// <param name="index">格子的下标。</param>
+        /// <param name="scope">搜索作用域；被筛掉的格子直接不画（行作用域照常开关）。</param>
         /// <remarks>
         /// 宽度用嵌套的 <see cref="EditorGUILayout.VerticalScope(GUILayoutOption[])"/> 包住：
         /// GUILayout 的宽度选项只作用于**下一个布局组**，而要约束的是一个子节点的整块内容
         /// （它可能是好几行）。标签宽度是全局状态，用 <c>try/finally</c> 还原。
         /// </remarks>
-        private static void DrawCell(InspectorProperty child, GroupChildrenLayout layout, int index)
+        private static void DrawCell(InspectorProperty child, GroupChildrenLayout layout, int index, SearchScope scope)
         {
+            if (!scope.ShouldDraw(child))
+            {
+                return;
+            }
+
             var width = layout.CellWidths != null && index < layout.CellWidths.Length ? layout.CellWidths[index] : 0f;
             var labelWidth = layout.CellLabelWidths != null && index < layout.CellLabelWidths.Length
                 ? layout.CellLabelWidths[index]

@@ -221,6 +221,19 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 只挂 <c>[Searchable]</c> 的类型为真——它**没有自己的绘制器**（搜索框由宿主绘制器顺带画），
+        /// 全靠处理器那一半被认出来。处理器写错了基类，这条就红。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂搜索特性的类型为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(SearchableOnlyFixture)),
+                Is.True,
+                "搜索靠处理器保证不写了个寂寞，判据必须看得见它。");
+        }
+
+        /// <summary>
         /// **只把本包特性标在嵌套类型内部**的类型必须被判为「用到了本插件」。
         /// <para>
         /// 嵌套层从本轮起会真的展开（<c>NestedMemberExpansion</c>）——判据看不见它，
@@ -447,6 +460,14 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>只标了列表设置——靠绘制器那一半被认出来。</summary>
         [ListDrawerSettings]
+        public int[] values = { 1 };
+    }
+
+    /// <summary>只挂搜索特性的资产。</summary>
+    internal sealed class SearchableOnlyFixture : ScriptableObject
+    {
+        /// <summary>只标了搜索——它没有绘制器，靠处理器那一半被认出来。</summary>
+        [Searchable]
         public int[] values = { 1 };
     }
 

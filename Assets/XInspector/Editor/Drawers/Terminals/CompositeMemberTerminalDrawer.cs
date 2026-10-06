@@ -25,6 +25,11 @@ namespace XInspector.Editor
     /// <b>折叠状态进 <see cref="PropertyState"/></b>（与 <c>[FoldoutGroup]</c> 等包内所有折叠
     /// 同一口径：不跨会话持久化）；初值取**收起**，与原生对嵌套 `[Serializable]` 字段的默认一致。
     /// </para>
+    /// <para>
+    /// <b>标了 <c>[Searchable]</c> 时这里多两件事</b>：画一行搜索框（在只读罩**之外**——
+    /// 只读的复合块也要能搜），以及按命中集挑子节点画。过滤是**策略不是可见性**：
+    /// 被筛掉的节点照旧可见，只是没被交给 <c>Draw()</c>——见 <see cref="SearchScope"/>。
+    /// </para>
     /// </remarks>
     internal sealed class CompositeMemberTerminalDrawer : XInspectorDrawer
     {
@@ -67,17 +72,64 @@ namespace XInspector.Editor
                 }
             }
 
+            // 搜索框画在**只读罩之外**：只读的复合块也要能搜（输入框本身不是数据）。
+            // 框由**宿主自己**画——状态就是在这里按需建出来的，子节点只往上找。
+            if (property.Attributes.Has<SearchableAttribute>())
+            {
+                SearchBox.Draw(property);
+            }
+
+            var scope = SearchScope.Find(property);
+
             using (new EditorGUI.DisabledScope(property.State.IsReadOnly))
             {
                 EditorGUI.indentLevel++;
                 try
                 {
-                    property.DrawChildren();
+                    if (scope.IsActive)
+                    {
+                        DrawFiltered(property, scope);
+                    }
+                    else
+                    {
+                        property.DrawChildren();
+                    }
                 }
                 finally
                 {
                     EditorGUI.indentLevel--;
                 }
+            }
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>
+        /// 只画命中的子节点；一个都没命中时留一条提示，而不是留一块空白。
+        /// </summary>
+        /// <param name="property">复合成员节点。</param>
+        /// <param name="scope">生效中的搜索。</param>
+        private static void DrawFiltered(InspectorProperty property, SearchScope scope)
+        {
+            var drawn = false;
+            var children = property.Children;
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (!scope.ShouldDraw(children[i]))
+                {
+                    continue;
+                }
+
+                children[i].Draw();
+                drawn = true;
+            }
+
+            if (!drawn)
+            {
+                SearchBox.DrawNoMatchHint();
             }
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using UnityEditor;
 
 namespace XInspector.Editor
@@ -137,11 +138,27 @@ namespace XInspector.Editor
         /// <remarks>
         /// 格式化交给 <see cref="ReflectedValueFormatter.Format"/>——「一个值该显示成什么」
         /// 这个问题全包只该有一份答案，搜索的素材与只读展示的文本因此逐字一致。
+        /// <para>
+        /// <b>枚举走显示名。</b> 值文本是拿来给人认的，<c>3</c> 与 <c>Bitter</c> 之间只有后者认得出。
+        /// </para>
         /// </remarks>
         public static bool TryFormat(
             SerializedProperty property, Type declaredType, out string text, out string reason)
         {
             text = null;
+            reason = null;
+
+            if (property == null)
+            {
+                reason = "没有 Unity 的序列化后端（反射成员？）";
+                return false;
+            }
+
+            if (property.propertyType == SerializedPropertyType.Enum)
+            {
+                text = EnumText(property);
+                return true;
+            }
 
             if (!TryRead(property, declaredType, out var value, out reason))
             {
@@ -155,6 +172,26 @@ namespace XInspector.Editor
         #endregion
 
         #region Private Helpers
+
+        /// <summary>枚举的显示名；下标越界时退回数值。</summary>
+        /// <param name="property">枚举属性。</param>
+        /// <returns>显示文本。</returns>
+        /// <remarks>
+        /// 取不到名字的少数情形（<c>[Flags]</c> 组合值没有同名条目）退回数值——
+        /// 报一个**别的**名字比报数字更糟。
+        /// </remarks>
+        private static string EnumText(SerializedProperty property)
+        {
+            var names = property.enumDisplayNames;
+            var index = property.enumValueIndex;
+
+            if (names != null && index >= 0 && index < names.Length)
+            {
+                return names[index];
+            }
+
+            return property.intValue.ToString(CultureInfo.InvariantCulture);
+        }
 
         /// <summary>整型对齐到声明类型（<c>int</c> 的元素给 <c>int</c>，而不是 Unity 的 <c>long</c>）。</summary>
         /// <param name="value">读出的整数。</param>

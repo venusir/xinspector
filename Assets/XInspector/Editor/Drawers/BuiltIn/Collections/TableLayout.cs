@@ -97,6 +97,10 @@ namespace XInspector.Editor
         /// <param name="attribute">列表设置（增删按钮的可见性取自它）。</param>
         /// <param name="model">构建期建好的表格模型。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
+        /// <param name="rows">
+        /// 搜索的行掩码；<c>null</c> 表示不过滤。被筛掉的行不画，
+        /// 但**传给 <c>−</c> 的仍是真实下标**。
+        /// </param>
         /// <param name="removeIndex">请求删除的下标（原地更新，趟末施加）。</param>
         public static void DrawRows(
             InspectorProperty property,
@@ -104,6 +108,7 @@ namespace XInspector.Editor
             ListDrawerSettingsAttribute attribute,
             TableModel model,
             bool canResize,
+            bool[] rows,
             ref int removeIndex)
         {
             var showRemove = attribute.HideRemoveButton == false;
@@ -121,6 +126,11 @@ namespace XInspector.Editor
             var count = array.arraySize;
             for (var i = 0; i < count; i++)
             {
+                if (rows != null && !rows[i])
+                {
+                    continue;
+                }
+
                 DrawRow(property, array.GetArrayElementAtIndex(i), model, widths, i, showRemove, canResize, ref removeIndex);
             }
         }
