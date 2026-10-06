@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using XInspector.Editor;
@@ -336,20 +337,154 @@ namespace XInspector.Tests.Editor
             });
         }
 
-        /// <summary>
-        /// 数组段被**响亮拒绝**——按元素取实例是元素节点化的领域。
-        /// </summary>
+        #endregion
+
+        #region 索引段（元素层的读路径）
+
+        /// <summary>索引段读到数组元素——<c>Array</c> + <c>data[i]</c> 是路径转义，不是类型下钻。</summary>
         /// <remarks>
-        /// 拒绝而不是静默错读：`Items.Array.data[0]` 若被当成普通字段去解析，
-        /// 结果会是「在 Int32[] 上找不到名为 Array 的字段」这种答非所问的原因。
+        /// 2026-10-06 之前这一条断言的是「被拒绝」：那会儿元素还没节点化，拒绝是给这一天
+        /// 留的接口（见 <c>Pipeline</c> §十九）。现在它读得到——而且末段是索引时
+        /// <see cref="ReflectedAccessor.Member"/> 为 <c>null</c>、<c>ValueType</c> 是元素类型。
         /// </remarks>
         [Test]
-        public void 数组段被拒绝()
+        public void 索引段读到数组元素()
         {
+            var fixture = new PathFixture();
+
             Assert.That(ReflectedAccessor.TryCreatePath(
-                typeof(PathFixture), "Items.Array.data[0]", out var accessor, out var reason), Is.False);
-            Assert.That(accessor, Is.Null);
-            Assert.That(reason, Does.Contain("数组"));
+                typeof(PathFixture), "Items.Array.data[0]", out var accessor, out var reason), Is.True, reason);
+
+            Assert.That(accessor.Read(fixture), Is.EqualTo(1));
+            Assert.That(accessor.ValueType, Is.EqualTo(typeof(int)));
+            Assert.That(accessor.Member, Is.Null, "末段是索引：没有单一成员可记。");
+        }
+
+        /// <summary>索引段读到 <c>List&lt;T&gt;</c> 的元素，后面还能继续接字段段。</summary>
+        [Test]
+        public void 索引段读到List元素并继续下钻()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[1].Hp", out var accessor, out var reason),
+                Is.True, reason);
+
+            Assert.That(accessor.Read(fixture), Is.EqualTo(22));
+            Assert.That(accessor.Member.Name, Is.EqualTo("Hp"), "末段是字段时照旧记着成员。");
+        }
+
+        /// <summary>同一个集合上的两个下标各读各的——逐元素编译，不串号。</summary>
+        [Test]
+        public void 两个下标不串号()
+        {
+            var fixture = new PathFixture();
+
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[0].Hp", out var first, out _);
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[1].Hp", out var second, out _);
+
+            Assert.That(first.Read(fixture), Is.EqualTo(11));
+            Assert.That(second.Read(fixture), Is.EqualTo(22));
+        }
+
+        /// <summary>索引段读到的是**活值**：改元素里的字段、换掉整个集合都跟着走。</summary>
+        /// <remarks>
+        /// 与 <see cref="路径读到的是活值"/> 同款——元素层的消费者（条件、按钮、按名回调）
+        /// 同样绑定在访问器上，绑死实例会在父集合被重新赋值后**静默陈旧**。
+        /// </remarks>
+        [Test]
+        public void 索引段读到的是活值()
+        {
+            var fixture = new PathFixture();
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[1].Hp", out var accessor, out _);
+
+            fixture.StatsList[1].Hp = 99;
+            Assert.That(accessor.Read(fixture), Is.EqualTo(99), "改元素里的字段，应当立刻读到。");
+
+            fixture.StatsList = new List<PathStats> { new PathStats { Hp = 1 }, new PathStats { Hp = 33 } };
+            Assert.That(accessor.Read(fixture), Is.EqualTo(33), "换掉整个集合，同样应当读到。");
+        }
+
+        /// <summary>值类型元素（struct）读得到——取出的是副本，只读语义下无差别。</summary>
+        [Test]
+        public void 索引段读到值类型元素()
+        {
+            var fixture = new PathFixture();
+            fixture.Holders[0].Value.Number = 8;
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Holders.Array.data[0].Value.Number", out var accessor, out var reason),
+                Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(8));
+        }
+
+        /// <summary>集合为 <c>null</c> 时整条链给不到实例，**不抛**（空传播的又一格）。</summary>
+        [Test]
+        public void 空集合给不到实例()
+        {
+            var fixture = new PathFixture { StatsList = null };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[0]", out var accessor, out var reason),
+                Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.Null);
+
+            fixture.StatsList = new List<PathStats> { new PathStats { Hp = 5 } };
+            Assert.That(accessor.Read(fixture), Is.Not.Null, "补回集合后立刻又能读到。");
+        }
+
+        /// <summary>
+        /// 越界的两种落点：**末段**给 <c>null</c>（「取不到实例」——多选时各目标长度不一致才看得到），
+        /// **中间段**给 <c>default(元素类型)</c>（后面还有字段段，null 与默认在「再往下读一个字段」
+        /// 这条路上是同一件事）。
+        /// </summary>
+        [Test]
+        public void 越界的落点分两档()
+        {
+            var fixture = new PathFixture();
+
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[9]", out var last, out _);
+            Assert.That(last.Read(fixture), Is.Null, "末段越界 = 取不到实例。");
+
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[9].Hp", out var middle, out _);
+            Assert.That(middle.Read(fixture), Is.EqualTo(0), "中段越界 = 默认值，后面照常下钻。");
+        }
+
+        /// <summary>索引对**不占**深度预算——它是路径转义，不是类型下钻。</summary>
+        [Test]
+        public void 索引对不占深度预算()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "StatsList.Array.data[0].Inner.Name", out var accessor, out var reason),
+                Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo("内层"), "两段字段 + 一对索引，仍在预算内。");
+        }
+
+        /// <summary>
+        /// 非法索引段一律**响亮拒绝**并说清为什么——退化成「在 X 上找不到名为 Y 的字段」
+        /// 那种答非所问的原因，比不说更糟。
+        /// </summary>
+        [Test]
+        public void 非法索引段被拒绝()
+        {
+            Assert.That(Reject("Items.Array"), Does.Contain("Array"), "以 Array 结尾。");
+            Assert.That(Reject("Items.Array.size"), Does.Contain("data[i]"), "只认 data[i] 形态。");
+            Assert.That(Reject("Items.Array.data[x]"), Does.Contain("下标"), "下标不是数字。");
+            Assert.That(Reject("Items.Array.data[]"), Does.Contain("下标"), "空下标。");
+            Assert.That(Reject("Items.Array.data[-1]"), Does.Contain("下标"), "负数下标。");
+            Assert.That(Reject("Items.data[0]"), Does.Contain("成对"), "data[0] 前面没有 Array。");
+            Assert.That(
+                Reject("Stats.Array.data[0]"),
+                Does.Contain("Array"),
+                "前置类型不是集合，按普通字段名处理（于是「找不到字段」）。");
+            Assert.That(Reject("Matrix.Array.data[0]"), Does.Contain("多维"), "多维数组不做。");
         }
 
         /// <summary>
@@ -467,6 +602,21 @@ namespace XInspector.Tests.Editor
             return ReflectedAccessor.TryCreate(field, out accessor, out _);
         }
 
+        /// <summary>编译一条**应当失败**的路径，返回原因。</summary>
+        /// <param name="path">路径。</param>
+        /// <returns>失败原因。</returns>
+        private static string Reject(string path)
+        {
+            Assert.That(
+                ReflectedAccessor.TryCreatePath(typeof(PathFixture), path, out var accessor, out var reason),
+                Is.False,
+                $"「{path}」不该被接受。");
+            Assert.That(accessor, Is.Null);
+            Assert.That(reason, Is.Not.Null.And.Not.Empty, $"「{path}」被拒时要有原因。");
+
+            return reason;
+        }
+
         #endregion
     }
 
@@ -522,8 +672,21 @@ namespace XInspector.Tests.Editor
         /// <summary>中段是值类型的嵌套。</summary>
         public PathHolder Holder = new PathHolder();
 
-        /// <summary>数组——路径里的 <c>Array</c> 段必须被拒绝。</summary>
+        /// <summary>数组——索引段的对照（<c>Items.Array.data[0]</c> 读得到 1）。</summary>
         public int[] Items = { 1, 2, 3 };
+
+        /// <summary><c>List&lt;T&gt;</c> 形态的集合——元素节点路径（<c>Array.data[i]</c>）的主战场。</summary>
+        public List<PathStats> StatsList = new List<PathStats>
+        {
+            new PathStats { Hp = 11 },
+            new PathStats { Hp = 22 },
+        };
+
+        /// <summary>中段是值类型的元素数组——索引 + 值类型段的组合。</summary>
+        public PathHolder[] Holders = { new PathHolder(), new PathHolder() };
+
+        /// <summary>多维数组——索引段要拒绝它（序列化系统本来就看不见它，节点也不会走这条路径）。</summary>
+        public int[,] Matrix = new int[2, 2];
 
         /// <summary>多态引用——路径穿过它必须被拒绝。</summary>
         [UnityEngine.SerializeReference]

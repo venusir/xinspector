@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -56,6 +57,11 @@ namespace XInspector.Editor
         /// <summary>
         /// 被读取的成员。
         /// </summary>
+        /// <remarks>
+        /// <b>路径以索引段收尾时为 <c>null</c></b>（如元素节点的 <c>items.Array.data[0]</c>）：
+        /// 末段不是任何成员，没有单一 <see cref="MemberInfo"/> 可记——此时看
+        /// <see cref="ValueType"/>（它是元素类型）。
+        /// </remarks>
         public MemberInfo Member { get; }
 
         /// <summary>
@@ -168,18 +174,27 @@ namespace XInspector.Editor
         /// 嵌套成员节点的 <c>Path</c> 恰好就是绝对序列化路径，不必另拼。
         /// </para>
         /// <para>
-        /// <b>每一段都必须是实例字段。</b> 本工厂不认属性、不认静态成员——嵌套层的成员本来就
-        /// 全是字段（它们来自 Unity 的序列化迭代器）。要认属性与静态成员就用
+        /// <b>字段段必须是实例字段。</b> 本工厂不认属性、不认静态成员——嵌套层与元素层的成员
+        /// 本来就全是字段（它们来自 Unity 的序列化迭代器）。要认属性与静态成员就用
         /// <see cref="TryCreate"/>（单段版）。两条路对「哪些段认得」必须一致，
         /// 故段解析共用 <c>NestedMemberExpansion.FindDeclaredField</c>。
         /// </para>
         /// <para>
-        /// <b>链只在末端转一次 <c>object</c></b>，中间段不逐个装箱。
+        /// <b>索引段只认 Unity 的 <c>Array</c> + <c>data[i]</c> 这一对</b>，判据落在
+        /// **前置类型**上（当前类型是数组或 <c>List&lt;T&gt;</c> 时才是索引对——字段真叫
+        /// <c>Array</c> 时它就是普通字段）。非法形态（<c>Array.size</c>、下标非数字、
+        /// 多维数组……）**响亮拒绝**并说清为什么。取元素带 null 与越界守卫（<c>AndAlso</c>
+        /// 短路），与逐段空传播同一条纪律：链在绘制路径上每帧求值，**绝不抛**。
+        /// 越界/空集合的落点分两档：**末段索引**给 <c>null</c>（消费者据此显示「—」/跳过目标），
+        /// **中间段**给 <c>default(元素类型)</c>。值类型元素取出的是副本，只读语义下无差别。
         /// </para>
         /// <para>
-        /// <b>数组与多态段响亮拒绝，不静默错读。</b> 展开判据本来就不展开数组与
-        /// <c>[SerializeReference]</c>，所以今天走不到那里；拒绝是给元素节点化那天留的接口
-        /// （两条都有用例，见 <c>ReflectedAccessorTests</c>）。
+        /// <b>链只在末端转一次 <c>object</c></b>，中间段不逐个装箱
+        /// （末段索引例外：它直接产出 <c>object</c> 好让越界表达成 <c>null</c>）。
+        /// </para>
+        /// <para>
+        /// <b>深度只数字段段</b>（索引对不占 <c>MaxDepth</c> 预算）：预算挡的是自引用类型，
+        /// 而索引段是**路径转义**（Unity 的属性路径形态），不是类型下钻。
         /// </para>
         /// </remarks>
         public static bool TryCreatePath(
@@ -197,6 +212,7 @@ namespace XInspector.Editor
             Expression body = null;
             var current = rootType;
             var last = (FieldInfo)null;
+            var lastValueType = (Type)null;
             var depth = 0;
             var start = 0;
 
@@ -211,12 +227,74 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                if (string.Equals(name, "Array", StringComparison.Ordinal) || name.IndexOf('[') >= 0)
+                // **索引对**（Unity 的 `Array` + `data[i]`）。判据落在**前置类型**上而不是段名上：
+                // 字段真叫 `Array` 时它就是普通字段（`Array.Array.data[0]` 靠这条正确解析）。
+                var collectionType = CollectionElement.TypeOf(current);
+
+                if (collectionType != null && string.Equals(name, "Array", StringComparison.Ordinal))
+                {
+                    if (separator < 0)
+                    {
+                        reason = "路径以「Array」结尾——它后面必须跟 data[i]（只认这一种形态）";
+                        return false;
+                    }
+
+                    var indexStart = separator + 1;
+                    var indexSeparator = path.IndexOf('.', indexStart);
+                    var indexName = indexSeparator < 0
+                        ? path.Substring(indexStart)
+                        : path.Substring(indexStart, indexSeparator - indexStart);
+
+                    if (!TryParseElementIndex(indexName, out var index, out reason))
+                    {
+                        return false;
+                    }
+
+                    // 多维数组不做：序列化系统本来就看不见它们（元素层的节点也不会走这条路径），
+                    // 真放行的话 Expression.ArrayIndex 会抛，兜底出来的原因答非所问。
+                    if (current.IsArray && current.GetArrayRank() != 1)
+                    {
+                        reason = $"路径段「{name}.{indexName}」落在多维数组上——只支持一维数组与 List<T>";
+                        return false;
+                    }
+
+                    var collection = body ?? Convert(instance, current);
+                    var inRange = BuildInRangeGuard(collection, current, index);
+                    var indexed = BuildElementAccess(collection, current, index);
+
+                    // **末段索引**（元素节点路径全是这种）：越界 / 空集合在 object 层给 null，
+                    // 而不是 default(元素类型)——多选下各目标长度不一致时，值类型元素给默认值
+                    // 会表现为「显示 0」，那是静默错值的近亲；给 null 则三处消费者都落到既有的
+                    // 「取不到实例」语义（读值「—」、方法跳过该目标、条件算假）。
+                    // **中间段**保持 default(元素类型)：后面还有字段段，null 与默认值在
+                    // 「再往下读一个字段」这条路上是同一件事（引用类型给 null、值类型给默认）。
+                    var isLast = indexSeparator < 0;
+
+                    body = isLast
+                        ? Expression.Condition(
+                            inRange,
+                            Expression.Convert(indexed, typeof(object)),
+                            Expression.Constant(null, typeof(object)))
+                        : Expression.Condition(inRange, indexed, Expression.Default(collectionType));
+
+                    current = collectionType;
+                    last = null;
+                    lastValueType = collectionType;
+
+                    if (isLast)
+                    {
+                        break;
+                    }
+
+                    start = indexSeparator + 1;
+                    continue;
+                }
+
+                if (name.IndexOf('[') >= 0)
                 {
                     reason =
-                        $"路径段「{name}」是数组/列表的段——按索引取实例是**元素层的读路径**，" +
-                        "本包还没有那条路（元素节点化本身已于 2026-10-06 落地，它不经过这里：" +
-                        "序列化那一半走 FindProperty，见 CollectionElementExpansion）";
+                        $"路径段「{name}」只认得 Unity 的 `Array.data[i]` 形态——索引段必须成对出现，" +
+                        "且前面那一段的字段是数组或 List<T>";
                     return false;
                 }
 
@@ -256,6 +334,7 @@ namespace XInspector.Editor
 
                 current = field.FieldType;
                 last = field;
+                lastValueType = field.FieldType;
 
                 if (separator < 0)
                 {
@@ -265,7 +344,7 @@ namespace XInspector.Editor
                 start = separator + 1;
             }
 
-            if (last == null)
+            if (lastValueType == null)
             {
                 reason = "路径不含任何有效段";
                 return false;
@@ -277,8 +356,9 @@ namespace XInspector.Editor
                     Expression.Convert(body, typeof(object)), instance);
 
                 // 恒为 false：段解析只看实例字段（静态成员够不着，见 FindDeclaredField 的说明），
-                // 故整条链一定依赖目标对象。
-                accessor = new ReflectedAccessor(last, lambda.Compile(), last.FieldType, false);
+                // 故整条链一定依赖目标对象。`last` 为 null 表示路径以**索引段**收尾
+                // （元素节点路径），此时没有单一成员可记——`ValueType` 给元素类型。
+                accessor = new ReflectedAccessor(last, lambda.Compile(), lastValueType, false);
                 reason = null;
                 return true;
             }
@@ -416,6 +496,88 @@ namespace XInspector.Editor
 
             reason = $"它既不是字段也不是属性（{member.MemberType}）";
             return false;
+        }
+
+        /// <summary>
+        /// 解析 Unity 的 <c>data[i]</c> 索引段。
+        /// </summary>
+        /// <param name="name">段名。</param>
+        /// <param name="index">解析出的下标。</param>
+        /// <param name="reason">失败原因（中文，可直接拼进告警）。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 只认 <c>data[非负整数]</c> 这一种形态：别的写法（<c>size</c>、负号、空格、空括号）
+        /// 一律**响亮拒绝**并说清为什么——失败原因是告警文案的主体，
+        /// 「在 X 上找不到名为 Y 的字段」那种答非所问的原因比不说更糟。
+        /// </remarks>
+        private static bool TryParseElementIndex(string name, out int index, out string reason)
+        {
+            index = 0;
+            reason = null;
+
+            const string Prefix = "data[";
+
+            if (name.Length < Prefix.Length + 1 ||
+                !name.StartsWith(Prefix, StringComparison.Ordinal) ||
+                name[name.Length - 1] != ']')
+            {
+                reason = $"路径段「{name}」不是索引段——只认得 Unity 的 `data[i]` 形态";
+                return false;
+            }
+
+            var digits = name.Substring(Prefix.Length, name.Length - Prefix.Length - 1);
+
+            if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out index))
+            {
+                reason = $"路径段「{name}」的下标不是非负整数";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 越界守卫：集合非空**且**下标在范围内。
+        /// </summary>
+        /// <param name="collection">集合表达式（一维数组或 <c>List&lt;T&gt;</c>）。</param>
+        /// <param name="collectionType">集合类型。</param>
+        /// <param name="index">下标。</param>
+        /// <returns>布尔表达式。</returns>
+        /// <remarks>
+        /// <b><c>AndAlso</c> 的顺序就是守卫的全部</b>：集合为 <c>null</c> 时
+        /// <c>Length</c> / <c>Count</c> 都会抛，短路保证右侧不执行。空集合与越界是真实存在的
+        /// ——多选时各目标的长度可以不一致，而「每帧不抛」与逐段空传播是同一条纪律。
+        /// </remarks>
+        private static Expression BuildInRangeGuard(Expression collection, Type collectionType, int index)
+        {
+            var notNull = Expression.ReferenceNotEqual(collection, Expression.Constant(null, collectionType));
+            var length = collectionType.IsArray
+                ? (Expression)Expression.ArrayLength(collection)
+                : Expression.Property(collection, "Count");
+
+            return Expression.AndAlso(notNull, Expression.LessThan(Expression.Constant(index), length));
+        }
+
+        /// <summary>
+        /// 按索引取元素的表达式（不含守卫）。
+        /// </summary>
+        /// <param name="collection">集合表达式。</param>
+        /// <param name="collectionType">集合类型。</param>
+        /// <param name="index">下标。</param>
+        /// <returns>取值表达式，类型是元素类型。</returns>
+        /// <remarks>
+        /// 数组走 <see cref="Expression.ArrayIndex(Expression, Expression)"/>，
+        /// <c>List&lt;T&gt;</c> 走它的索引器（<c>Item</c>）——<c>List</c> 的索引器越界会抛，
+        /// 所以调用方必须先接 <see cref="BuildInRangeGuard"/>。值类型元素取出的是**副本**，
+        /// 只读语义下无差别（本包不给反射成员写路径）。
+        /// </remarks>
+        private static Expression BuildElementAccess(Expression collection, Type collectionType, int index)
+        {
+            var constant = Expression.Constant(index);
+
+            return collectionType.IsArray
+                ? Expression.ArrayIndex(collection, constant)
+                : Expression.Property(collection, "Item", constant);
         }
 
         /// <summary>把编译异常转成一句可拼进告警的中文原因。</summary>
