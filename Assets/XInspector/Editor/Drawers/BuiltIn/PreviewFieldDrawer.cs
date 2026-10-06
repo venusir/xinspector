@@ -61,6 +61,8 @@ namespace XInspector.Editor
             PreviewFieldGUI.DrawBox(previewRect, serializedProperty.objectReferenceValue,
                 property.State.GetOrCreate<PreviewFieldState>());
 
+            HandleDropAndClear(property, serializedProperty, previewRect);
+
             var hasRoom = PreviewFieldLayout.FitsBeside(content, height, MinFieldWidth, Gap);
 
             using (new EditorGUI.DisabledScope(property.State.IsReadOnly))
@@ -82,6 +84,82 @@ namespace XInspector.Editor
                 {
                     EditorGUILayout.PropertyField(serializedProperty, label, true);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 把**预览方块本身**变成落点：Ctrl+拖拽替换、Ctrl+点击清空。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="serializedProperty">目标的序列化属性。</param>
+        /// <param name="previewRect">方块区域。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>补的是方块，不是字段。</b> 旁边那个原生对象字段本来就支持拖放与类型限制
+        /// （那是 <c>EditorGUI.ObjectField</c> 自己的事）；这里对齐的是 Odin 的
+        /// 「Ctrl+点方块清空、Ctrl+拖到方块上替换」。
+        /// </para>
+        /// <para>
+        /// <b>判定抽在 <see cref="PreviewFieldDrop"/> 里</b>（纯函数、可无头测）；这里只处理事件。
+        /// 不分配控制 ID：本方法**不画控件**，只是在既有矩形上让开事件，故没有「条件分配
+        /// 让后续 ID 漂移」那类问题。
+        /// </para>
+        /// <para>
+        /// <b>只读与多选一律跳过</b>：多选时写单值会把主目标的对象铺到全部目标，那是静默改数据
+        /// ——与集合绘制器在多选下禁用增删按钮同一条理由。
+        /// </para>
+        /// </remarks>
+        private static void HandleDropAndClear(
+            InspectorProperty property, SerializedProperty serializedProperty, Rect previewRect)
+        {
+            var current = Event.current;
+
+            if (current == null || property.State.IsReadOnly || serializedProperty.hasMultipleDifferentValues)
+            {
+                return;
+            }
+
+            if (!previewRect.Contains(current.mousePosition))
+            {
+                return;
+            }
+
+            switch (current.type)
+            {
+                case EventType.MouseDown when current.control && current.button == 0:
+                    serializedProperty.objectReferenceValue = null;
+                    current.Use();
+                    break;
+
+                case EventType.DragUpdated:
+                case EventType.DragPerform:
+                    if (PreviewFieldDrop.TryAccept(
+                            DragAndDrop.objectReferences, property.Type, out var accepted, out var reason))
+                    {
+                        DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+
+                        if (current.type == EventType.DragPerform)
+                        {
+                            serializedProperty.objectReferenceValue = accepted;
+                            DragAndDrop.AcceptDrag();
+                        }
+                    }
+                    else
+                    {
+                        // 被拒要**响**：光标变禁入之外，拖放落下时还留一条说明。
+                        DragAndDrop.visualMode = DragAndDropVisualMode.Rejected;
+
+                        if (current.type == EventType.DragPerform)
+                        {
+                            DrawerWarnings.Once(
+                                property,
+                                nameof(PreviewFieldDrawer) + ".drop",
+                                $"[XInspector] 属性「{property.Path}」拒绝了这次拖放：{reason}。");
+                        }
+                    }
+
+                    current.Use();
+                    break;
             }
         }
 
