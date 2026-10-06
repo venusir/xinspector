@@ -12,20 +12,19 @@ namespace XInspector.Editor
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>按需展开是本轮的安全阀。</b> 只给「用到了本包」的嵌套类型展开——判据是
+    /// <b>按需展开是这块能力的安全阀。</b> 只给「用到了本包」的嵌套类型展开——判据是
     /// <see cref="ShouldExpand"/>：嵌套成员里有任何一个带**本包支持的特性**。其余情形整份交回
     /// <c>UnityFallbackDrawer</c>——「没用到本包的类型外观不变」这条契约不能破。
-    /// </para>
-    /// <para>
-    /// <b><c>[InlineProperty]</c> 那条触发留给下一批。</b> 它今天还是**替换型**绘制器
-    /// （自己迭代 <c>SerializedProperty</c> 画子字段、不调下一个），此刻让节点展开就会
-    /// 画两遍或一遍都不画——两件事必须同批做：绘制器改成「画标签 + 调下一个」、
-    /// 判据再加一条「字段/声明类型标了 <see cref="InlinePropertyAttribute"/>」。
     /// </para>
     /// <para>
     /// <b>只做固定形状的那一半。</b> 数组与列表不展开（元素个数随时可变，与「树的形状在构建
     /// 结束后冻结」正面冲突，那是元素节点化的领域）；多态引用（<c>[SerializeReference]</c>）
     /// 也不展开——那是 L7 那条产品线。
+    /// </para>
+    /// <para>
+    /// <b>成员级的分组特性自 2026-10-06 起生效</b>（构建期装配出分组节点，见
+    /// <c>PropertyTreeBuilder.AssembleNestedLevel</c>）；**类级**特性仍不生效，见
+    /// <see cref="WarnAboutInertTypeGroups"/>。
     /// </para>
     /// </remarks>
     internal static class NestedMemberExpansion
@@ -44,31 +43,39 @@ namespace XInspector.Editor
         #region Public API
 
         /// <summary>
-        /// 展开过的成员里若有**分组特性**，报一次告警。
+        /// 展开过的嵌套类型若在**类型上**带分组特性，报一次告警。
         /// </summary>
         /// <param name="parent">刚展开过的复合成员节点。</param>
         /// <remarks>
-        /// 嵌套层的分组装配本轮**没有做**（它要动 <c>ApplyGrouping</c> 的路径前缀与
-        /// 「已挂载成员重排」，属另一轮）。不警告的话，那些分组特性会**静默不生效**——
-        /// 一个标了却什么都不做的 `[BoxGroup]` 正是本包最忌讳的现象。
+        /// <para>
+        /// 嵌套层里的**成员级**分组特性自 2026-10-06 起正常生效（构建期会装配出分组节点）。
+        /// 仍然不生效的是**类级**特性：本包只在被检视类型上收集类级特性
+        /// （<c>CollectTypeAttributes</c> 只对根调用），嵌套类型的类级特性没有任何收集通道，
+        /// 判据也照此收窄（类级特性不触发展开）。
+        /// </para>
+        /// <para>
+        /// 这条告警只在**已经展开**的类型上说话：没展开就整份交给 Unity，那是文档写明的边界；
+        /// 一旦展开，这份静默就是本包的。收件人明确、不会误报。
+        /// </para>
         /// </remarks>
-        public static void WarnAboutInertGroups(InspectorProperty parent)
+        public static void WarnAboutInertTypeGroups(InspectorProperty parent)
         {
-            var children = parent.RawChildren;
-
-            for (var i = 0; i < children.Count; i++)
+            var type = parent.Type;
+            if (type == null)
             {
-                for (var a = 0; a < children[i].Attributes.Count; a++)
+                return;
+            }
+
+            foreach (var attribute in type.GetCustomAttributes(true))
+            {
+                if (attribute is PropertyGroupAttribute group)
                 {
-                    if (children[i].Attributes[a] is PropertyGroupAttribute group)
-                    {
-                        Debug.LogWarning(
-                            $"[XInspector] 嵌套层里的分组特性（「{children[i].Path}」上的 " +
-                            $"[{group.GetType().Name}(\"{group.GroupID}\")]）**本轮不生效**：" +
-                            "嵌套层的分组装配尚未实现（`ApplyGrouping` 只跑顶层）。" +
-                            "该特性已忽略，这个成员会平铺在父字段之下。");
-                        return;
-                    }
+                    Debug.LogWarning(
+                        $"[XInspector] 嵌套类型「{type.Name}」的**类级**分组特性" +
+                        $"（[{group.GetType().Name}(\"{group.GroupID}\")]）不生效：" +
+                        "类级特性只在被检视的最外层类型上收集，嵌套类型上的没有收集通道。" +
+                        "把分组标到**成员**上即可生效。");
+                    return;
                 }
             }
         }

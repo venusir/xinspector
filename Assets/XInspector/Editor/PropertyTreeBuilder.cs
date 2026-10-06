@@ -351,8 +351,9 @@ namespace XInspector.Editor
             // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
 
-            // 分组特性在嵌套层本轮不生效——报一次，别让它静默（下一轮做装配）。
-            NestedMemberExpansion.WarnAboutInertGroups(parent);
+            // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
+            // 这里只管**类级**那条仍然失效的路径，别让它静默。
+            NestedMemberExpansion.WarnAboutInertTypeGroups(parent);
         }
 
         #endregion
@@ -970,16 +971,47 @@ namespace XInspector.Editor
         #region 分组装配
 
         /// <summary>
-        /// 把成员搬进各自的分组节点，未声明分组的成员留在根下。
+        /// 分组装配的总入口：先装顶层，再逐层装嵌套层，最后全树排一次同层分组的先后。
         /// </summary>
         /// <param name="root">根节点。</param>
-        /// <param name="members">按序列化顺序排列的成员节点。</param>
+        /// <param name="members">按序列化顺序排列的顶层成员节点。</param>
         /// <remarks>
+        /// <para>
         /// 分组节点**落在其首个成员出现的位置**：某个分组第一次被提及时就地插入父节点的
         /// 子列表。于是夹在分组字段之间的未分组字段会留在原地，而不是被挤到 Inspector 末尾
         /// ——后者一眼就能看出不对，却是「先摆所有分组、再摆散字段」那种朴素实现的必然结果。
+        /// </para>
+        /// <para>
+        /// 装配分两段走：顶层这次是「成员还没挂上去、装配负责挂」；嵌套层那次是「成员早在
+        /// 收集期就挂在复合父节点下、装配负责把它们搬走」（见 <see cref="AssembleNestedLevel"/>）。
+        /// 两段共用同一个 <see cref="AssembleLevel"/>。
+        /// </para>
         /// </remarks>
         private static void ApplyGrouping(InspectorProperty root, List<InspectorProperty> members)
+        {
+            AssembleLevel(root, members, 0);
+
+            ApplyNestedGrouping(root);
+
+            // 全树排一次就够：本方法现在会进所有子节点（含成员节点），
+            // 各层分组的 `Order` 因此都被吃到。
+            SortGroupNodesAtLevel(root);
+        }
+
+        /// <summary>
+        /// 把成员搬进各自的分组节点，未声明分组的成员直接挂到 <paramref name="container"/> 下。
+        /// </summary>
+        /// <param name="container">这一层的父节点（顶层是根，嵌套层是复合成员节点）。</param>
+        /// <param name="members">按序列化顺序排列的成员节点，**尚未**挂在 <paramref name="container"/> 下。</param>
+        /// <param name="prefixSegments">
+        /// 路径前缀的段数：容器路径在分组路径里占几段。顶层为 <c>0</c>；嵌套层为
+        /// <c>DepthOf(container.Path)</c>（成员序列化路径不含 <c>/</c>，故通常是 1，
+        /// 但按段数表达就不必假设这一点）。
+        /// </param>
+        private static void AssembleLevel(
+            InspectorProperty container,
+            List<InspectorProperty> members,
+            int prefixSegments)
         {
             var groups = new Dictionary<string, InspectorProperty>(StringComparer.Ordinal);
 
@@ -990,24 +1022,140 @@ namespace XInspector.Editor
 
                 if (groupAttribute == null)
                 {
-                    root.AddChild(member);
+                    container.AddChild(member);
                     continue;
                 }
 
-                EnsureMemberGroupAttributes(root, groups, member, groupAttribute.GroupID);
+                EnsureMemberGroupAttributes(
+                    container, groups, member, groupAttribute.GroupID, prefixSegments);
                 groups[groupAttribute.GroupID].AddChild(member);
             }
+        }
 
-            SortGroupNodesAtLevel(root);
+        /// <summary>
+        /// 逐层装配嵌套层：每个「有子节点的成员节点」都代表一层。
+        /// </summary>
+        /// <param name="node">当前节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 用整树深度优先而不是只下探一层：复合成员可能落在分组节点**里面**
+        /// （顶层 <c>[BoxGroup("A")]</c> + 复合字段），所以「哪一层要装」得在整棵树上找。
+        /// 判据只看 <see cref="InspectorPropertyKind.Member"/>——分组节点的子节点是成员，
+        /// 它们自己那一层由各自作为复合父节点时再装，故不会重复装配。
+        /// </para>
+        /// <para>
+        /// <b>装配必须留到这里，不能提前到收集期</b>：第一趟处理器会给成员注入特性
+        /// （类级分组就是这么分发到成员上的），装配看不见它们就等于那个特性像没写一样。
+        /// </para>
+        /// </remarks>
+        private static void ApplyNestedGrouping(InspectorProperty node)
+        {
+            if (node.Kind == InspectorPropertyKind.Member && node.RawChildren.Count > 0)
+            {
+                AssembleNestedLevel(node);
+            }
+
+            // 装配**之后**再取子节点：装配会新建分组节点，它们的子节点同样可能是复合成员。
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                ApplyNestedGrouping(children[i]);
+            }
+        }
+
+        /// <summary>
+        /// 装复合成员节点下的那一层：子节点早已挂好，装配负责把它们搬进分组（或留在原地）。
+        /// </summary>
+        /// <param name="container">复合成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>前缀是父成员的序列化路径。</b> 同一个嵌套类型用在两处时（<c>stats</c> 与
+        /// <c>other</c>），分组路径必须各不相同，否则两处的组会并成一个、节点 Path 也不再唯一。
+        /// 前缀因此被写进 <c>GroupID</c>（走 <see cref="PropertyGroupAttribute.CloneForPath"/>，
+        /// 与类级分组的分发同一套写法），于是「分组节点恒有 <c>GroupID == node.Path</c>」
+        /// 这条不变量在嵌套层照旧成立。
+        /// </para>
+        /// <para>
+        /// <b>前缀不是分组段。</b> 成员序列化路径里不含 <c>/</c>（字段名不可能含），
+        /// 所以它整条是**一个不透明段**——<see cref="EnsureGroupChain"/> 靠
+        /// <c>prefixSegments</c> 跳过它，绝不会造出一个以成员名命名的假分组节点。
+        /// </para>
+        /// <para>
+        /// <b>重排的做法是「快照 → 清空 → 按原顺序重挂」</b>：<c>AddChild</c> 只追加、
+        /// 不从旧父节点摘除，不清空就会留下重复。重挂会重设 <c>Parent</c> 与 <c>Owner</c>
+        /// （<c>Owner</c> 此时已回填，是幂等的）。于是「分组落在其首个成员出现的位置」这条
+        /// 语义在嵌套层**逐字继承**，不必重新定义；<c>[PropertyOrder]</c> 排好的次序也保住了
+        /// （重挂的依据正是排好序的那份快照）。
+        /// </para>
+        /// </remarks>
+        private static void AssembleNestedLevel(InspectorProperty container)
+        {
+            var children = container.RawChildren;
+
+            // 早退：这一层没有任何分组特性时**原样不动**（不清空、不重挂）。
+            // 「没用到本包的类型外观不变」这条契约因此不只靠推理，还靠这条分支。
+            if (!HasGroupAttribute(children))
+            {
+                return;
+            }
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                PrefixGroupAttributes(children[i], container.Path);
+            }
+
+            var members = new List<InspectorProperty>(children);
+            children.Clear();
+
+            var prefixSegments = DepthOf(container.Path);
+            AssembleLevel(container, members, prefixSegments);
+        }
+
+        /// <summary>这一层的成员里有没有人带分组特性。</summary>
+        /// <param name="members">成员节点。</param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        private static bool HasGroupAttribute(List<InspectorProperty> members)
+        {
+            for (var i = 0; i < members.Count; i++)
+            {
+                if (members[i].Attributes.Has<PropertyGroupAttribute>())
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>把成员身上每个分组特性的路径改写成 <c>「前缀/原路径」</c>。</summary>
+        /// <param name="member">成员节点。</param>
+        /// <param name="prefix">前缀，即它所属复合容器的序列化路径。</param>
+        /// <remarks>
+        /// 克隆而不是就地改：特性实例来自反射，但同一个实例可能被别处引用着
+        /// （「每个属性一份独立实例」那条纪律的同一个理由）。
+        /// </remarks>
+        private static void PrefixGroupAttributes(InspectorProperty member, string prefix)
+        {
+            var attributes = member.Attributes.Raw;
+
+            for (var i = 0; i < attributes.Count; i++)
+            {
+                if (attributes[i] is PropertyGroupAttribute group)
+                {
+                    attributes[i] = group.CloneForPath(
+                        prefix + PropertyGroupPath.Separator + group.GroupID);
+                }
+            }
         }
 
         /// <summary>
         /// 让成员身上「属于目标路径链」的每个分组特性各贡献自己那一段路径。
         /// </summary>
-        /// <param name="root">根节点。</param>
+        /// <param name="container">这一层的父节点（顶层是根，嵌套层是复合成员节点）。</param>
         /// <param name="groups">已建分组节点的查找表。</param>
         /// <param name="member">成员节点。</param>
-        /// <param name="targetPath">成员最终要落的路径（最深那条）。</param>
+        /// <param name="targetPath">成员最终要落的路径（最深那条，含前缀）。</param>
+        /// <param name="prefixSegments">路径前几段是容器路径（不造节点），顶层为 0。</param>
         /// <remarks>
         /// <para>
         /// 只处理**是目标路径前缀（或相等）**的那些特性：成员只归属最深的一条链，
@@ -1021,15 +1169,17 @@ namespace XInspector.Editor
         /// </para>
         /// </remarks>
         private static void EnsureMemberGroupAttributes(
-            InspectorProperty root,
+            InspectorProperty container,
             Dictionary<string, InspectorProperty> groups,
             InspectorProperty member,
-            string targetPath)
+            string targetPath,
+            int prefixSegments)
         {
             var attributes = member.Attributes;
             var deepestDepth = DepthOf(targetPath);
 
-            for (var depth = 1; depth <= deepestDepth; depth++)
+            // 从**前缀之后**的第一段起：前 prefixSegments 段是容器路径，不是分组。
+            for (var depth = prefixSegments + 1; depth <= deepestDepth; depth++)
             {
                 for (var i = 0; i < attributes.Count; i++)
                 {
@@ -1037,7 +1187,7 @@ namespace XInspector.Editor
                         DepthOf(group.GroupID) == depth &&
                         IsPrefixOrEqual(group.GroupID, targetPath))
                     {
-                        EnsureGroupChain(root, groups, group.GroupID, group);
+                        EnsureGroupChain(container, groups, group.GroupID, group, prefixSegments);
                     }
                 }
             }
@@ -1100,31 +1250,47 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 确保从根到指定路径的整条分组链都存在，返回最深的那一节。
+        /// 确保从容器到指定路径的整条分组链都存在，返回最深的那一节。
         /// </summary>
-        /// <param name="root">根节点。</param>
+        /// <param name="container">这一层的父节点（顶层是根，嵌套层是复合成员节点）。</param>
         /// <param name="groups">已建分组节点的查找表。</param>
-        /// <param name="path">目标路径，已规范化。</param>
+        /// <param name="path">目标路径（含前缀），已规范化。</param>
         /// <param name="source">用于合成祖先节点的来源特性。</param>
+        /// <param name="prefixSegments">路径前几段是容器路径（不造节点），顶层为 0。</param>
         /// <returns>路径末段对应的分组节点。</returns>
         /// <remarks>
+        /// <para>
         /// 祖先节点由 <see cref="PropertyGroupAttribute.CloneForPath"/> 从来源特性复制而来，
         /// 因此 <c>ShowLabel</c> 这类子类字段会一并带到祖先上——语义是「祖先继承后代的呈现设定」，
         /// 比凭空造一个全默认的祖先更符合直觉。
+        /// </para>
+        /// <para>
+        /// <b>前 <paramref name="prefixSegments"/> 段只累积路径、不造节点。</b> 嵌套层里前缀是
+        /// 父成员的序列化路径（如 <c>stats</c>），它不是分组段——给它造节点会得到一个名为
+        /// <c>stats</c> 的**分组**节点，挂在同样叫 <c>stats</c> 的**成员**节点下：
+        /// 既是多余的一层框，又让 <c>Path</c> 不再唯一。节点身份仍是完整路径，故
+        /// <c>current</c> 照常累积所有段。
+        /// </para>
         /// </remarks>
         private static InspectorProperty EnsureGroupChain(
-            InspectorProperty root,
+            InspectorProperty container,
             Dictionary<string, InspectorProperty> groups,
             string path,
-            PropertyGroupAttribute source)
+            PropertyGroupAttribute source,
+            int prefixSegments)
         {
-            var parent = root;
+            var parent = container;
             string current = null;
 
             var segments = path.Split(PropertyGroupPath.Separator);
             for (var i = 0; i < segments.Length; i++)
             {
                 current = current == null ? segments[i] : current + PropertyGroupPath.Separator + segments[i];
+
+                if (i < prefixSegments)
+                {
+                    continue;
+                }
 
                 if (groups.TryGetValue(current, out var node))
                 {
@@ -1242,12 +1408,12 @@ namespace XInspector.Editor
                 }
             }
 
+            // 无条件进所有子节点：嵌套层的分组挂在**成员节点**之下，只认 Kind == Group
+            // 会让那些分组永远轮不到 Order 排。判据少一条，代价只是构建期多走一遍树
+            // （每一层各自重排，没有分组的层是空操作）。
             for (var i = 0; i < children.Count; i++)
             {
-                if (children[i].Kind == InspectorPropertyKind.Group)
-                {
-                    SortGroupNodesAtLevel(children[i]);
-                }
+                SortGroupNodesAtLevel(children[i]);
             }
         }
 
