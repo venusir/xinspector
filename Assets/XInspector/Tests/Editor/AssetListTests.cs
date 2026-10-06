@@ -201,6 +201,92 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 写入
+
+        /// <summary>类型不符的写入被拒、**零改动**，并告警一次（不静默）。</summary>
+        [Test]
+        public void 写入_类型不符被拒且零改动()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("不是属性"));
+
+            var target = ScriptableObject.CreateInstance<AssetListFixture>();
+            var wrong = ScriptableObject.CreateInstance<AssetListProbeAsset>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "materials");
+                var array = node.ValueEntry.SerializedProperty;
+
+                Assert.That(
+                    AssetListWrite.TryAppend(node, array, typeof(Material), new Object[] { wrong }),
+                    Is.False,
+                    "元素类型要的是 Material，给脚本资产就该被拒。");
+                Assert.That(array.arraySize, Is.EqualTo(0), "被拒就是零改动。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(wrong);
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>批量追加：值按顺序落进新槽，走的是集合回调那条通道。</summary>
+        [Test]
+        public void 写入_批量追加的值与顺序()
+        {
+            var target = ScriptableObject.CreateInstance<AssetListFixture>();
+            var first = ScriptableObject.CreateInstance<AssetListProbeAsset>();
+            var second = ScriptableObject.CreateInstance<AssetListProbeAsset>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "probes");
+                var array = node.ValueEntry.SerializedProperty;
+
+                Assert.That(
+                    AssetListWrite.TryAppend(
+                        node, array, typeof(AssetListProbeAsset), new Object[] { first, second }),
+                    Is.True);
+
+                Assert.That(array.arraySize, Is.EqualTo(2));
+                Assert.That(array.GetArrayElementAtIndex(0).objectReferenceValue, Is.SameAs(first));
+                Assert.That(
+                    array.GetArrayElementAtIndex(1).objectReferenceValue,
+                    Is.SameAs(second),
+                    "顺序即写入顺序——批量长出的副本槽被逐个覆盖。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(first);
+                Object.DestroyImmediate(second);
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>空入参不产生改动（「长度真的变了」这条判据不成立）。</summary>
+        [Test]
+        public void 写入_空入参不产生改动()
+        {
+            var target = ScriptableObject.CreateInstance<AssetListFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "probes");
+                var array = node.ValueEntry.SerializedProperty;
+
+                Assert.That(
+                    AssetListWrite.TryAppend(node, array, typeof(AssetListProbeAsset), Array.Empty<Object>()),
+                    Is.False);
+                Assert.That(array.arraySize, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>构建被测的树。</summary>
@@ -300,6 +386,10 @@ namespace XInspector.Tests.Editor
         [AssetList]
         [TableList]
         public List<AssetListProbeAsset> both = new List<AssetListProbeAsset>();
+
+        /// <summary>写入用例的落点（元素类型是脚本资产，测试里现造实例）。</summary>
+        [AssetList]
+        public List<AssetListProbeAsset> probes = new List<AssetListProbeAsset>();
     }
 
     /// <summary>

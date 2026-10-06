@@ -59,8 +59,10 @@ namespace XInspector
         /// 涉及的下标。
         /// </summary>
         /// <remarks>
-        /// <see cref="CollectionChangeType.Add"/> 时是**新元素的下标**（即改动前的长度），
-        /// <see cref="CollectionChangeType.RemoveAt"/> 时是被移除元素原来的下标。
+        /// <see cref="CollectionChangeType.Add"/> 时是**新元素的下标**（即改动前的长度；
+        /// 一次批量追加——如 <c>[AssetList]</c> 拖入多个资产——是**第一个**新元素的下标，
+        /// 其余新元素紧跟在它后面），<see cref="CollectionChangeType.RemoveAt"/> 时是
+        /// 被移除元素原来的下标。
         /// </remarks>
         public int Index { get; }
 

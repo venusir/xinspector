@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 
 namespace XInspector.Editor
 {
@@ -56,6 +58,57 @@ namespace XInspector.Editor
             }
 
             return applied;
+        }
+
+        /// <summary>
+        /// **批量追加**若干个对象引用，并在前后配对触发回调。
+        /// </summary>
+        /// <param name="property">集合节点。</param>
+        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="values">要写进新槽的资产，**顺序即写入顺序**。</param>
+        /// <returns>长度真的变了返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>一次拖入 / 一次多选 = 一对回调</b>（改动前一次、改动后一次），与单元素的
+        /// <see cref="ApplyAdd"/> 同一口径：<c>CollectionChangeInfo.Type</c> 仍是
+        /// <see cref="CollectionChangeType.Add"/>、<c>Index</c> 是**第一个**新元素的下标、
+        /// <c>Value</c> 为 <c>null</c>（追加本来就不报新元素的值）。
+        /// </para>
+        /// <para>
+        /// <b>先长槽、后写值、再触发改动后。</b> 槽由 <see cref="CollectionMutation.AddRange"/>
+        /// 按 Unity 的「副本」语义长出，紧接着被逐个覆盖——改动后那一次回调看到的是**写完值
+        /// 之后**的序列化数据（托管集合仍是旧的，见类注释）。
+        /// </para>
+        /// <para>空入参**不产生任何改动**、也不触发回调（「长度真的变了」这条判据不成立）。</para>
+        /// </remarks>
+        public static bool ApplyAddRange(
+            InspectorProperty property, SerializedProperty array, IList<Object> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return false;
+            }
+
+            var state = property.State.Get<CollectionChangedState>();
+            var first = array.arraySize;
+            var info = new CollectionChangeInfo(CollectionChangeType.Add, first, null);
+
+            Fire(property, state?.Before, info);
+
+            if (!CollectionMutation.AddRange(array, values.Count))
+            {
+                return false;
+            }
+
+            for (var i = 0; i < values.Count; i++)
+            {
+                array.GetArrayElementAtIndex(first + i).objectReferenceValue = values[i];
+            }
+
+            CollectionElementExpansion.MarkLayerDirty(property);
+            Fire(property, state?.After, info);
+
+            return true;
         }
 
         /// <summary>

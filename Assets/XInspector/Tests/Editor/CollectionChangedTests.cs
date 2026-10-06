@@ -193,6 +193,73 @@ namespace XInspector.Tests.Editor
 
         #region 触发
 
+        /// <summary>
+        /// **批量追加**：一次拖入 / 一次多选 = 一对回调（改动前、改动后各一次），
+        /// 下标是**第一个**新元素，值仍为 <c>null</c>（追加本来就不报新元素的值）。
+        /// </summary>
+        [Test]
+        public void 批量追加时回调成对且下标是首个新元素()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionChangedFixture>();
+            var first = ScriptableObject.CreateInstance<ScriptableObject>();
+            var second = ScriptableObject.CreateInstance<ScriptableObject>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "assets");
+                    var array = node.ValueEntry.SerializedProperty;
+
+                    Assert.That(
+                        CollectionChangeInvoker.ApplyAddRange(
+                            node, array, new List<Object> { first, second }),
+                        Is.True);
+
+                    Assert.That(array.arraySize, Is.EqualTo(2));
+                    Assert.That(array.GetArrayElementAtIndex(0).objectReferenceValue, Is.SameAs(first));
+                    Assert.That(
+                        array.GetArrayElementAtIndex(1).objectReferenceValue,
+                        Is.SameAs(second),
+                        "顺序即写入顺序——长出来的副本槽被逐个覆盖。");
+                    Assert.That(
+                        target.Log,
+                        Is.EqualTo(new[] { "before|Add|0|", "after|Add|0|" }),
+                        "一对回调；下标是首个新元素；值为空。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(first);
+                Object.DestroyImmediate(second);
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>批量追加**零个值**：不产生改动、也不触发回调。</summary>
+        [Test]
+        public void 批量追加零个值不产生改动()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionChangedFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "assets");
+                    var array = node.ValueEntry.SerializedProperty;
+
+                    Assert.That(
+                        CollectionChangeInvoker.ApplyAddRange(node, array, new List<Object>()),
+                        Is.False);
+                    Assert.That(array.arraySize, Is.EqualTo(0));
+                    Assert.That(target.Log, Is.Empty, "没成对就不该有半条。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         /// <summary>删除：改动前与改动后**成对**触发，顺序与次数都对。</summary>
         [Test]
         public void 删除时改动前与改动后成对触发()
@@ -568,6 +635,10 @@ namespace XInspector.Tests.Editor
         /// <summary>复合元素：读不出值那一档。</summary>
         [OnCollectionChanged(nameof(Before), nameof(After))]
         public List<CollectionRow> rows = new List<CollectionRow> { new CollectionRow { level = 3 } };
+
+        /// <summary>对象引用元素——批量追加（`[AssetList]` 的写入通道）的落点。</summary>
+        [OnCollectionChanged(nameof(Before), nameof(After))]
+        public List<ScriptableObject> assets = new List<ScriptableObject>();
 
         /// <summary>只有改动后，而且是无参形状。</summary>
         [OnCollectionChanged(after: nameof(NoArgs))]

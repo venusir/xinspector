@@ -42,6 +42,12 @@ namespace XInspector.Editor
         /// <summary>行尾小按钮的宽度（像素）。</summary>
         private const float ButtonWidth = 20f;
 
+        /// <summary>标题行「选择」按钮的宽度（像素）——只有资产列表的列表形态才画它。</summary>
+        private const float SelectButtonWidth = 44f;
+
+        /// <summary>「选择」按钮的标签（静态复用——绘制路径不新建 <see cref="GUIContent"/>）。</summary>
+        private static readonly GUIContent SelectLabel = new GUIContent("选择", "从按类型过滤的资产里挑一个加进列表");
+
         #endregion
 
         #region Protected API
@@ -75,7 +81,14 @@ namespace XInspector.Editor
             // 由 Unity 的 PropertyField 免费显示为「—」，不受影响。
             var canResize = !readOnly && !serializedProperty.hasMultipleDifferentValues;
 
-            var append = DrawHeader(property, attribute, state, canResize, label);
+            var append = DrawHeader(property, attribute, state, canResize, label, out var selectRequested);
+
+            if (selectRequested)
+            {
+                // 「选择」（只有 [AssetList] 的列表形态才画这个按钮）：弹按类型过滤的资产菜单。
+                // 这是**事件路径**——全工程搜索只在这一刻发生（见 AssetListQuery 的纪律）。
+                AssetListMenu.Show(property, property.State.Get<AssetListModel>(), serializedProperty);
+            }
 
             if (!state.Expanded)
             {
@@ -134,30 +147,45 @@ namespace XInspector.Editor
 
         #region Private Helpers
 
-        /// <summary>标题行：折叠头（或普通标签）+ 右端的「+」。</summary>
+        /// <summary>标题行：折叠头（或普通标签）+ 右端的「选择」（仅资产列表）与「+」。</summary>
         /// <param name="property">集合节点（表格模型的「恒展开」取自它的状态）。</param>
         /// <param name="attribute">特性实例。</param>
         /// <param name="state">每属性状态（折叠状态存这里）。</param>
         /// <param name="canResize">此刻允许增删吗。</param>
         /// <param name="label">链上传下来的标签（可能被 <c>[HideLabel]</c> 撤掉）。</param>
+        /// <param name="selectRequested">本趟是否点了「选择」（见 <see cref="AssetListMenu"/>）。</param>
         /// <returns>本趟是否请求了追加。</returns>
         private static bool DrawHeader(
             InspectorProperty property,
             ListDrawerSettingsAttribute attribute,
             CollectionDrawerState state,
             bool canResize,
-            GUIContent label)
+            GUIContent label,
+            out bool selectRequested)
         {
+            selectRequested = false;
+
             var row = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
-            var model = property.State.Get<TableModel>();
-            var showFoldout = attribute.ShowFoldout && (model == null || !model.AlwaysExpanded);
+            var tableModel = property.State.Get<TableModel>();
+            var assetModel = property.State.Get<AssetListModel>();
+            var showFoldout = attribute.ShowFoldout && (tableModel == null || !tableModel.AlwaysExpanded);
             var showAdd = attribute.HideAddButton == false;
+            var showSelect = showAdd && assetModel != null && assetModel.Form == AssetListForm.List;
             var addRect = row;
+            var selectRect = row;
 
             if (showAdd)
             {
                 addRect = new Rect(row.xMax - ButtonWidth, row.y, ButtonWidth, row.height);
                 row.xMax = addRect.xMin - 2f;
+            }
+
+            if (showSelect)
+            {
+                // 「选择」挤在「+」左边。**用户显式说了不要加号（HideAddButton）时也不画**——
+                // 它是个「往列表里加」的入口，从别处冒出来等于绕过人家的表态。
+                selectRect = new Rect(row.xMax - SelectButtonWidth, row.y, SelectButtonWidth, row.height);
+                row.xMax = selectRect.xMin - 2f;
             }
 
             if (showFoldout)
@@ -174,7 +202,20 @@ namespace XInspector.Editor
                 }
             }
 
-            if (!showAdd || !state.Expanded)
+            if (!state.Expanded)
+            {
+                return false;
+            }
+
+            if (showSelect)
+            {
+                using (new EditorGUI.DisabledScope(!canResize))
+                {
+                    selectRequested = GUI.Button(selectRect, SelectLabel, EditorStyles.miniButton);
+                }
+            }
+
+            if (!showAdd)
             {
                 return false;
             }
@@ -216,6 +257,15 @@ namespace XInspector.Editor
             {
                 // 表格形态：模型是构建期建好的（见 TableListProcessor），绘制路径不反射。
                 TableLayout.DrawRows(property, array, attribute, model, canResize, rows, ref removeIndex);
+                return removeIndex;
+            }
+
+            var assetModel = property.State.Get<AssetListModel>();
+            if (assetModel != null)
+            {
+                // 资产列表形态：模型同样是构建期建好的（见 AssetListProcessor）。
+                AssetListLayout.DrawRows(
+                    property, array, attribute, assetModel, canResize, rows, ref removeIndex);
                 return removeIndex;
             }
 
@@ -498,6 +548,34 @@ namespace XInspector.Editor
         public static void Add(SerializedProperty array)
         {
             array.arraySize++;
+        }
+
+        /// <summary>
+        /// 在末尾**批量**追加若干个元素槽。
+        /// </summary>
+        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="count">追加个数。</param>
+        /// <returns>长度确实增加了返回 <c>true</c>；加不进去返回 <c>false</c>（由调用方告警）。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>槽先长出来、值随后由调用方写。</b> 新槽按 Unity 自己的语义是「上一个元素的副本」
+        /// （空列表则为默认值）——批量调用方**必须随即逐个覆盖**，净效果才是「新槽里就是那些
+        /// 资产」。这条与单元素 <see cref="Add"/> 的差别要写清楚，否则读者会以为批量进去的值
+        /// 也是副本。
+        /// </para>
+        /// <para>长度不可变的数组（固定缓冲）加不进去：返回 <c>false</c> 由调用方告警，不猜着再来。</para>
+        /// </remarks>
+        public static bool AddRange(SerializedProperty array, int count)
+        {
+            if (array == null || count <= 0)
+            {
+                return false;
+            }
+
+            var size = array.arraySize;
+            array.arraySize = size + count;
+
+            return array.arraySize != size;
         }
 
         /// <summary>
