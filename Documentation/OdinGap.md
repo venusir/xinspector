@@ -15,9 +15,9 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-06，元素节点化之后）：**
+**本项目的家底（2026-10-06，`[AssetList]` 之后）：**
 
-- 公开特性 **86 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **87 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
   **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
@@ -87,7 +87,7 @@
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | ✅ **整层已清完**（2026-10-05；`[InlineProperty]` 于 2026-10-06 升到**完全体**——复合类型的子字段成为真节点，当初那条推迟项就此复活了「固定形状」那一半） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
-| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]` `[AssetList]` | 🟡 **容器与元素都做了**：容器（自绘列表 + 表格 + 长度校验，2026-10-05）、集合回调与搜索（2026-10-06）、**元素节点化 + 元素层的读路径**（2026-10-06，两条能力轮）已落地；**仍缺**：`[AssetList]`、字典与矩阵（前置是 L7——Unity 根本不序列化它们，字段进不了树）、元素层深度 > 1、搜索按元素内的反射值匹配 |
+| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]` `[AssetList]` | 🟡 **容器、元素与资产列表都做了**：容器（自绘列表 + 表格 + 长度校验，2026-10-05）、集合回调与搜索（2026-10-06）、**元素节点化 + 元素层的读路径**（两条能力轮）、**`[AssetList]`**（第十七批）已落地；**仍缺**：字典与矩阵（前置是 L7——Unity 根本不序列化它们，字段进不了树）、元素层深度 > 1、搜索按元素内的反射值匹配 |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
 
 ---
@@ -139,7 +139,7 @@
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[AssetList]` | ❌ 缺 | **L6**（替换列表绘制器；2026-10-04 由 L1b 改判） |
+| `[AssetList]` | ✅ 已实现 | 2026-10-06（L6，第十七批）：**两形态都做**（列表 + 单元素）；只声明 `Path`/`AssetNamePrefix` 两个旋钮，官方另外四个不声明（见 Pipeline §二十） |
 | `[AssetSelector]` | ✅ 已实现 | 透传型：小按钮 + 编辑器自带菜单（无搜索框/图标/多选，见 Pipeline §六） |
 | `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
 | `[ColorPalette]` | ❌ 缺 | **卡在设计**（不再是「缺一层」：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
@@ -164,7 +164,8 @@
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 17 / 缺 6 / 不做 1**（2026-10-05：`[TableList]` `[HideInTables]` 转已实现；
+**小计：已实现 18 / 缺 5 / 不做 1**（2026-10-06：`[AssetList]` 转已实现（两形态）；
+2026-10-05：`[TableList]` `[HideInTables]` 转已实现；
 2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
 `[PreviewField]` 四项转已实现；同日 `[InlineEditor]` `[HideInInlineEditors]` 转已实现）
 
@@ -352,10 +353,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 86 已实现 + 10 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 87 已实现 + 9 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 86 个：
+已实现的 87 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -381,10 +382,11 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 - **反射成员**（1，2026-10-04 L3）：`[ShowInInspector]`
 - **结构与顺序**（2，2026-10-05 L4）：`[PropertyOrder]`（构建期稳定排序，可标方法）、
   `[InlineProperty]`（观感派：摊平子字段、不画折叠头）
-- **集合与表格**（7）：`[ListDrawerSettings]`（自绘容器）、`[TableList]`（表格呈现）、
+- **集合与表格**（8）：`[ListDrawerSettings]`（自绘容器）、`[TableList]`（表格呈现）、
   `[TableColumnWidth]`、`[HideInTables]`、`[RequiredListLength]`（2026-10-05 L6 第一批）、
   `[OnCollectionChanged]`（增删前后回调）、`[Searchable]`（按标签或值过滤子成员与行）
-  ——2026-10-06 L6 收尾两条。**只接管容器，元素仍由原生绘制**（元素节点化未做）
+  ——2026-10-06 L6 收尾两条；`[AssetList]`（2026-10-06 第十七批，**列表与单元素两形态**）。
+  容器、元素（节点化 + 读路径）与资产列表都做完了；**仍缺**字典与矩阵（前置 L7）
 - **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。
@@ -587,8 +589,11 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 > 指向元素实例的反射成员/方法、`[Button]` 一族与按名回调全部生效（取/调的是**那个元素实例**）；
 > 核心是路径访问器认 `Array.data[i]` 索引段（见 Pipeline §十九）。**外观变化**：只带
 > `[ShowInInspector]`/`[Button]` 的元素类型从此也会被本包接管。
-> **仍缺**：`[DictionaryDrawerSettings]` `[TableMatrix]`（前置是 L7——Unity 根本不序列化
-> 字典与矩阵，字段进不了树）、`[AssetList]`、元素层深度 > 1、搜索按元素内的反射值匹配。
+> **2026-10-06 `[AssetList]` 落地（第十七批）。** 它是 L6 里最后一个非 L7 前置项：
+> **两形态都做**（列表 + 单元素——官方明说两半「行为不同」，只做一半是半成品），
+> 只声明 `Path` / `AssetNamePrefix` 两个旋钮（官方另外四个各有不做的理由，见 Pipeline §二十）。
+> **L6 至此只剩**：`[DictionaryDrawerSettings]` `[TableMatrix]`（前置是 L7——Unity 根本不
+> 序列化字典与矩阵，字段进不了树）、元素层深度 > 1、搜索按元素内的反射值匹配。
 
 ## L7 · 性质不同：那是 Odin 的另一个产品
 

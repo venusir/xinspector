@@ -1624,7 +1624,72 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 
 ---
 
-## 二十、审计记忆
+## 二十、第十七批：`[AssetList]`（2026-10-06）
+
+**做了什么**：把数组/列表（**或单个 Unity 对象字段**）画成资产列表。这是 §六 判它 L6 时留下的
+判据（「只做单元素那半会得到一个**语义随目标类型而变的半成品**」）的兑现——**两半都做**。
+**特性计数 86 → 87**，L6 的最后一个非 L7 前置项；至此 **L6 只剩字典与矩阵（前置是 L7）**。
+
+### 核对到的事实（官方只公开到哪一步）
+
+`[AssetList]` = 「replaces the default list drawer with a list of all possible assets with the
+specified filter」；官方两个绘制器 `AssetListAttributeDrawer<TList, TElement>` 与
+`AssetListAttributeOnSingleObjectDrawer<TElement>` 印证「两半行为不同」。
+**声明体（构造器 / `AttributeUsage` / 字段类型）官方未公开**——只有具名实参示例：
+`Path`(string)、`AutoPopulate`(bool)、`Tags`(string)、`LayerNames`(string)、
+`AssetNamePrefix`(string)、`CustomFilterMethod`(string 方法名)。
+
+### 只声明两个（有真行为、形状可核）
+
+- `Path`：与 `[AssetSelector].Paths` 同语义（`|` 分隔、`Assets/` 相对）；**兼容官方样例的前导
+  `/`**（`"/Plugins/Sirenix/"` → `Assets/Plugins/Sirenix`）——这是本包对那句样例的**解释**，
+  写进注释、README 与用例。
+- `AssetNamePrefix`：**本包自定语义**——`AssetDatabase` 搜索语法里没有名字前缀过滤器，
+  故这是取回路径后的纯函数过滤（文件名去扩展名、`OrdinalIgnoreCase`）。
+
+**四个不声明**（写了会编译不过，而不是静默无效）：`AutoPopulate`（官方语义是「被检视时填充
+列表」= 绘制即搜工程 + 绘制即改数据，撞两条硬规矩）、`Tags`/`LayerNames`（说的是 GameObject
+的标签与层，而 `l:` 是**资产标签**——没有忠实的对应物）、`CustomFilterMethod`（resolved string，
+方法一律不做）。
+
+### 实现（与 `[TableList]` 逐字同构）
+
+- **构建期**（`AssetListProcessor`，**泛型基类必须是**）：形态判定一份（`ObjectReference` →
+  单元素；数组 / `List<T>` 且元素是 `UnityEngine.Object` 派生 → 列表；**接口元素类型直接拒**）、
+  建模型（`Folders` / `TypeFilter` / `NamePrefix` 预计算——绘制路径不碰字符串）、列表形态
+  `EnsureListSettings` 注入容器、降级（是非对象元素的列表就仍注入、退回普通列表绘制）、
+  **与 `[TableList]` 同现时让位**（本包自定规则：不动既有表格行为）并告警一次。
+- **列表形态**（`AssetListLayout`）：行 = 16px 缩略图（**本包自定值**）+ 原生对象字段 + 「−」；
+  标题行「+」左侧多一个「选择」（`HideAddButton` 时不画——那是「往列表里加」的入口）。
+  **缩略图自绘**，不走 `PreviewFieldGUI.DrawBox`（它在真预览与图标都取不到时会
+  `new GUIContent(name)`，逐行画就破了「绘制路径零分配」）；**每行一份 `PreviewFieldState`**
+  （那份缓存只记一个「当前对象」，N 行共用会互相顶掉）。
+- **单元素形态**（`AssetListDrawer`）：替换型；复用 `[PreviewField]` 的全部几何（方块 64、在左）；
+  「选择」从字段右端切出（纯函数）。**列表形态在这里静默放行**——`AttributeDrawer.CanDraw`
+  是 sealed 的「有特性即命中」，这个绘制器也会挂在列表字段的链上。
+- **拖放**：判定抽成 `AssetListDrop.Build`（纯函数，可无头测）；事件只留在绘制器一处；
+  拖放区 = 画出来的那些行的并集；**行内的对象字段优先**（它吃掉事件后类型变成
+  `EventType.Used`，我们那道「只认 DragUpdated / DragPerform」的判据天然让开）。
+  被拒的给**带计数**的告警（拖放是用户动作、不是每帧，故不走 `DrawerWarnings.Once`）。
+- **批量施加**：`CollectionMutation.AddRange` + `CollectionChangeInvoker.ApplyAddRange`——
+  一次拖入 / 一次多选 = **一对**回调（`Index` = **第一个**新元素、`Value` 仍为 null）；
+  槽先按 Unity 的「副本」语义长出、随即被逐个覆盖（注释里写明这条与单元素 Add 的差别）。
+
+### 三处本包自定语义（进 README 差异清单）
+
+拖放**去重**；**只收工程资产**（`EditorUtility.IsPersistent`——场景对象不是本特性的语义）；
+`t:` 只是**启发式收窄**——抽象类型可能一个都搜不到（菜单会空并**告警**，不静默），
+**正确性由落值前的类型校验保证**（`AssetListWrite`，菜单与拖放两条路共用）。
+
+### 不做
+
+`AutoPopulate` 一族、多选删除、行内拖放替换（原生对象字段自带）、预览块上的拖放
+（方块是预览不是控件，与 `[PreviewField]` 同一立场）、GameObject → 组件的降级查找
+（官方没写这种语义，不发明）。
+
+---
+
+## 二十一、审计记忆
 
 **2026-10-04（第七轮）：「没有公开无参构造函数」的告警打错了收件人。**
 
