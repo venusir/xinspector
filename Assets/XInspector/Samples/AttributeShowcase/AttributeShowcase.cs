@@ -120,6 +120,12 @@ namespace XInspector.Samples
         /// <summary>只带原生装饰器的嵌套类型——不展开，整份仍由 Unity 画（外观与从前一致）。</summary>
         public NestedShowcaseNative nativeNested;
 
+        /// <summary>
+        /// 类级分组标在**类型**上：那个类型的成员一律归入它，成员自己的分组嵌在它里面
+        /// （路径是「类级组 / 自有组」——类级恒在最外层）。
+        /// </summary>
+        public ClassLevelGroupedShowcase grouped = new ClassLevelGroupedShowcase();
+
         #endregion
 
         #region 值绘制
@@ -1052,5 +1058,25 @@ namespace XInspector.Samples
         /// <summary>Unity 自己的装饰器。</summary>
         [UnityEngine.Range(0f, 1f)]
         public float ratio;
+    }
+
+    /// <summary>
+    /// 展示**类级分组标在类型上**用的类型（2026-10-06 起在嵌套层生效）：
+    /// 它的成员一律归入类级分组，成员自己的分组嵌在里面。
+    /// <para>
+    /// 与 <see cref="NestedShowcaseStats"/> 的差别：那个演示的是**成员级**特性；
+    /// 这里的 <c>[BoxGroup]</c> 写在**类型自己**上——同一个类型用在两处字段时，两处的组各是各的。
+    /// </para>
+    /// </summary>
+    [Serializable]
+    [BoxGroup("嵌套类型的类级分组")]
+    public class ClassLevelGroupedShowcase
+    {
+        /// <summary>没有自身分组的成员——直接归入类级分组。</summary>
+        public int plain = 1;
+
+        /// <summary>自带分组的成员——嵌在类级分组**里面**（路径是「类级组 / 成员自己的分组」）。</summary>
+        [BoxGroup("成员自己的分组")]
+        public int own = 2;
     }
 }
