@@ -15,9 +15,9 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-06，两条能力轮之后）：**
+**本项目的家底（2026-10-06，L6 收尾两条之后）：**
 
-- 公开特性 **84 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **86 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
   **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
@@ -74,7 +74,7 @@
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；`[TypeDrawerSettings]` 经核实独立，仍缺 |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | ✅ **整层已清完**（2026-10-05；`[InlineProperty]` 于 2026-10-06 升到**完全体**——复合类型的子字段成为真节点，当初那条推迟项就此复活了「固定形状」那一半） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
-| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` | 🟡 **部分已做**（2026-10-05）：容器（自绘列表 + 表格 + 长度校验）已落地；**元素节点化未做**——元素类型里的本包特性照旧不生效 |
+| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]` `[AssetList]` | 🟡 **大部分已做**：容器（自绘列表 + 表格 + 长度校验，2026-10-05）、**集合回调与搜索**（2026-10-06）已落地；**仍缺**：元素节点化（元素类型里的本包特性照旧不生效）、`[AssetList]`、字典与矩阵（前置是 L7——Unity 根本不序列化它们，字段进不了树） |
 | **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换 | **Odin 的另一半产品（Serializer）** |
 
 ---
@@ -171,7 +171,7 @@
 | **`[ReadOnly]`** | **✅ 已实现** | — |
 | `[Required]` | ✅ 已实现 | — |
 | `[RequiredIn]` | ✅ 已实现 | 接 `PrefabKind`；`ErrorMessage` 只做纯文本（Odin 支持表达式） |
-| `[Searchable]` | ❌ 缺 | **L6**（过滤的是字段/类型的**子成员**，不拥有子绘制权就无从过滤；2026-10-04 由 L1b 改判） |
+| `[Searchable]` | ✅ 已实现 | 2026-10-06（L6）：按**标签或值**过滤子成员与列表行；**不做**类型级形态、`Recursive`、`FilterOptions` |
 | `[ShowInInspector]` | ✅ 已实现 | 第二套值后端：**只读**展示（`SetValue` 恒抛），标在方法上编译不过 |
 | **`[Title]`** | **✅ 已实现** | — |
 | `[TypeFilter]` | ⛔ 不做 | 唯一构造是 resolved string（样例里是方法），且被标注字段是抽象/接口类型——还需 L7 的类型切换。2026-10-04 核过签名后判定 |
@@ -244,7 +244,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[InlineProperty]` | ✅ 已实现 | **完全体**（2026-10-06）：复合类型的子字段成为真节点；向量这类原生复合类型仍走观感派；类级形态标在**字段的声明类型**上（另见 Essentials/Layout） |
 | **`[LabelText]`** | **✅ 已实现** | — |
 | **`[LabelWidth]`** | **✅ 已实现** | — |
-| `[OnCollectionChanged]` | ❌ 缺 | L6 |
+| `[OnCollectionChanged]` | ✅ 已实现 | 2026-10-06（L6）：两个方向夹住「写进序列化数据」那一步；只覆盖 Inspector 内的改动 |
 | `[OnInspectorDispose]` | ✅ 已实现 | 不产生节点 |
 | `[OnInspectorGUI]` | ✅ 已实现 | 只做标在方法上的无参形式 |
 | `[OnInspectorInit]` | ✅ 已实现 | 不产生节点 |
@@ -339,10 +339,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 84 已实现 + 12 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 86 已实现 + 10 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 84 个：
+已实现的 86 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -368,9 +368,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 - **反射成员**（1，2026-10-04 L3）：`[ShowInInspector]`
 - **结构与顺序**（2，2026-10-05 L4）：`[PropertyOrder]`（构建期稳定排序，可标方法）、
   `[InlineProperty]`（观感派：摊平子字段、不画折叠头）
-- **集合与表格**（5，2026-10-05 L6 第一批）：`[ListDrawerSettings]`（自绘容器）、
-  `[TableList]`（表格呈现）、`[TableColumnWidth]`、`[HideInTables]`、`[RequiredListLength]`
-  ——**只接管容器，元素仍由原生绘制**（元素节点化未做）
+- **集合与表格**（7）：`[ListDrawerSettings]`（自绘容器）、`[TableList]`（表格呈现）、
+  `[TableColumnWidth]`、`[HideInTables]`、`[RequiredListLength]`（2026-10-05 L6 第一批）、
+  `[OnCollectionChanged]`（增删前后回调）、`[Searchable]`（按标签或值过滤子成员与行）
+  ——2026-10-06 L6 收尾两条。**只接管容器，元素仍由原生绘制**（元素节点化未做）
 - **调试**（1）：`[ShowDrawerChain]`
 
 （另有 `PropertyGroupAttribute`——它是自定义分组的**抽象基类**，不能直接标注，故不计入。
@@ -385,7 +386,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 12 个」也不等于「12 份工作量」**：其中真正需要新层的集中在
+**「缺 10 个」也不等于「10 份工作量」**：其中真正需要新层的集中在
 L6（集合自绘）与 L7（Odin 的另一条产品线）——L1a、L1b 两族、`[InlineEditor]` 一族、
 **L5 的按钮与回调两批**、**L3 的反射后端**、以及 **L2 的预制体上下文族**（都 2026-10-04）
 这几块已经清完。剩下的缺口里，**L6 是最重的一块**（它比原先估计的更重，见推荐顺序）。
@@ -546,10 +547,10 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 `[OnValueChanged]` 的判据改成「绘制这一趟里值前后不一致」，于是不必跨帧记旧值、
 也没有第一帧误报。
 
-## L6 · 需要集合自绘　🟡 部分已做（2026-10-05：容器与表格）
+## L6 · 需要集合自绘　🟡 大部分已做（2026-10-05 容器与表格；2026-10-06 回调与搜索）
 
 `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]`
-`[TableColumnWidth]` `[OnCollectionChanged]` `[RequiredListLength]`。
+`[TableColumnWidth]` `[OnCollectionChanged]` `[Searchable]` `[RequiredListLength]` `[AssetList]`。
 
 现状：数组与列表交给 `PropertyField(includeChildren: true)`，Unity 已经画得和原生一样。
 自己做展开的**唯一理由**是让本包的**特性作用于元素**（`[ShowIf]` 标在元素字段上之类）。
@@ -562,8 +563,11 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 > **但「让特性作用于元素」没有兑现**：元素仍由原生 `PropertyField` 逐个画、不进本包管线——
 > 自绘的收益是**容器行为与表格呈现**。要兑现那句话得先做**元素节点化**（见 §十二 与
 > Pipeline 的已否决形状）。
-> **仍缺**：`[DictionaryDrawerSettings]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]`
-> `[AssetList]`。
+> **2026-10-06 收尾两条**：`[OnCollectionChanged]`（增删前后回调，夹住「写进序列化数据」
+> 那一步）与 `[Searchable]`（按标签或值过滤子成员与列表行）。两条都不需要元素节点化——
+> 回调落在既有的增删施加点上，搜索按**行**与**节点**过滤，元素本身仍由原生绘制。
+> **仍缺**：`[DictionaryDrawerSettings]` `[TableMatrix]`（前置是 L7——Unity 根本不序列化
+> 字典与矩阵，字段进不了树）、`[AssetList]`、元素节点化。
 
 ## L7 · 性质不同：那是 Odin 的另一个产品
 

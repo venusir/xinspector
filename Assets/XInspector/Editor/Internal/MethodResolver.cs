@@ -267,7 +267,7 @@ namespace XInspector.Editor
         /// <returns>诊断里显示的类型名。</returns>
         /// <remarks>
         /// 用户源码里写的是 <c>object</c>，诊断里印 <c>Object</c> 会让人以为要写全名。
-        /// 认不出的类型退回 <see cref="Type.Name"/>——本包用到的那几个（<c>CollectionChangeInfo</c>）
+        /// 认不出的类型退回 <c>Type.Name</c>——本包用到的那几个（<c>CollectionChangeInfo</c>）
         /// 恰好就是源码里的写法。
         /// </remarks>
         private static string Keyword(Type type)
