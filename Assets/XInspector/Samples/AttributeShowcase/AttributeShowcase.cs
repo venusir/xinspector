@@ -189,6 +189,16 @@ namespace XInspector.Samples
         /// <summary>上一条的边界来源——改它的 x/y，上面那条滑块的量程立刻跟着变。</summary>
         public Vector2 dynamicRange = new Vector2(0f, 60f);
 
+        /// <summary>
+        /// 边界取自**非序列化属性**——它不在 Unity 的序列化里，靠的是「按名找成员」那条
+        /// 反射阶梯（2026-10-06 起与条件族同款）。改上面那个成员，这里也跟着变。
+        /// </summary>
+        [MinMaxSlider(nameof(ComputedRange), true)]
+        public Vector2 computedRangeValue = new Vector2(1f, 9f);
+
+        /// <summary>上一条的边界来源：普通属性，读的是当前值。</summary>
+        public Vector2 ComputedRange => new Vector2(dynamicRange.x, dynamicRange.y * 0.5f);
+
         /// <summary>回绕：初始的 400 在绘制后被绕成 40（区间按半开处理）。</summary>
         [Wrap(0f, 360f)]
         public float angle = 400f;
@@ -308,6 +318,17 @@ namespace XInspector.Samples
 
         /// <summary>上面那一组的开关——**组 ID 就是它的名字**（勾上才看得到组内成员）。</summary>
         public bool showAdvanced;
+
+        /// <summary>
+        /// 开关是**非序列化属性**：复选框画成禁用、标题上有一句说明，门控照常生效。
+        /// 本包对反射成员一律不给写（写进去既不可撤销也不会随存档保存），
+        /// 画一个点了没反应的控件比画成禁用的更糟。
+        /// </summary>
+        [ToggleGroup(nameof(AdvancedUnlocked), groupTitle: "解锁内容（反射开关）")]
+        public int unlockedValue = 3;
+
+        /// <summary>上一条的开关：普通属性，跟着上面那个勾选框走。</summary>
+        public bool AdvancedUnlocked => showAdvanced;
 
         /// <summary>三个未指定宽度的格子：均分整行。</summary>
         [HorizontalGroup("三格")]
