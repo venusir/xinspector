@@ -468,6 +468,72 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **两组**索引对：元素层深度 &gt; 1 的路径（每层一对）读得到。
+        /// </summary>
+        [Test]
+        public void 两组索引对读到内层元素()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[1].Hp",
+                out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(222));
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[1]",
+                out var last, out reason), Is.True, reason);
+            Assert.That(last.Read(fixture), Is.InstanceOf<PathStats>(), "末段索引给元素实例。");
+            Assert.That(last.ValueType, Is.EqualTo(typeof(PathStats)));
+            Assert.That(last.Member, Is.Null);
+        }
+
+        /// <summary>两组索引对的落点与一组时同款：末段 <c>null</c>、中间段默认值；全程不抛。</summary>
+        [Test]
+        public void 两组索引对的落点分两档()
+        {
+            var fixture = new PathFixture();
+
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[9]", out var last, out _);
+            Assert.That(last.Read(fixture), Is.Null, "末段越界 = 取不到实例。");
+
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[9].Hp", out var middle, out _);
+            Assert.That(middle.Read(fixture), Is.EqualTo(0), "中段越界 = 默认值，后面照常下钻。");
+
+            fixture.Outers[0].Inner.Clear();
+            ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[0]", out var empty, out _);
+            Assert.That(empty.Read(fixture), Is.Null, "空集合同样给不到实例。");
+        }
+
+        /// <summary>内层集合为 <c>null</c> 时给不到实例（多组索引的空传播），**不抛**。</summary>
+        [Test]
+        public void 两组索引对内层为null时给不到实例()
+        {
+            var fixture = new PathFixture();
+            fixture.Outers[0].Inner = null;
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Inner.Array.data[0]", out var accessor, out _),
+                Is.True);
+            Assert.That(accessor.Read(fixture), Is.Null);
+        }
+
+        /// <summary>两组索引对 + 值类型元素（struct）的组合。</summary>
+        [Test]
+        public void 两组索引对里的值类型元素()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Outers.Array.data[0].Values.Array.data[0].Number",
+                out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// 非法索引段一律**响亮拒绝**并说清为什么——退化成「在 X 上找不到名为 Y 的字段」
         /// 那种答非所问的原因，比不说更糟。
         /// </summary>
@@ -685,6 +751,9 @@ namespace XInspector.Tests.Editor
         /// <summary>中段是值类型的元素数组——索引 + 值类型段的组合。</summary>
         public PathHolder[] Holders = { new PathHolder(), new PathHolder() };
 
+        /// <summary>深度 2：外层元素里嵌着内层集合（两组 <c>Array.data[i]</c> 的主战场）。</summary>
+        public List<PathOuter> Outers = new List<PathOuter> { new PathOuter() };
+
         /// <summary>多维数组——索引段要拒绝它（序列化系统本来就看不见它，节点也不会走这条路径）。</summary>
         public int[,] Matrix = new int[2, 2];
 
@@ -721,6 +790,20 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>一个值。</summary>
         public int Number;
+    }
+
+    /// <summary>元素层深度 2 的路径夹具：外层元素里再嵌一个集合（还有一组值类型元素）。</summary>
+    internal sealed class PathOuter
+    {
+        /// <summary>内层集合——两组索引对的直接对象。</summary>
+        public List<PathStats> Inner = new List<PathStats>
+        {
+            new PathStats { Hp = 111 },
+            new PathStats { Hp = 222 },
+        };
+
+        /// <summary>值类型元素的数组——两组索引对 + 值类型元素的组合。</summary>
+        public PathValue[] Values = { new PathValue { Number = 7 } };
     }
 
     /// <summary>持有值类型成员的复合类型。</summary>

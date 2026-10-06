@@ -358,6 +358,12 @@ namespace XInspector.Editor
         /// 逐段下钻：每段在该层类型上按 <c>DeclaredOnly</c> 逐级上溯找同名字段，再进它的
         /// <see cref="FieldInfo.FieldType"/>。解析不到不抛——子节点照建，只是拿不到特性
         /// （与 <c>m_Script</c> 那类 Unity 注入成员的处置一致）。
+        /// <para>
+        /// <b>它不认索引段</b>（<c>Array.data[i]</c>）——那是
+        /// <c>ReflectedAccessor.TryCreatePath</c> 的领域。当前唯一调用点只传**单段名**
+        /// （建树时按子属性名解析），所以没坏；谁日后想把完整元素路径（两组索引对那种）
+        /// 递进来，会在这里静默解析失败——需要索引语义就用路径访问器。
+        /// </para>
         /// </remarks>
         public static FieldInfo ResolveField(Type rootType, string path)
         {

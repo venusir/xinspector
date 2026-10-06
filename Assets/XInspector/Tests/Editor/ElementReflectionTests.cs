@@ -374,6 +374,156 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 深度 2 的读路径（拥有者 / 外层元素 / 内层元素三层同名）
+
+        /// <summary>内层元素的反射成员读的是**内层**元素实例（三层同名、值各不相同）。</summary>
+        [Test]
+        public void 内层元素的反射成员读的是内层元素实例()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(
+                    Read(Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].Doubled")),
+                    Is.EqualTo(14),
+                    "内层 value 为 7；外层是 33、拥有者是 -1——读错一层这里就是别的数。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>内层元素的按钮调的是内层实例；外层与拥有者上的同名按钮一次都没被调。</summary>
+        [Test]
+        public void 内层元素的按钮调的是内层元素实例()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var node = Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].Heal()");
+                var state = node.State.Get<ButtonState>();
+
+                Assert.That(node.Kind, Is.EqualTo(InspectorPropertyKind.Method));
+                Assert.That(
+                    state.Methods[0].DeclaringType,
+                    Is.EqualTo(typeof(DeepReflected)),
+                    "外层与拥有者上都有同名按钮作陷阱。");
+
+                MethodInvoker.Invoke(state.Methods, tree.Targets, state.Scopes, null, false, "测试");
+
+                var outer = target.outers[0];
+                Assert.That(outer.inners[0].value, Is.EqualTo(700), "内层被治好了。");
+                Assert.That(outer.value, Is.EqualTo(3), "外层原封不动。");
+                Assert.That(outer.outerHeals, Is.EqualTo(0));
+                Assert.That(target.ownerHeals, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>内层元素的条件指向**内层实例**的非序列化属性（外层与拥有者的同名属性恒为真）。</summary>
+        [Test]
+        public void 内层元素的条件指向内层元素()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(
+                    Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].gatedByInner").IsVisible,
+                    Is.False,
+                    "内层的 Enabled 恒为假——解析到外层或拥有者就会「永远显示」。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>内层元素的按名条件先找**同层**的序列化成员（内层的 flag 为真、外层的为假）。</summary>
+        [Test]
+        public void 按名找成员在内层先找同层()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var gated = Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].gatedByInnerFlag");
+
+                Assert.That(gated.IsVisible, Is.True, "内层的 flag 为真；外层的是假。");
+
+                SetBool(target, tree, "outers.Array.data[0].inners.Array.data[0].flag", false);
+
+                Assert.That(gated.IsVisible, Is.False, "改内层的开关立刻跟随。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **不查中间祖先**：条件名内层没有、外层有、根也有——两级语义（最近容器 → 根绝对名）
+        /// 取的是**根**，外层那份不进候选。
+        /// </summary>
+        [Test]
+        public void 按名解析不查中间祖先()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(
+                    Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].gatedByRoot").IsVisible,
+                    Is.False,
+                    "根上的 outerOnly 为假——若查询了中间祖先（外层为真）这里就会显示。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>内层元素为 <c>null</c> 时读值给不出（「—」）、条件算假，**全程不抛**。</summary>
+        [Test]
+        public void 内层元素为空时读路径不抛()
+        {
+            var target = ScriptableObject.CreateInstance<DeepReflectionFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var gated = Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].gatedByInner");
+                var doubled = Find(tree.Root, "outers.Array.data[0].inners.Array.data[0].Doubled");
+                var entry = doubled.ValueEntry as ReflectedValueEntry;
+
+                target.outers[0].inners[0] = null;
+
+                Assert.DoesNotThrow(() =>
+                {
+                    Assert.That(gated.IsVisible, Is.False, "取不到实例，条件按假处置。");
+
+                    Assert.That(
+                        entry.TryGetDisplayValue(out _, out var mixed, out _),
+                        Is.False);
+                    Assert.That(mixed, Is.True, "取不到实例 = 「不一致」——终端据此画「—」。");
+                });
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>读一次反射成员的显示值。</summary>
@@ -547,5 +697,106 @@ namespace XInspector.Tests.Editor
             new ElementReflected(),
             new ElementReflected { value = 3 },
         };
+    }
+
+    /// <summary>深度 2 的**内层**元素：三层同名陷阱的最内那一层。</summary>
+    [Serializable]
+    internal class DeepReflected
+    {
+        /// <summary>内层的值（与拥有者 / 外层都不同，用来识别读到了谁）。</summary>
+        public int value = 7;
+
+        /// <summary>内层的开关——三层同名里**只有内层**为真。</summary>
+        public bool flag = true;
+
+        /// <summary>三层同名的反射属性：内层的恒为**假**（外层与拥有者恒为真）。</summary>
+        public bool Enabled => false;
+
+        /// <summary>三层同名的反射成员（内层 14、外层 33、拥有者 -1）。</summary>
+        [ShowInInspector]
+        public int Doubled => value * 2;
+
+        /// <summary>条件指向内层实例的非序列化属性（外层与拥有者的同名属性恒为真）。</summary>
+        [ShowIf(nameof(Enabled))]
+        public int gatedByInner;
+
+        /// <summary>条件指向**同层**（内层）的序列化开关。</summary>
+        [ShowIf(nameof(flag))]
+        public int gatedByInnerFlag;
+
+        /// <summary>条件名内层没有、外层有、根也有——两级语义下取**根**（不为中间祖先让路）。</summary>
+        [ShowIf("outerOnly")]
+        public int gatedByRoot;
+
+        /// <summary>内层按钮：改的是内层实例。</summary>
+        [Button("内层按钮")]
+        public void Heal()
+        {
+            value = 700;
+        }
+    }
+
+    /// <summary>深度 2 的**外层**元素：里面有内层集合，自己带着同名的陷阱。</summary>
+    [Serializable]
+    internal class DeepOuterElement
+    {
+        /// <summary>外层的值。</summary>
+        public int value = 3;
+
+        /// <summary>外层同名开关——为假（内层为真，用来验证「先找最近的容器」）。</summary>
+        public bool flag = false;
+
+        /// <summary>中间祖先独有的开关——两级语义下**不该**被查到。</summary>
+        public bool outerOnly = true;
+
+        /// <summary>外层同名反射属性——恒为真。</summary>
+        public bool Enabled => true;
+
+        /// <summary>外层同名反射成员——33（内层是 14）。</summary>
+        [ShowInInspector]
+        public int Doubled => 30 + value;
+
+        /// <summary>外层的计分板。</summary>
+        public int outerHeals;
+
+        /// <summary>外层同名按钮。</summary>
+        [Button("外层按钮")]
+        public void Heal()
+        {
+            outerHeals++;
+        }
+
+        /// <summary>内层集合（深度 &gt; 1 起节点化）。</summary>
+        [ListDrawerSettings]
+        public List<DeepReflected> inners = new List<DeepReflected> { new DeepReflected() };
+    }
+
+    /// <summary>深度 2 的读路径对照资产：拥有者、外层元素、内层元素**三层同名陷阱**。</summary>
+    [HideMonoScript]
+    internal sealed class DeepReflectionFixture : ScriptableObject
+    {
+        /// <summary>拥有者层的同名开关——恒为真。</summary>
+        public bool Enabled => true;
+
+        /// <summary>「不查中间祖先」用例的落点：根上的同名成员为**假**。</summary>
+        public bool outerOnly = false;
+
+        /// <summary>拥有者层的计分板。</summary>
+        public int ownerHeals;
+
+        /// <summary>拥有者层的同名按钮。</summary>
+        [Button("拥有者按钮")]
+        public void Heal()
+        {
+            ownerHeals++;
+        }
+
+        /// <summary>拥有者层的同名反射成员——值刻意与两层元素都不同。</summary>
+        [ShowInInspector]
+        public int Doubled => -1;
+
+        /// <summary>外层集合。</summary>
+        [ListDrawerSettings]
+        public List<DeepOuterElement> outers = new List<DeepOuterElement> { new DeepOuterElement() };
     }
 }
