@@ -51,6 +51,7 @@ namespace XInspector.Editor
 
             if (applied)
             {
+                CollectionElementExpansion.MarkLayerDirty(property);
                 Fire(property, state?.After, info);
             }
 
@@ -76,6 +77,7 @@ namespace XInspector.Editor
 
             if (applied)
             {
+                CollectionElementExpansion.MarkLayerDirty(property);
                 Fire(property, state?.After, info);
             }
 

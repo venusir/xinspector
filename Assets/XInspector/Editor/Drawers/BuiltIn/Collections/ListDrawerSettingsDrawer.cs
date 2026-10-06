@@ -12,13 +12,17 @@ namespace XInspector.Editor
     /// <para>
     /// <b>替换型绘制器</b>（值绘制带，与 <see cref="DisplayAsStringDrawer"/> 同档同款）：
     /// 自己画完、不调下一个。因此它绕过了末端那层禁用罩——<c>[ReadOnly]</c> / <c>[DisableIf]</c> /
-    /// <c>[DisableIn]</c> 都要在这里自己照应：按钮进 <see cref="EditorGUI.DisabledScope"/>，
+    /// <c>[DisableIn]</c> 都要在这里自己照应：按钮与**行内容**都进
+    /// <see cref="EditorGUI.DisabledScope"/>（判据见 <see cref="CollectionDrawerLayout.DisableRowContent"/>），
     /// **灰而不隐**（隐不隐由旋钮说了算，禁不禁用由只读说了算）。
     /// </para>
     /// <para>
-    /// <b>元素仍由原生绘制器逐个画</b>——本包不建元素节点，因为树的形状在构建结束后不可变，
-    /// 而数组长度随时可变（见 <see cref="InspectorProperty.RawChildren"/> 的契约）。
-    /// 元素级特性因此仍不生效（它们进不了树），这条边界写进了包 README。
+    /// <b>元素**按需**成为真节点</b>（见 <see cref="CollectionElementExpansion"/> 的安全阀）：
+    /// 元素类型用到了本包、且这个集合被本包接管时，每个元素一行节点，展开的子字段经
+    /// **各自的链**绘制——元素类型里的条件、分组、顺序、内联因此第一次生效。
+    /// 其余集合（含表格形态、元素层里面）整份照旧，外观与从前逐字一致。
+    /// 「树的形状在构建结束后不可变」这条契约随之重新定义为「形状只在构建期与**元素层对账**
+    /// 两个时刻变」——见 <see cref="InspectorProperty.RawChildren"/>。
     /// </para>
     /// <para>
     /// <b>结构性增删的纪律：</b>循环里只**记录意图**，趟末统一施加。两个理由：元素句柄在增删后
@@ -218,6 +222,11 @@ namespace XInspector.Editor
             var count = array.arraySize;
             var disableContent = CollectionDrawerLayout.DisableRowContent(property);
 
+            // 元素层（若建了）：行 i 对应元素节点 i——对账保证长度一致（见 CollectionElementSync）。
+            // 越界只可能发生在「不走 Tree.Draw 直接调绘制器」的场合（测试、宿主自己搭的循环），
+            // 那时退回原生子字段画法，画出来的东西与从前逐字一致。
+            var layer = property.State.Get<CollectionElementLayerState>();
+
             for (var i = 0; i < count; i++)
             {
                 if (rows != null && !rows[i])
@@ -225,7 +234,11 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                DrawRow(array.GetArrayElementAtIndex(i), attribute, state, i, canResize, disableContent, ref removeIndex);
+                var elementNode = layer != null && i < layer.Nodes.Count ? layer.Nodes[i] : null;
+
+                DrawRow(
+                    array.GetArrayElementAtIndex(i), elementNode, attribute, state, i, canResize, disableContent,
+                    ref removeIndex);
             }
 
             return removeIndex;
@@ -253,6 +266,9 @@ namespace XInspector.Editor
 
         /// <summary>画一行：复合元素自己画折叠头、单值元素交给原生控件，行尾是可选的「−」。</summary>
         /// <param name="element">本行的元素。</param>
+        /// <param name="elementNode">
+        /// 本行的元素节点；这个集合没建元素层（或节点暂时对不上）时为 <c>null</c>。
+        /// </param>
         /// <param name="attribute">特性实例。</param>
         /// <param name="state">每属性状态（行标签缓存）。</param>
         /// <param name="index">元素下标。</param>
@@ -272,6 +288,7 @@ namespace XInspector.Editor
         /// </remarks>
         private static void DrawRow(
             SerializedProperty element,
+            InspectorProperty elementNode,
             ListDrawerSettingsAttribute attribute,
             CollectionDrawerState state,
             int index,
@@ -329,7 +346,16 @@ namespace XInspector.Editor
             {
                 using (new EditorGUI.DisabledScope(disableContent))
                 {
-                    CollectionRows.DrawChildren(element);
+                    if (elementNode != null)
+                    {
+                        // 元素层：子节点各自经**链**绘制——元素类型里写的条件、分组、顺序、内联
+                        // 因此全部生效。这就是「让特性作用于元素」这句动因的兑现点。
+                        elementNode.DrawChildren();
+                    }
+                    else
+                    {
+                        CollectionRows.DrawChildren(element);
+                    }
                 }
             }
             finally

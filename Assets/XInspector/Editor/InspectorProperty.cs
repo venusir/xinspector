@@ -237,11 +237,22 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 子节点的底层列表，供构建期的分组装配做位置调整。
+        /// 子节点的底层列表，供构建期的分组装配与**元素层对账**做位置调整。
         /// </summary>
         /// <remarks>
-        /// 只对构建期开放。对外仍是只读的 <see cref="Children"/>——
-        /// 树的形状在构建结束后不应再变，否则每帧绘制的内容会不稳定。
+        /// <para>
+        /// <b>形状只在两个时刻变</b>（2026-10-06 随元素节点化重新定义，全文见 Pipeline §十八）：
+        /// 构建期一次；以及每次绘制之前的**元素层对账**——某个集合的元素节点数与
+        /// <c>arraySize</c> 对不上时整层丢弃重建。其余任何时刻形状不变，
+        /// 因此**一趟绘制之内**读到的树是稳定的。
+        /// </para>
+        /// <para>
+        /// <b>推论：元素节点不跨结构变更。</b> <see cref="Path"/> 在每次同步之后于树内唯一，
+        /// 它仍是节点身份；但元素节点的身份是**按位置**的投影（<c>items.Array.data[0]</c>），
+        /// 长度一变整层作废——旧节点对象不得跨同步点持有（搜索命中集、重置名单这类
+        /// 跨趟消费者一律把元素子树排除在外，见 <c>CollectionElementExpansion.IsElementNode</c>）。
+        /// </para>
+        /// <para>只对构建期与同步点开放。对外仍是只读的 <see cref="Children"/>。</para>
         /// </remarks>
         internal List<InspectorProperty> RawChildren => _children;
 

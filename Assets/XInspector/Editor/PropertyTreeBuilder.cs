@@ -151,6 +151,15 @@ namespace XInspector.Editor
             // 它们走下面的第二趟。
             RunProcessors(root, members);
 
+            // 元素层必须在**第一趟处理器之后**：判据要看处理器注入的 [ListDrawerSettings]
+            // （TableList / Searchable / OnCollectionChanged 三个处理器都会补一份），
+            // 读注入之前的事实会漏掉那三种接管方式。
+            //
+            // 位置也在**挂链之前**（新子树的链由 AttachChainRecursive 的递归一并挂上）、
+            // **分组装配之前**（元素内部那一层由 ApplyNestedGrouping 的递归一并装）。
+            // 见 CollectionElementExpansion 的取舍。
+            ExpandCollectionElements(tree, members);
+
             AttachChain(root, ChildrenTerminal);
             for (var i = 0; i < members.Count; i++)
             {
@@ -295,7 +304,16 @@ namespace XInspector.Editor
         /// 声明类型必须可赋给窗口基类），套到嵌套层会把整层**静默滤掉**。
         /// </para>
         /// </remarks>
-        private static void ExpandChildren(SerializedObject serializedObject, InspectorProperty parent)
+        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="parent">复合父节点。</param>
+        /// <param name="withReflectedMembers">
+        /// 要不要收 <c>[ShowInInspector]</c> 的成员与方法节点。嵌套类型是 <c>true</c>；
+        /// **元素层是 <c>false</c>**——元素里的实例读路径（<c>Array.data[i]</c> 段）
+        /// 留给下一轮，收了也取不到实例（<see cref="ReflectedAccessor.TryCreatePath"/> 会拒绝）。
+        /// 该开关沿递归传播：元素子树里的**每一层**都取不到实例。
+        /// </param>
+        private static void ExpandChildren(
+            SerializedObject serializedObject, InspectorProperty parent, bool withReflectedMembers = true)
         {
             var property = parent.ValueEntry?.SerializedProperty;
             if (property == null)
@@ -329,26 +347,241 @@ namespace XInspector.Editor
 
                 if (node.Member != null && NestedMemberExpansion.ShouldExpand(node, stableProperty))
                 {
-                    ExpandChildren(serializedObject, node);
+                    ExpandChildren(serializedObject, node, withReflectedMembers);
                 }
 
                 next = child.NextVisible(false) && child.depth == depth;
             }
 
-            // 嵌套层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀。
-            // 嵌套层里的方法节点同理。两段都排在序列化子节点之后——与顶层的三段顺序
-            // （序列化 → 反射 → 方法）一致；也都排在下面的排序之前，嵌套层的
-            // [PropertyOrder] 因此同样能排到按钮。
-            AppendNestedReflectedMembers(serializedObject, parent);
-            AppendNestedMethodMembers(parent);
+            if (withReflectedMembers)
+            {
+                // 嵌套层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀。
+                // 嵌套层里的方法节点同理。两段都排在序列化子节点之后——与顶层的三段顺序
+                // （序列化 → 反射 → 方法）一致；也都排在下面的排序之前，嵌套层的
+                // [PropertyOrder] 因此同样能排到按钮。
+                AppendNestedReflectedMembers(serializedObject, parent);
+                AppendNestedMethodMembers(parent);
+            }
 
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
-            // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
+            // 顶层那一次仍在 Build 里（两处都只对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
 
-            // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
-            // 这里只管**类级**那条仍然失效的路径，别让它静默。
-            NestedMemberExpansion.WarnAboutInertTypeGroups(parent);
+            if (withReflectedMembers)
+            {
+                // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
+                // 这里只管**类级**那条仍然失效的路径，别让它静默。
+                NestedMemberExpansion.WarnAboutInertTypeGroups(parent);
+            }
+        }
+
+        #endregion
+
+        #region 元素层
+
+        /// <summary>
+        /// 给「用到本包 + 已被接管」的集合建元素层；被挡住但用到了本包的，各告警一次。
+        /// </summary>
+        /// <param name="tree">属性树（登记对账名单用）。</param>
+        /// <param name="members">顶层成员（此刻还没挂到根上，与处理器那一趟同款）。</param>
+        private static void ExpandCollectionElements(PropertyTree tree, List<InspectorProperty> members)
+        {
+            for (var m = 0; m < members.Count; m++)
+            {
+                ExpandCollectionElementsIn(tree, members[m]);
+            }
+        }
+
+        /// <summary>
+        /// 深度优先地走一层子树：集合节点按判据建层，其余节点继续下探。
+        /// </summary>
+        /// <param name="tree">属性树。</param>
+        /// <param name="node">当前节点。</param>
+        /// <remarks>
+        /// 递归发生在**建层之后**：元素节点是刚挂上来的，深度判据（元素里的集合不节点化）
+        /// 要走到它们才报得出「Nested」那条边界。
+        /// </remarks>
+        private static void ExpandCollectionElementsIn(PropertyTree tree, InspectorProperty node)
+        {
+            if (node.Kind == InspectorPropertyKind.Member && node.ValueEntry?.SerializedProperty != null)
+            {
+                var decision = CollectionElementExpansion.Decide(node);
+
+                if (decision == CollectionElementExpansion.ElementLayerDecision.Build)
+                {
+                    CreateElementLayer(tree.SerializedObject, tree, node);
+                }
+                else if (decision != CollectionElementExpansion.ElementLayerDecision.Inert)
+                {
+                    CollectionElementExpansion.WarnBlocked(node, decision);
+                }
+            }
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                ExpandCollectionElementsIn(tree, children[i]);
+            }
+        }
+
+        /// <summary>
+        /// 建一个集合的元素层：逐元素建节点、递归展开，并登记进树的对账名单。
+        /// </summary>
+        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="tree">属性树。</param>
+        /// <param name="collection">集合节点。</param>
+        private static void CreateElementLayer(
+            SerializedObject serializedObject, PropertyTree tree, InspectorProperty collection)
+        {
+            var layer = collection.State.GetOrCreate<CollectionElementLayerState>();
+            layer.Nodes.Clear();
+            layer.Dirty = false;
+
+            var count = collection.ValueEntry.SerializedProperty.arraySize;
+            for (var i = 0; i < count; i++)
+            {
+                layer.Nodes.Add(CreateElementNode(serializedObject, collection, i));
+            }
+
+            // 第一趟处理器——**只对新子树**（元素节点是刚挂上来的，顶层那一趟跑在它们出生之前）。
+            // 与构建顺序契约同款：在挂链之前（注入的特性会改变链的构成）、在分组装配之前
+            // （注入的分组特性要被装配看见）。父 / 根钩子不重跑——它们对集合节点自己已经跑过。
+            RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
+
+            // 用到了本包、但本轮**做不了**的那些用法（元素里的读路径、类级分组），报一次——
+            // 报在集合上：按元素报会把同一件事刷十遍。第三类（元素里的集合）由构建期的
+            // 树遍历顺带报，它们自己在树上。
+            var unsupported = CollectionElementExpansion.FindUnsupportedInElement(
+                CollectionElementExpansion.ElementTypeOf(collection));
+            if (unsupported != null)
+            {
+                DrawerWarnings.Once(collection, nameof(CreateElementLayer) + ".元素里的边界",
+                    $"[XInspector] 属性「{collection.Path}」的元素类型里有一处本轮不支持的用法：" +
+                    $"{unsupported}。它不会生效——这是元素层本轮划的边界（见包 README 的已知限制）。");
+            }
+
+            // 登记进对账名单：此后每趟绘制之前 CollectionElementSync 都会看它一眼。
+            tree.ElementCollections.Add(collection);
+        }
+
+        /// <summary>
+        /// 建一个元素节点：路径 <c>items.Array.data[i]</c>、种类仍是 <c>Member</c>。
+        /// </summary>
+        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="collection">集合节点。</param>
+        /// <param name="index">元素下标。</param>
+        /// <returns>建好的元素节点。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>种类仍是 <see cref="InspectorPropertyKind.Member"/>。</b> 它的路径对
+        /// <c>SerializedObject.FindProperty</c> 合法（<c>Kind.Member</c> 的不变量照旧成立），
+        /// 且 <c>SerializedMemberResolver.FindNestedScopeNode</c> 靠这条认容器——
+        /// 单列一个新 Kind 会让元素成员里的条件**静默看错对象**。它是 <c>Member == null</c>
+        /// 的成员：元素上标不了任何特性，也就没有「成员自己的特性」可读。
+        /// </para>
+        /// <para>
+        /// <b>值是独立实例。</b> 按路径重新 <c>FindProperty</c> 取一份（与
+        /// <see cref="CreateMember"/> 同款）——<c>GetArrayElementAtIndex</c> 的句柄
+        /// 会随结构变更作废，路径不会。
+        /// </para>
+        /// </remarks>
+        private static InspectorProperty CreateElementNode(
+            SerializedObject serializedObject, InspectorProperty collection, int index)
+        {
+            var element = collection.ValueEntry.SerializedProperty.GetArrayElementAtIndex(index);
+            var path = element.propertyPath;
+            var elementType = CollectionElementExpansion.ElementTypeOf(collection) ?? typeof(object);
+            var stableProperty = serializedObject.FindProperty(path) ?? element;
+
+            var node = new InspectorProperty(
+                element.displayName,
+                path,
+                elementType,
+                InspectorPropertyKind.Member,
+                new PropertyAttributes(new List<Attribute>()))
+            {
+                ValueEntry = new SerializedPropertyValueEntry(stableProperty, elementType),
+                Member = null,
+            };
+
+            collection.AddChild(node);
+
+            ExpandChildren(serializedObject, node, withReflectedMembers: false);
+
+            return node;
+        }
+
+        /// <summary>
+        /// 重建一个集合的元素层——对账发现长度对不上（或结构刚被改过）时走这里。
+        /// </summary>
+        /// <param name="collection">集合节点。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>流水线与构建期逐条对应</b>（顺序是契约）：建节点 → 第一趟处理器 → 挂链 →
+        /// 分组装配 → 第二趟分组处理器。与构建期的差别只有一处：第一趟**只对新子树**
+        /// 跑（<c>RunNestedProcessors</c> 的既有语义），根与集合节点自己的钩子不重跑——
+        /// 它们的特性没变，重跑等于把「注入只发生一次」的契约破掉。
+        /// </para>
+        /// <para>
+        /// <b>旧子树整体释放。</b> 状态袋里的 <c>IDisposable</c>（内嵌编辑器之类）不释放
+        /// 就是重建一次泄漏一次；旧节点对象同时作废——不得跨同步点持有（见
+        /// <see cref="CollectionElementExpansion"/> 的有效窗口）。
+        /// </para>
+        /// <para>
+        /// <b>这是一次性动作，不是每帧动作。</b> 反射与处理器都发生在这里，而这里只在
+        /// 长度对不上时被调到——「反射仅限构建期」这条规则按此豁免（见
+        /// <see cref="CollectionElementSync"/>）。
+        /// </para>
+        /// </remarks>
+        internal static void RebuildElementLayer(InspectorProperty collection)
+        {
+            var layer = collection.State.Get<CollectionElementLayerState>();
+            var serializedObject = collection.Owner?.SerializedObject;
+
+            if (layer == null || serializedObject == null)
+            {
+                return;
+            }
+
+            var children = collection.RawChildren;
+
+            // 1. 旧子树整体释放（状态随节点走）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                PropertyTree.DisposeNode(children[i]);
+            }
+
+            children.Clear();
+            layer.Nodes.Clear();
+
+            // 2. 建新节点（按路径取独立实例）。
+            var count = collection.ValueEntry?.SerializedProperty?.arraySize ?? 0;
+            for (var i = 0; i < count; i++)
+            {
+                layer.Nodes.Add(CreateElementNode(serializedObject, collection, i));
+            }
+
+            // 3. 第一趟处理器：只跑新子树（父 / 根钩子不重跑）。
+            RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
+
+            // 4. 挂链（递归覆盖新子树；带 [InlineProperty] 的折叠抑制也在这一步定案）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                AttachChainRecursive(children[i]);
+            }
+
+            // 5. 分组装配：元素内部那一层（含更深处），分组路径前缀 = 元素路径。
+            for (var i = 0; i < children.Count; i++)
+            {
+                ApplyNestedGrouping(children[i]);
+            }
+
+            SortGroupNodesAtLevel(collection);
+
+            // 6. 第二趟：只对分组节点、只跑处理分组特性的那些（新装配出来的分组）。
+            RunGroupProcessors(collection);
+
+            layer.Dirty = false;
         }
 
         #endregion
@@ -648,6 +881,15 @@ namespace XInspector.Editor
                 case InspectorPropertyKind.ReflectedMember:
                     return ReflectedTerminal;
                 default:
+                    // 元素层容器：链上的集合绘制器一旦放行（CanDraw 为假），整份要交回 Unity
+                    // 的**原生数组画法**——元素节点是集合绘制器自己画的（见 ListDrawerSettingsDrawer），
+                    // 不是给复合末端当折叠头逐个画的。接错末端的症状是「列表回退时每个元素
+                    // 变成一行折叠头 + 缩进」。
+                    if (node.State.Get<CollectionElementLayerState>() != null)
+                    {
+                        return MemberTerminal;
+                    }
+
                     return node.Children.Count > 0 ? CompositeMemberTerminal : MemberTerminal;
             }
         }

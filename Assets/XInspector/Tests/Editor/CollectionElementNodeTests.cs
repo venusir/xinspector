@@ -1,0 +1,518 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
+using XInspector.Editor;
+using Object = UnityEngine.Object;
+
+namespace XInspector.Tests.Editor
+{
+    /// <summary>
+    /// 集合元素节点化：安全阀（什么时候建元素层、什么时候不建但告警）、元素节点的形状，
+    /// 以及**元素类型里的特性第一次生效**。
+    /// <para>
+    /// 不测 IMGUI——断言的是「有没有元素节点、路径对不对、条件跟不跟随、分组落在哪、
+    /// 回退时末端是谁」。
+    /// </para>
+    /// </summary>
+    [TestFixture]
+    public class CollectionElementNodeTests
+    {
+        #region Fixture
+
+        /// <summary>复位静态门面：建树会初始化绘制器与处理器两张注册表。</summary>
+        [TearDown]
+        public void TearDown()
+        {
+            DrawerTypeRegistry.Reset();
+            AttributeProcessorRegistry.Reset();
+        }
+
+        #endregion
+
+        #region 元素层的形状
+
+        /// <summary>元素类型用到了本包 → 每个元素一个真节点，路径是 <c>items.Array.data[i]</c>。</summary>
+        [Test]
+        public void 元素类型用到本包时元素成为子节点()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+
+                Assert.That(items.Children.Count, Is.EqualTo(3));
+
+                var first = items.Children[0];
+                Assert.That(first.Path, Is.EqualTo("items.Array.data[0]"));
+                Assert.That(
+                    first.Kind,
+                    Is.EqualTo(InspectorPropertyKind.Member),
+                    "元素节点仍是 Member——单列新 Kind 会让按名解析容器认不出它。");
+                Assert.That(first.Type, Is.EqualTo(typeof(ElementItem)));
+                Assert.That(first.Member, Is.Null, "元素上标不了特性，没有成员自己的特性可读。");
+                Assert.That(first.ValueEntry.IsUnityBacked, Is.True);
+                Assert.That(
+                    first.ValueEntry.SerializedProperty.propertyPath,
+                    Is.EqualTo("items.Array.data[0]"),
+                    "值的句柄按路径取得（独立实例）。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 对照：元素类型没用本包（原生装饰器 / 标量）时不建元素节点——「没用到本包的集合
+        /// 外观逐字不变」这条契约的回归守卫。
+        /// </summary>
+        [Test]
+        public void 未用到的元素类型不建元素节点()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(Find(tree.Root, "native").Children.Count, Is.EqualTo(0));
+                Assert.That(Find(tree.Root, "numbers").Children.Count, Is.EqualTo(0), "标量元素没有特性可生效。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// <b>「让特性作用于元素」的直接证据：</b>元素成员上的 <c>[ShowIf]</c> 跟随**同层**的开关。
+        /// </summary>
+        [Test]
+        public void 元素成员的条件生效()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+                var hp = Find(items.Children[0], "items.Array.data[0].hp");
+
+                Assert.That(hp.IsVisible, Is.True, "起点：同层 alive 为真。");
+
+                SetBool(target, tree, "items.Array.data[0].alive", false);
+
+                Assert.That(hp.IsVisible, Is.False, "条件指的是**这个元素内部**的 alive。");
+                Assert.That(
+                    Find(items.Children[1], "items.Array.data[1].hp").IsVisible,
+                    Is.True,
+                    "每个元素各是各的：改一个元素不影响别的元素。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素成员上的 <c>[BoxGroup]</c> 在元素**内部**装配，分组路径带元素前缀。</summary>
+        [Test]
+        public void 元素成员的分组在元素内部装配()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+                var group = Find(items.Children[0], "items.Array.data[0]/基础");
+                var level = Find(group, "items.Array.data[0].level");
+
+                Assert.That(group.Kind, Is.EqualTo(InspectorPropertyKind.Group));
+                Assert.That(
+                    group.Path,
+                    Is.EqualTo("items.Array.data[0]/基础"),
+                    "分组路径以元素路径为前缀——两个元素的组各是各的，不会并成一个。");
+                Assert.That(
+                    group.Attributes.Get<PropertyGroupAttribute>().GroupID,
+                    Is.EqualTo(group.Path),
+                    "「分组节点恒有 GroupID == node.Path」这条不变量在元素层照旧成立。");
+                Assert.That(level.Parent, Is.SameAs(group));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素成员上的 <c>[PropertyOrder]</c> 在元素内部同样生效。</summary>
+        [Test]
+        public void 元素成员的顺序在元素内部生效()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+
+                Assert.That(
+                    items.Children[0].Children[0].Name,
+                    Is.EqualTo("priority"),
+                    "声明序是 alive/hp/level/priority，[PropertyOrder(-1)] 把它排到最前。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>嵌套类型里的集合照样节点化（祖先链里没有元素层，深度判据不拦它）。</summary>
+        [Test]
+        public void 嵌套类型里的集合也节点化()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var list = Find(Find(tree.Root, "holder"), "holder.list");
+
+                Assert.That(list.Children.Count, Is.EqualTo(1));
+                Assert.That(list.Children[0].Path, Is.EqualTo("holder.list.Array.data[0]"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 元素层容器的末端是**值末端**：链上的集合绘制器一旦放行（绘制期降级），整份要交回
+        /// Unity 的原生数组画法，而不是把元素节点当折叠头逐个画。
+        /// </summary>
+        [Test]
+        public void 元素层容器的末端是值末端()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+                var list = Find(Find(tree.Root, "holder"), "holder.list");
+
+                Assert.That(items.Chain.Entries[items.Chain.Count - 1].Drawer, Is.InstanceOf<UnityFallbackDrawer>());
+                Assert.That(list.Chain.Entries[list.Chain.Count - 1].Drawer, Is.InstanceOf<UnityFallbackDrawer>());
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
+        #region 安全阀的边界（用到了本包却不建层——一律告警，不静默）
+
+        /// <summary>没有容器（字段上没有任何会让本包接管它的特性）时不建层，并告警一次。</summary>
+        [Test]
+        public void 没有容器的集合不建层并告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(@"给它加 \[ListDrawerSettings\]"));
+
+            var target = ScriptableObject.CreateInstance<NoContainerElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(Find(tree.Root, "items").Children.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>表格形态不节点化（单元格画法逐字不变），并告警一次。</summary>
+        [Test]
+        public void 表格形态不建层并告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("表格形态"));
+
+            var target = ScriptableObject.CreateInstance<TableElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(Find(tree.Root, "rows").Children.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素层**里面**的集合不再建层（深度只做一层），并告警一次。</summary>
+        [Test]
+        public void 元素里的集合不递归并告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("只做一层"));
+
+            var target = ScriptableObject.CreateInstance<NestedCollectionElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var outer = Find(tree.Root, "outer");
+
+                Assert.That(outer.Children.Count, Is.EqualTo(1), "外层照常节点化。");
+
+                var inner = Find(outer.Children[0], "outer.Array.data[0].inner");
+                Assert.That(inner.Children.Count, Is.EqualTo(0), "内层不递归；内层元素类型里的特性不会生效。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 元素类型里**只有** <c>[ShowInInspector]</c> / <c>[Button]</c> 时：层不建（窄判据为假），
+        /// 但也不许静默——告警一次说明读路径留下一轮。
+        /// </summary>
+        [Test]
+        public void 元素里只有反射成员时不建层并告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("读路径留下一轮"));
+
+            var target = ScriptableObject.CreateInstance<ReflectedOnlyElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(Find(tree.Root, "items").Children.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 元素类型里**另有**序列化字段的特性时层照建，但元素里的反射成员不会出现——
+        /// 这个「展开过却少画了几样」的缺口要告警一次，不许静默。
+        /// </summary>
+        [Test]
+        public void 元素里的反射成员不出现并告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[ShowInInspector\] / \[Button\] 一族"));
+
+            var target = ScriptableObject.CreateInstance<InspectedElementFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var items = Find(tree.Root, "items");
+
+                Assert.That(items.Children.Count, Is.EqualTo(1), "序列化字段那一半照常节点化。");
+                Assert.That(Find(items.Children[0], "items.Array.data[0].hp"), Is.Not.Null);
+
+                foreach (var child in items.Children[0].Children)
+                {
+                    Assert.That(
+                        child.Kind,
+                        Is.Not.EqualTo(InspectorPropertyKind.ReflectedMember),
+                        "元素里的读路径留下一轮：ReflectedMember 节点不该出现。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>构建被测的树。</summary>
+        /// <param name="target">目标资产。</param>
+        /// <returns>属性树。</returns>
+        private static PropertyTree BuildTree(ScriptableObject target)
+        {
+            return PropertyTree.Create(new SerializedObject(target));
+        }
+
+        /// <summary>改一个 bool 字段的值，并让树看到它。</summary>
+        /// <param name="target">目标资产。</param>
+        /// <param name="tree">属性树——条件求值器读的是**树自己的**序列化对象。</param>
+        /// <param name="path">序列化路径（可点分）。</param>
+        /// <param name="value">新值。</param>
+        private static void SetBool(ScriptableObject target, PropertyTree tree, string path, bool value)
+        {
+            var serializedObject = new SerializedObject(target);
+            serializedObject.FindProperty(path).boolValue = value;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            tree.SerializedObject.Update();
+        }
+
+        /// <summary>按路径查找直接子节点。</summary>
+        /// <param name="parent">父节点。</param>
+        /// <param name="path">完整路径。</param>
+        /// <returns>节点；不存在时断言失败。</returns>
+        private static InspectorProperty Find(InspectorProperty parent, string path)
+        {
+            foreach (var child in parent.Children)
+            {
+                if (child.Path == path)
+                {
+                    return child;
+                }
+            }
+
+            Assert.Fail($"找不到节点 {path}。");
+            return null;
+        }
+
+        #endregion
+    }
+
+    /// <summary>元素类型的对照：条件、分组、顺序三样都齐，且有一个「用不到本包」的对照类型。</summary>
+    [Serializable]
+    internal class ElementItem
+    {
+        /// <summary>条件开关（**元素内部**的成员）。</summary>
+        public bool alive = true;
+
+        /// <summary>带条件的成员——元素里的特性靠它证明生效。</summary>
+        [ShowIf(nameof(alive))]
+        public int hp = 10;
+
+        /// <summary>带分组的成员——分组要装配在元素**内部**。</summary>
+        [BoxGroup("基础")]
+        public int level = 1;
+
+        /// <summary>带顺序的成员——排到元素那一层的最前。</summary>
+        [PropertyOrder(-1f)]
+        public int priority;
+    }
+
+    /// <summary>只带原生装饰器的元素类型——不该被节点化。</summary>
+    [Serializable]
+    internal class NativeOnlyItem
+    {
+        /// <summary>Unity 自己的装饰器（写全名：NUnit 也有一个 <c>[Range]</c>）。</summary>
+        [UnityEngine.Range(0f, 1f)]
+        public float ratio;
+    }
+
+    /// <summary>元素里嵌套一个集合——深度只做一层。</summary>
+    [Serializable]
+    internal class OuterWithCollection
+    {
+        /// <summary>元素**里面**的集合：本轮不节点化。</summary>
+        [ListDrawerSettings]
+        public List<ElementItem> inner = new List<ElementItem> { new ElementItem() };
+    }
+
+    /// <summary>元素类型里只有反射成员——窄判据为假（读路径留下一轮）。</summary>
+    [Serializable]
+    internal class ReflectedOnlyItem
+    {
+        /// <summary>普通字段。</summary>
+        public int plain = 1;
+
+        /// <summary>唯一的用法——序列化通道看不见它。</summary>
+        [ShowInInspector]
+        public int Tag => plain;
+    }
+
+    /// <summary>元素类型里既有序列化字段的特性、也有反射成员（后者本轮不出现）。</summary>
+    [Serializable]
+    internal class InspectedElementItem
+    {
+        /// <summary>条件开关。</summary>
+        public bool alive = true;
+
+        /// <summary>序列化字段上的特性——这一半照常生效。</summary>
+        [ShowIf(nameof(alive))]
+        public int hp = 10;
+
+        /// <summary>反射成员——元素里的读路径留下一轮。</summary>
+        [ShowInInspector]
+        public int Tag => hp;
+    }
+
+    /// <summary>嵌套类型里带一个集合——这个集合照样节点化（祖先链里没有元素层）。</summary>
+    [Serializable]
+    internal class NestedCollectionHolder
+    {
+        /// <summary>容器与锚：嵌套类型里有本包特性才会展开。</summary>
+        [ListDrawerSettings]
+        public List<ElementItem> list = new List<ElementItem> { new ElementItem() };
+    }
+
+    /// <summary>元素节点化的主对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class CollectionElementFixture : ScriptableObject
+    {
+        /// <summary>元素类型用到了本包 → 建元素层。</summary>
+        [ListDrawerSettings]
+        public List<ElementItem> items = new List<ElementItem>
+        {
+            new ElementItem(), new ElementItem(), new ElementItem(),
+        };
+
+        /// <summary>对照：元素类型只带原生装饰器 → 不建层。</summary>
+        [ListDrawerSettings]
+        public List<NativeOnlyItem> native = new List<NativeOnlyItem> { new NativeOnlyItem() };
+
+        /// <summary>对照：标量元素没有特性可生效 → 不建层。</summary>
+        [ListDrawerSettings]
+        public List<int> numbers = new List<int> { 1, 2 };
+
+        /// <summary>嵌套类型里的集合 → 照样建层。</summary>
+        public NestedCollectionHolder holder = new NestedCollectionHolder();
+    }
+
+    /// <summary>元素类型用到了本包，但字段上没有任何会让本包接管它的特性。</summary>
+    [HideMonoScript]
+    internal sealed class NoContainerElementFixture : ScriptableObject
+    {
+        /// <summary>没有被接管的集合——元素里的特性不会生效（告警一次）。</summary>
+        public List<ElementItem> items = new List<ElementItem> { new ElementItem() };
+    }
+
+    /// <summary>表格形态的集合——本轮不节点化。</summary>
+    [HideMonoScript]
+    internal sealed class TableElementFixture : ScriptableObject
+    {
+        /// <summary>表格：单元格画法逐字不变。</summary>
+        [TableList]
+        public List<ElementItem> rows = new List<ElementItem> { new ElementItem() };
+    }
+
+    /// <summary>元素**里面**的集合——深度只做一层。</summary>
+    [HideMonoScript]
+    internal sealed class NestedCollectionElementFixture : ScriptableObject
+    {
+        /// <summary>外层照常节点化；内层不递归。</summary>
+        [ListDrawerSettings]
+        public List<OuterWithCollection> outer = new List<OuterWithCollection> { new OuterWithCollection() };
+    }
+
+    /// <summary>元素类型里只有反射成员——层不建，但要告警。</summary>
+    [HideMonoScript]
+    internal sealed class ReflectedOnlyElementFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法在元素类型的反射成员上。</summary>
+        [ListDrawerSettings]
+        public List<ReflectedOnlyItem> items = new List<ReflectedOnlyItem> { new ReflectedOnlyItem() };
+    }
+
+    /// <summary>元素类型里既有序列化字段的特性、也有反射成员。</summary>
+    [HideMonoScript]
+    internal sealed class InspectedElementFixture : ScriptableObject
+    {
+        /// <summary>层照建，但元素里的反射成员不出现（告警一次）。</summary>
+        [ListDrawerSettings]
+        public List<InspectedElementItem> items = new List<InspectedElementItem> { new InspectedElementItem() };
+    }
+}

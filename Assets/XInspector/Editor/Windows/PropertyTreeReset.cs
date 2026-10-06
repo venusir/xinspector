@@ -120,6 +120,14 @@ namespace XInspector.Editor
         /// <param name="paths">收集到的路径。</param>
         private static void Collect(InspectorProperty node, List<string> paths)
         {
+            // 元素子树整体不进名单：集合字段自己的路径已经覆盖了整份数组，而这条路在
+            // **跨趟**的时机运行（工具栏按钮），那时元素层可能早已重建过若干轮——
+            // 旧路径只是白跑一次 FindProperty。见 CollectionElementExpansion 的有效窗口。
+            if (CollectionElementExpansion.IsElementNode(node))
+            {
+                return;
+            }
+
             if (node.Kind == InspectorPropertyKind.Member &&
                 !string.Equals(node.Path, ScriptBindingProperty, System.StringComparison.Ordinal))
             {

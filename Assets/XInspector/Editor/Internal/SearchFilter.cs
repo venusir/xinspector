@@ -359,6 +359,15 @@ namespace XInspector.Editor
             {
                 var child = children[i];
 
+                // 元素节点与它的子树**不参与节点级过滤**：元素的行过滤由容器的行掩码负责
+                // （见 SearchFilterState.EnsureListRows），节点级再插一脚会把「整行命中、
+                // 某个字段没命中」的元素拆得七零八落。跳过同样省掉每查询 O(元素×字段) 的走树
+                // ——元素节点是**跨同步点作废**的（见 CollectionElementExpansion 的有效窗口）。
+                if (CollectionElementExpansion.IsElementNode(child))
+                {
+                    continue;
+                }
+
                 if (SearchMatcher.NodeMatchesSelf(child, query))
                 {
                     MarkKeepAll(child);
@@ -385,6 +394,12 @@ namespace XInspector.Editor
             var children = node.Children;
             for (var i = 0; i < children.Count; i++)
             {
+                // 元素子树与 Collect 同款地跳过：命中集里不该出现元素节点。
+                if (CollectionElementExpansion.IsElementNode(children[i]))
+                {
+                    continue;
+                }
+
                 MarkKeepAll(children[i]);
             }
         }

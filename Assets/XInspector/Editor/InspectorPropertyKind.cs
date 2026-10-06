@@ -21,6 +21,13 @@ namespace XInspector.Editor
 
         /// <summary>
         /// 成员节点，对应一个字段或属性。
+        /// <para>
+        /// <b>集合的元素节点也是 <see cref="Member"/></b>（<c>Member == null</c>、路径形如
+        /// <c>items.Array.data[0]</c>）。路径照旧交给序列化系统（<c>FindProperty</c> 认得它），
+        /// 而按名解析容器（<c>SerializedMemberResolver.FindNestedScopeNode</c>）靠的正是这一条——
+        /// 单列一个新 Kind 会让元素成员里的条件**静默看错对象**。它的身份不跨结构变更，
+        /// 见 <see cref="InspectorProperty.RawChildren"/>。
+        /// </para>
         /// </summary>
         Member = 2,
 

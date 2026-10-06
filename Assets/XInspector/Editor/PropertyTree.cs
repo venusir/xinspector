@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -223,6 +224,16 @@ namespace XInspector.Editor
         internal TreeLifecycleHooks Lifecycle { get; set; }
 
         /// <summary>
+        /// 建了元素层的集合节点，供每趟绘制之前的对账使用（见 <see cref="CollectionElementSync"/>）。
+        /// </summary>
+        /// <remarks>
+        /// 登记制而不是每趟走树找：走树是 O(全部节点)，而名单只有几个元素、比较也只是读一次
+        /// <c>arraySize</c>——这条路径每帧（其实是每个 GUI 事件）都要跑。
+        /// 只有**真的建了层**的集合会进来，故绝大多数工程里它是空的。
+        /// </remarks>
+        internal List<InspectorProperty> ElementCollections { get; } = new List<InspectorProperty>();
+
+        /// <summary>
         /// 绘制整棵树。
         /// </summary>
         /// <remarks>
@@ -239,6 +250,14 @@ namespace XInspector.Editor
             {
                 RunStateUpdate();
             }
+
+            // 元素层对账：集合的元素节点必须与 arraySize 一致——不一致就整层重建
+            // （撤销、外部改动、以及我们自己的增删都靠这一下收敛）。
+            //
+            // **放在最前面**：搜索过滤会从任意一个 ShouldDraw 惰性触发、整棵子树走树，
+            // 可能先于集合绘制器读到元素节点；「元素层在本趟内有效」必须是先于**所有**
+            // 消费者的前置条件。理由与「为什么只比长度就够」见 CollectionElementSync。
+            CollectionElementSync.ReconcileAll(this);
 
             Root.Draw();
         }
@@ -296,10 +315,16 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="node">起始节点。</param>
         /// <remarks>
+        /// <para>
         /// 手写递归而非走 <see cref="InspectorProperty.Children"/>：那是个只读列表接口，
         /// 而这里与构建期一样可以直接用内部列表，少一层接口调用。
+        /// </para>
+        /// <para>
+        /// 元素层的重建也调它（<c>PropertyTreeBuilder.RebuildElementLayer</c>）：
+        /// 被丢掉的元素子树里的 <c>IDisposable</c> 状态必须释放，语义与整树释放完全相同。
+        /// </para>
         /// </remarks>
-        private static void DisposeNode(InspectorProperty node)
+        internal static void DisposeNode(InspectorProperty node)
         {
             node.State.Reset();
 

@@ -103,7 +103,34 @@ namespace XInspector.Editor
                 return false;
             }
 
-            return HasSupportedField(declaredType, new HashSet<Type>(), 0);
+            return HasSupportedField(declaredType, new HashSet<Type>(), 0, true);
+        }
+
+        /// <summary>
+        /// 这个类型（含更深层）的**可序列化字段**里有没有本包支持的特性——判据的唯一实现处。
+        /// </summary>
+        /// <param name="type">类型。</param>
+        /// <param name="includeNonSerializedMembers">
+        /// 要不要把「迭代器看不见、但会产生节点的成员」（<c>[ShowInInspector]</c> 的字段与属性、
+        /// 会生成方法节点的 <c>[Button]</c>）算进来。
+        /// <para>
+        /// 嵌套类型是 <c>true</c>（那些消费者自 §十六 起都在）；**集合元素是 <c>false</c>**——
+        /// 元素里的实例读路径留下一轮（<c>ReflectedAccessor</c> 还不认 <c>Array.data[i]</c> 段），
+        /// 把那一半算进来等于「展开了却什么都画不出来」，比不展开更糟（§十六 的教训：
+        /// 判据放开与消费者到位必须同批）。
+        /// </para>
+        /// </param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 只按**声明类型**走，不解包数组 / <c>List</c>：要不要为某个集合建元素层，
+        /// 判据问的是「**元素类型**里有没有用得上的东西」（见
+        /// <see cref="CollectionElementExpansion.UsesPackageInElement"/>），
+        /// 由调用方把元素类型递进来。数组字段本身永远不算——它要么被本包接管（另判），
+        /// 要么整份交给 Unity。
+        /// </remarks>
+        internal static bool ContainsSupportedFields(Type type, bool includeNonSerializedMembers)
+        {
+            return HasSupportedField(type, new HashSet<Type>(), 0, includeNonSerializedMembers);
         }
 
         /// <summary>
@@ -410,8 +437,10 @@ namespace XInspector.Editor
         /// <param name="type">类型。</param>
         /// <param name="visited">已访问的类型（挡环形引用）。</param>
         /// <param name="depth">当前深度。</param>
+        /// <param name="includeNonSerializedMembers">要不要算上迭代器看不见的那些成员（见 <see cref="ContainsSupportedFields"/>）。</param>
         /// <returns>有返回 <c>true</c>。</returns>
-        private static bool HasSupportedField(Type type, HashSet<Type> visited, int depth)
+        private static bool HasSupportedField(
+            Type type, HashSet<Type> visited, int depth, bool includeNonSerializedMembers)
         {
             if (type == null || depth > MaxDepth || !visited.Add(type))
             {
@@ -419,7 +448,7 @@ namespace XInspector.Editor
             }
 
             // 与 HasSupportedMember 同一条腿：迭代器看不见的那些成员。
-            if (HasNonSerializedNodeMember(type))
+            if (includeNonSerializedMembers && HasNonSerializedNodeMember(type))
             {
                 return true;
             }
@@ -447,7 +476,7 @@ namespace XInspector.Editor
                         return true;
                     }
 
-                    if (HasSupportedField(field.FieldType, visited, depth + 1))
+                    if (HasSupportedField(field.FieldType, visited, depth + 1, includeNonSerializedMembers))
                     {
                         return true;
                     }
@@ -460,7 +489,11 @@ namespace XInspector.Editor
         /// <summary>该字段算不算「会被 Unity 序列化」（展开只看这些字段的特性）。</summary>
         /// <param name="field">字段。</param>
         /// <returns>算返回 <c>true</c>。</returns>
-        private static bool IsSerializableField(FieldInfo field)
+        /// <remarks>
+        /// 元素层的边界扫描（<c>CollectionElementExpansion</c>）也用它——
+        /// 「哪些字段会进树」这件事只该有一个答案。
+        /// </remarks>
+        internal static bool IsSerializableField(FieldInfo field)
         {
             if (field.IsStatic || field.IsNotSerialized || field.IsDefined(typeof(HideInInspector), true))
             {

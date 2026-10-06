@@ -93,9 +93,17 @@ namespace XInspector.Tests.Editor
             }
         }
 
-        /// <summary>数组不展开（元素个数随时可变，那是元素节点化的领域）。</summary>
+        /// <summary>
+        /// **没被本包接管**的数组不建元素节点。
+        /// </summary>
+        /// <remarks>
+        /// 2026-10-06 随元素节点化改名并改口径：数组**能**节点化了，但按需——元素类型用到本包
+        /// **且**这个集合被本包接管（有 <c>[ListDrawerSettings]</c> 一类）时才会。
+        /// 这个夹具的 <c>array</c> 字段一个特性都没标，因此仍整份交给 Unity；
+        /// 「用到本包的集合建元素层」那一半在 <c>CollectionElementNodeTests</c>。
+        /// </remarks>
         [Test]
-        public void 数组不展开()
+        public void 未接管的数组不建元素节点()
         {
             var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
             try
