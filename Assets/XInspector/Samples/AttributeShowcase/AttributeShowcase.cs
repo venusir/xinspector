@@ -775,6 +775,35 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 调色板
+
+        /// <summary>
+        /// 具名形态：找的是工程里**名为 `ShowcasePalette`** 的那份调色板资产
+        /// （名字就是资产文件名去扩展名）——本目录下的 `ShowcasePalette.asset` 正是它。
+        /// 字段上方一行色块，点一下填进字段；原生颜色字段照常在下面。
+        /// 当前值命中某一格时那一格会描一圈白边。
+        /// </summary>
+        [ColorPalette("ShowcasePalette")]
+        public Color accent = new Color(0.9019608f, 0.49411765f, 0.13333334f);
+
+        /// <summary>
+        /// 无参形态：用工程里**恰好唯一**的那份调色板。示例工程里有两份（这份与下面那种
+        /// 「什么都没有」的情形合起来说明规则），所以这一格**会告警并退回普通绘制**——
+        /// 那是刻意的演示：无参形态在有多份时不该猜。
+        /// 想看它工作，把别的调色板资产从工程里移走即可。
+        /// </summary>
+        [ColorPalette]
+        public Color single = Color.white;
+
+        /// <summary>
+        /// 找不到时的兜底：Console 里一条 `[XInspector] …` 告警，字段照常可编辑。
+        /// 本包的立场是「特性配置不对绝不让字段消失」。
+        /// </summary>
+        [ColorPalette("这个调色板不存在")]
+        public Color missing = Color.gray;
+
+        #endregion
+
         #region 集合与表格
 
         /// <summary>原生对照：没标任何特性，数组照旧由 Unity 画（折行、自带增删与拖拽）。</summary>

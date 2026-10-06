@@ -27,6 +27,9 @@
 
 **遗留**：`AttributeProcessorRegistry` 是 `internal`（`DrawerTypeRegistry` 是 public）。
 若使用方需要「我的处理器到底被扫到了没」这样的诊断面，把它改成 public 是纯新增。
+**2026-10-07 再评估后仍不做**：触发条件（真有使用方要这个诊断面）没到，而把可变数组交给
+使用方反而有风险——`DrawerTypeRegistry` 那边暴露的是 `IReadOnlyList`，要转就得连返回类型
+一起改（仓内调用点跟着动）。留着，等真有诉求那一轮再一起做。
 
 ---
 
@@ -102,7 +105,7 @@ Odin 官方签名后（[Pipeline.md](Modules/Pipeline.md) §六），原先那�
 | `[AssetList]` | **L6** ✅ **2026-10-06 已落地**（Pipeline §二十；**两形态都做**——判据兑现） | 官方原文「替换默认的列表绘制器」，且明说对列表与单元素**行为不同**——只做单元素那半会得到一个语义随目标类型而变的半成品 |
 | `[TypeDrawerSettings]` | **L7 前置**（2026-10-06 改判） | 它要的是「**可写的 `System.Type` 通道**」：`BaseType`/`Filter` 的语义全是约束一个**类型选择器的候选集**，而本包 `System.Type` 只能经只读反射后端出场、写回无落点——今天实现出来必然是静默 no-op。自研序列化能持久化 `System.Type` 之后才是可做的（与字典/矩阵同类） |
 | `[TypeFilter]` | **⛔ 不做** | 唯一构造是 resolved string（样例里是方法）；被标注字段还是抽象/接口类型，另需 L7 的类型切换 |
-| `[ColorPalette]` | **卡在设计** | 构造参数都过得了边界，缺的是数据：Odin 的调色板存在它自己的偏好设置里。得先定「命名调色板存在哪、谁来编辑」 |
+| `[ColorPalette]` | ✅ **已做**（2026-10-07） | 当初「卡在设计」那一层定成「**工程内 ScriptableObject 资产** + 按资产名查找」（无参形态用工程里唯一那份）。选资产而非编辑器偏好：后者不进版本控制、不跨机器。见 Pipeline §二十七 |
 
 **真正的 L1b 剩余**：`[InlineEditor]` 一族（含依赖它的 `[ShowIn/HideIn/DisableInInlineEditors]`）、
 路径选择器 `[FilePath]` `[FolderPath]`、`[MinMaxSlider]` `[PreviewField]`

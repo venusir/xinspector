@@ -228,6 +228,7 @@ public static string BuildTag = "静态成员也可以标";
 [ValueDropdown("options")]                     public string difficulty;   // 选项来自数组
 [ValueDropdown("paths", AppendNextDrawer = true)] public string picked;    // 小按钮 + 普通框
 [ValueDropdown(nameof(GetLevels))]             public int level;           // 来源可以是方法/属性
+[ColorPalette("UI")]                           public Color accent;         // 调色板（工程内资产）
 [AssetSelector]                                public Material anyMaterial; // 资产下拉
 [AssetSelector(Paths = "Assets/Art", Filter = "t:Material")] public Material scoped;
 ```
@@ -242,6 +243,8 @@ public static string BuildTag = "静态成员也可以标";
 | `[MinMaxSlider]` 的边界 | 可以是字面量、一个 `Vector2` 成员、两个 `float` 成员或混搭；那三个「成员」**也可以是普通字段/属性或无参方法**（2026-10-06 起）。**只作用 `Vector2`**（`Vector2Int` 不做：值后端不支持它）。边界出现 NaN/无穷时退回普通绘制；动态成员的值被改成倒置时**自动换序** |
 | `[PreviewField]` 的方块 | **方块是预览、不是控件**——可编辑的是旁边那个对象字段（原生控件，拖拽赋值照常）。宽度不够时字段排到下一行。默认高度 64、默认对齐 `Left`，都由本包定 |
 | `[ValueDropdown]` 的树形 | 选项里带 `/` 就**分子菜单**（与 Odin 一致，默认就是树形）；`FlattenTreeView = true` 拍平成一层 |
+| `[ColorPalette]` 的调色板 | **工程内的一份资产**（右键 `Create/XInspector/Color Palette` 建 `XInspectorColorPalette`），不是编辑器偏好——那样能进版本控制、能团队共享。`[ColorPalette("名字")]` 按**资产文件名**找（大小写不敏感、改名即改名）；`[ColorPalette]` 用工程里**唯一**那份，零份或多份时**告警并退回普通绘制**（多份时列候选名）。找不到**不让字段消失** |
+| `[ColorPalette]` 的形态 | **透传型**：字段上方一行色块（当前值命中的那格**描一圈白边**，容差 1/255），点一下填进去；原生颜色字段照常在下面。格子 16 像素、间距 2 像素是**本包自定值**，放不下折行而不缩格子。**多选值不一致时整行不画**（点一下会把主目标的颜色铺到全部目标）。**只作用单个 `Color` 字段**——数组与 `List<Color>` 不做 |
 | `[ValueDropdown]` 的类型判定 | 源与目标类型必须一致；**枚举还要求成员名与顺序完全一致**——不符则**拒绝这次选择并告警**，绝不按索引硬写。序列化来源比 `propertyType`，反射来源比 CLR 类型（对象引用还要求**能赋给字段的声明类型**）——两条通道共用同一份枚举判据 |
 | `[ValueDropdown]` 的选项标签 | 序列化来源按元素类型格式化；反射来源与 `[ShowInInspector]` 的只读展示**共用同一个格式化器**——因此浮点精度（`0.###` 对 `0.######`）与 Unity 空对象的写法（`(None)` 对 `None`）在两种来源下**略有出入**，这是有意的取舍：不为此再写第二套格式化器 |
 | `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |

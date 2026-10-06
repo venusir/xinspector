@@ -17,7 +17,7 @@
 
 **本项目的家底（2026-10-07，第二十一批之后）：**
 
-- 公开特性 **87 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **88 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
   **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
@@ -170,7 +170,7 @@
 | `[AssetList]` | ✅ 已实现 | 2026-10-06（L6，第十七批）：**两形态都做**（列表 + 单元素）；只声明 `Path`/`AssetNamePrefix` 两个旋钮，官方另外四个不声明（见 Pipeline §二十） |
 | `[AssetSelector]` | ✅ 已实现 | 透传型：小按钮 + 编辑器自带菜单（无搜索框/图标/多选，见 Pipeline §六） |
 | `[ChildGameObjectsOnly]` | ✅ 已实现 | — |
-| `[ColorPalette]` | ❌ 缺 | **卡在设计**（不再是「缺一层」：需先定「命名调色板存在哪、谁来编辑」，见 Pipeline §六） |
+| `[ColorPalette]` | ✅ 已实现 | 2026-10-07（第二十三批）：调色板来源定为**工程内 ScriptableObject 资产**（`XInspectorColorPalette`），按**资产名**查找；无参形态用工程里**唯一**那份，多份或零份时告警并退回；**透传型**绘制器（色块行 + 原生颜色字段） |
 | `[DisplayAsString]` | ✅ 已实现 | — |
 | `[EnumPaging]` | ✅ 已实现 | — |
 | `[EnumToggleButtons]` | ✅ 已实现 | — |
@@ -381,10 +381,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 87 已实现 + 9 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 88 已实现 + 8 缺 + 8 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 87 个：
+已实现的 88 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -398,7 +398,8 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 - **值绘制**（16）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
   `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
   `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
-  `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）
+  `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）、
+  `[ColorPalette]`（2026-10-07，**卡在设计的那一层补上了**：工程内调色板资产 + 按名查找）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
 - **预制体上下文**（6，2026-10-04 L2 收尾之一）：四个条件 `[ShowIn]` `[HideIn]` `[EnableIn]`
@@ -429,10 +430,11 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 9 个」也不等于「9 份工作量」**：2026-10-06 盘点之后，剩下的 9 个缺口里
+**「缺 8 个」也不等于「8 份工作量」**：2026-10-07 盘点之后，剩下的 8 个缺口里
 **5 个是 L7 本体**（多态引用与类型注册表一族）、**2 个是 L7 前置**（字典 / 矩阵——Unity
 根本不序列化，字段进不了树）、**1 个也是 L7 前置**（`[TypeDrawerSettings]`——缺一条可写的
-`System.Type` 通道）、**1 个卡在设计**（`[ColorPalette]` 的调色板来源）。
+`System.Type` 通道）。**「卡在设计」那一列归零**（`[ColorPalette]` 的调色板来源已定：
+工程内资产，2026-10-07），故现在的缺口**全部是 L7 那条产品线及其前置**。
 换句话说：**L0–L6 里「做得了、只是还没做」的已归零**（L1a、L1b 两族、`[InlineEditor]` 一族、
 L5 的按钮与回调两批、L3 的反射后端与窗口、L2 的预制体上下文族、L4 的顺序与内联、
 L6 的容器 / 元素 / 回调 / 搜索 / 资产列表，以及两条「嵌套 / 元素层」能力轮，全部清完）。
@@ -441,6 +443,8 @@ L6 的容器 / 元素 / 回调 / 搜索 / 资产列表，以及两条「嵌套 /
 **2026-10-04 改判的 5 项**（同一轮逐个核过签名）：`[Searchable]`→L6、
 `[AssetList]`→L6、`[TypeDrawerSettings]`→L3、`[TypeFilter]`→⛔、
 `[ColorPalette]`→卡在设计。它们原先都记在 L1b 下，是**层判错了**，不是「还没排到」。
+（`[ColorPalette]` 那一项**已于 2026-10-07 落地**——设计那一层定成「工程内资产、按名查找」，
+见 Pipeline §二十七。）
 （2026-10-06 又一次改判：`[TypeDrawerSettings]` 由 L3 → **L7 前置**——见 L3 段末追记。
 **这是同一项第三次挪层**，也是「核对签名之后再动手」这条纪律里最曲折的一条：它的签名
 第一次核就被抄对了，错的是**对「它能干什么」的判断**。）

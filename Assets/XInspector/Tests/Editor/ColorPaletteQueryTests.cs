@@ -85,7 +85,13 @@ namespace XInspector.Tests.Editor
             Assert.That(ColorPaletteQuery.Find(string.Empty), Is.Null);
         }
 
-        /// <summary>全部按名字排序——告警里要列候选，顺序得稳定。</summary>
+        /// <summary>
+        /// 全部按名字排序——告警里要列候选，顺序得稳定。
+        /// </summary>
+        /// <remarks>
+        /// 断的是**这三个之间的相对次序**，不是绝对条数：扫描是全工程的，展示台里那份示例
+        /// 调色板也会出现在表里（而且它本来就应该在）。
+        /// </remarks>
         [Test]
         public void 全部按名字排序()
         {
@@ -94,11 +100,17 @@ namespace XInspector.Tests.Editor
             CreatePalette("Beta");
 
             var all = ColorPaletteQuery.All();
+            var ours = new List<string>();
 
-            Assert.That(all.Count, Is.EqualTo(3));
-            Assert.That(all[0].name, Is.EqualTo("Alpha"));
-            Assert.That(all[1].name, Is.EqualTo("Beta"));
-            Assert.That(all[2].name, Is.EqualTo("Zeta"));
+            foreach (var palette in all)
+            {
+                if (palette.name == "Alpha" || palette.name == "Beta" || palette.name == "Zeta")
+                {
+                    ours.Add(palette.name);
+                }
+            }
+
+            Assert.That(ours, Is.EqualTo(new[] { "Alpha", "Beta", "Zeta" }));
         }
 
         /// <summary>
@@ -112,16 +124,36 @@ namespace XInspector.Tests.Editor
         [Test]
         public void 查找是惰性缓存且失效后重扫()
         {
-            CreatePalette("Alpha");
+            var alpha = CreatePalette("Alpha");
 
             var first = ColorPaletteQuery.All();
-            Assert.That(first.Count, Is.EqualTo(1));
             Assert.That(ColorPaletteQuery.All(), Is.SameAs(first), "没有资产变动 ⇒ 不重扫。");
 
             CreatePalette("Beta");
 
             ColorPaletteQuery.Invalidate();
-            Assert.That(ColorPaletteQuery.All().Count, Is.EqualTo(2), "失效之后重扫，新资产进表。");
+
+            var rescanned = ColorPaletteQuery.All();
+            Assert.That(rescanned, Is.Not.SameAs(first), "失效之后重扫，换一份新表。");
+            Assert.That(rescanned, Does.Contain(alpha), "重扫之后仍找得到原来那份。");
+            Assert.That(ColorPaletteQuery.Find("Beta"), Is.Not.Null, "新资产也进表了。");
+        }
+
+        /// <summary>
+        /// 展示台里那份示例调色板找得到。
+        /// </summary>
+        /// <remarks>
+        /// 它是 <c>[ColorPalette("ShowcasePalette")]</c> 那一格的落点——资产坏掉或丢了的话，
+        /// 展示台会**静默**变成兜底演示（告警 + 退回普通绘制），看的人只会以为特性没生效。
+        /// 这条守卫与沙盒场景对齐检查同一个理由：仓库内的一致性也是门禁的事。
+        /// </remarks>
+        [Test]
+        public void 展示台的示例调色板找得到()
+        {
+            Assert.That(
+                ColorPaletteQuery.Find("ShowcasePalette"),
+                Is.Not.Null,
+                "装好的包里应当带着 Samples/AttributeShowcase/ShowcasePalette.asset。");
         }
 
         /// <summary>调色板里的颜色是**只读视图**，且空数组不会漏出 <c>null</c>。</summary>
