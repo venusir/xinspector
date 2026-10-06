@@ -87,7 +87,8 @@ namespace XInspector.Editor
             {
                 // 「选择」（只有 [AssetList] 的列表形态才画这个按钮）：弹按类型过滤的资产菜单。
                 // 这是**事件路径**——全工程搜索只在这一刻发生（见 AssetListQuery 的纪律）。
-                AssetListMenu.Show(property, property.State.Get<AssetListModel>(), serializedProperty);
+                AssetListMenu.Show(
+                    property, property.State.Get<AssetListModel>(), serializedProperty, append: true);
             }
 
             if (!state.Expanded)

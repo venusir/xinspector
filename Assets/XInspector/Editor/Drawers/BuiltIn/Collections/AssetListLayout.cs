@@ -94,6 +94,20 @@ namespace XInspector.Editor
             return new RowRects(thumbnail, field, remove);
         }
 
+        /// <summary>
+        /// **单元素形态**：把字段矩形切成「对象字段 + 选择按钮」两块。
+        /// </summary>
+        /// <param name="field">对象字段的矩形（由 <c>PreviewFieldLayout.FieldRectBeside</c> 给出）。</param>
+        /// <param name="input">切给对象字段的部分。</param>
+        /// <param name="button">切给「选择」按钮的部分。</param>
+        /// <remarks>宽度不够时**不缩成负数**（与 <see cref="Allocate"/> 同一条纪律）。</remarks>
+        public static void SplitFieldAndButton(Rect field, out Rect input, out Rect button)
+        {
+            button = new Rect(field.xMax - ButtonWidth, field.y, ButtonWidth, field.height);
+            input = new Rect(
+                field.x, field.y, Mathf.Max(0f, field.width - ButtonWidth - Spacing), field.height);
+        }
+
         #endregion
 
         #region 绘制
@@ -305,12 +319,16 @@ namespace XInspector.Editor
         /// <summary>
         /// 弹出「选择」菜单。
         /// </summary>
-        /// <param name="property">集合节点（写回与告警去重要用）。</param>
+        /// <param name="property">节点（写回与告警去重要用）。</param>
         /// <param name="model">构建期模型。</param>
-        /// <param name="array">集合的序列化属性。</param>
-        public static void Show(InspectorProperty property, AssetListModel model, SerializedProperty array)
+        /// <param name="target">
+        /// 写回的目标：**列表形态**是集合属性（选中后追加进去）；**单元素形态**是字段本身（赋值）。
+        /// </param>
+        /// <param name="append">真 = 追加进列表；假 = 赋给单元素字段。</param>
+        public static void Show(
+            InspectorProperty property, AssetListModel model, SerializedProperty target, bool append)
         {
-            if (model == null || array == null)
+            if (model == null || target == null)
             {
                 return;
             }
@@ -336,7 +354,7 @@ namespace XInspector.Editor
                     new GUIContent(options[i].Path),
                     false,
                     OnSelected,
-                    new Payload(property, array.Copy(), model.ElementType, options[i].AssetPath));
+                    new Payload(property, target.Copy(), model.ElementType, options[i].AssetPath, append));
             }
 
             menu.DropDown(new Rect(Event.current.mousePosition, Vector2.zero));
@@ -362,11 +380,11 @@ namespace XInspector.Editor
         /// <summary>菜单回调的载荷。</summary>
         private readonly struct Payload
         {
-            /// <summary>集合节点。</summary>
+            /// <summary>节点。</summary>
             public readonly InspectorProperty Property;
 
-            /// <summary>集合的序列化属性（菜单打开期间的副本）。</summary>
-            public readonly SerializedProperty Array;
+            /// <summary>写回的目标（菜单打开期间的副本）。</summary>
+            public readonly SerializedProperty Target;
 
             /// <summary>元素类型。</summary>
             public readonly Type ElementType;
@@ -374,18 +392,24 @@ namespace XInspector.Editor
             /// <summary>选中的资产路径。</summary>
             public readonly string AssetPath;
 
-            /// <summary>以四段构造。</summary>
-            /// <param name="property">集合节点。</param>
-            /// <param name="array">集合的序列化属性。</param>
+            /// <summary>真 = 追加进列表；假 = 赋给单元素字段。</summary>
+            public readonly bool Append;
+
+            /// <summary>以五段构造。</summary>
+            /// <param name="property">节点。</param>
+            /// <param name="target">写回目标。</param>
             /// <param name="elementType">元素类型。</param>
             /// <param name="assetPath">资产路径。</param>
+            /// <param name="append">追加还是赋值。</param>
             public Payload(
-                InspectorProperty property, SerializedProperty array, Type elementType, string assetPath)
+                InspectorProperty property, SerializedProperty target, Type elementType, string assetPath,
+                bool append)
             {
                 Property = property;
-                Array = array;
+                Target = target;
                 ElementType = elementType;
                 AssetPath = assetPath;
+                Append = append;
             }
         }
 
@@ -404,7 +428,13 @@ namespace XInspector.Editor
                 return;
             }
 
-            AssetListWrite.TryAppend(data.Property, data.Array, data.ElementType, new[] { asset });
+            if (data.Append)
+            {
+                AssetListWrite.TryAppend(data.Property, data.Target, data.ElementType, new[] { asset });
+                return;
+            }
+
+            AssetListWrite.TryAssign(data.Property, data.Target, data.ElementType, asset);
         }
 
         #endregion

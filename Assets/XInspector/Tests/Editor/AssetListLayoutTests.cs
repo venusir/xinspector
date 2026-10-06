@@ -123,6 +123,23 @@ namespace XInspector.Tests.Editor
             Assert.That(rects.Remove.width, Is.GreaterThanOrEqualTo(0f));
         }
 
+        /// <summary>单元素形态：从字段右端切出「选择」按钮，字段不缩成负数、不压到按钮上。</summary>
+        [Test]
+        public void 单元素几何_按钮从右端切出()
+        {
+            var field = new Rect(100f, 0f, 200f, 18f);
+
+            AssetListLayout.SplitFieldAndButton(field, out var input, out var button);
+
+            Assert.That(button.x, Is.EqualTo(300f - 20f));
+            Assert.That(button.width, Is.EqualTo(20f));
+            Assert.That(input.x, Is.EqualTo(100f));
+            Assert.That(input.xMax, Is.LessThanOrEqualTo(button.x - 2f));
+
+            AssetListLayout.SplitFieldAndButton(new Rect(0f, 0f, 10f, 18f), out var tiny, out _);
+            Assert.That(tiny.width, Is.GreaterThanOrEqualTo(0f), "宽度不足也不缩成负数。");
+        }
+
         #endregion
     }
 }

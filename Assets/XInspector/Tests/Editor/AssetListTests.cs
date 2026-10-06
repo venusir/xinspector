@@ -95,6 +95,10 @@ namespace XInspector.Tests.Editor
                 var node = Find(tree.Root, "single");
 
                 Assert.That(IndexOf<ListDrawerSettingsDrawer>(node), Is.EqualTo(-1));
+                Assert.That(
+                    IndexOf<AssetListDrawer>(node),
+                    Is.GreaterThanOrEqualTo(0),
+                    "单元素形态由它自己那一格替换型绘制器画。");
 
                 var model = node.State.Get<AssetListModel>();
                 Assert.That(model, Is.Not.Null);
