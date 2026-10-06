@@ -314,7 +314,7 @@ namespace XInspector.Tests.Editor
                     var node = Find(tree.Root, "loadout");
                     var state = StateOf(node, "剑");
 
-                    Assert.That(state.EnsureListRows(node.ValueEntry.SerializedProperty), Is.EqualTo(new[] { true, false }));
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { true, false }));
                 }
             }
             finally
@@ -335,7 +335,7 @@ namespace XInspector.Tests.Editor
                     var node = Find(tree.Root, "rows");
                     var state = StateOf(node, "哥布");
 
-                    Assert.That(state.EnsureListRows(node.ValueEntry.SerializedProperty), Is.EqualTo(new[] { false, true }));
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { false, true }));
                 }
             }
             finally
@@ -359,8 +359,119 @@ namespace XInspector.Tests.Editor
 
                     Assert.That(model, Is.Not.Null, "表格模型要在（[TableList] 建的）。");
                     Assert.That(
-                        state.EnsureTableRows(node.ValueEntry.SerializedProperty, model.Columns),
+                        state.EnsureTableRows(node, model.Columns),
                         Is.EqualTo(new[] { true, false }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **同一搜索宿主下两个同尺寸的列表不串掩码**——缓存键带宿主身份。
+        /// </summary>
+        /// <remarks>
+        /// 这条钉的是**既有缺陷的回归**：键原先只比「查询 + 长度」，第二个列表会直接复用
+        /// 第一个列表留下的掩码（静默筛错行）。元素层支持深度 &gt; 1 之后，「外层查询落到
+        /// 内层集合」成了常态，这条就更容易撞上。
+        /// </remarks>
+        [Test]
+        public void 同宿主下两个同尺寸的列表不串掩码()
+        {
+            var target = ScriptableObject.CreateInstance<TwoListSearchFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "host");
+                    var state = StateOf(host, "剑");
+
+                    var swords = Find(host, "host.swords");
+                    var wands = Find(host, "host.wands");
+
+                    Assert.That(
+                        state.EnsureListRows(swords),
+                        Is.EqualTo(new[] { true, false }),
+                        "第一个列表：剑命中。");
+
+                    Assert.That(
+                        state.EnsureListRows(wands),
+                        Is.EqualTo(new[] { false, false }),
+                        "第二个列表同尺寸但值不同——键不认宿主的话这里会拿到上一个列表的掩码。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **重建之后内层集合的行掩码重算**——节点身份进了键，新节点必然 miss。
+        /// </summary>
+        /// <remarks>
+        /// 深度 &gt; 1 的场景：外层列表是搜索宿主，内层列表在它的元素里。外层改长度会让
+        /// 内层换成**新节点**——旧键（同尺寸、同查询）若不认节点，就会把重建前的掩码
+        /// 接着用。
+        /// </remarks>
+        [Test]
+        public void 重建之后内层集合的行掩码重算()
+        {
+            var target = ScriptableObject.CreateInstance<SearchDepthFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var rows = Find(tree.Root, "rows");
+                    var state = StateOf(rows, "剑");
+
+                    var before = Find(rows.Children[0], "rows.Array.data[0].items");
+                    Assert.That(state.EnsureListRows(before), Is.EqualTo(new[] { true }), "起点：剑命中。");
+
+                    SetString(target, tree, "rows.Array.data[0].items.Array.data[0]", "盾");
+                    SetArraySize(target, tree, "rows", 2);
+
+                    Assert.That(CollectionElementSync.ReconcileAll(tree), Is.GreaterThan(0), "外层重建。");
+
+                    var after = Find(Find(tree.Root, "rows").Children[0], "rows.Array.data[0].items");
+                    Assert.That(after, Is.Not.SameAs(before), "重建换了新节点。");
+                    Assert.That(
+                        state.EnsureListRows(after),
+                        Is.EqualTo(new[] { false }),
+                        "新节点 ⇒ 键 miss ⇒ 按新数据重算。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>表格的**列集合**也进缓存键——同一节点换了列模型必须重算。</summary>
+        [Test]
+        public void 表格的列集合进了缓存键()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "table");
+                    var model = node.State.Get<TableModel>();
+                    var state = StateOf(node, "哥布");
+
+                    Assert.That(model, Is.Not.Null);
+                    Assert.That(state.EnsureTableRows(node, model.Columns), Is.EqualTo(new[] { false, true }));
+
+                    // 同节点、同查询、同尺寸，只换列集合（只留 level 列，值是 1/2）——
+                    // 键不认列的话会复用上面那份掩码。
+                    var narrow = new[] { model.Columns[0] };
+                    Assert.That(
+                        state.EnsureTableRows(node, narrow),
+                        Is.EqualTo(new[] { false, false }),
+                        "只有 level 列时「哥布」不命中——列变了就该重算。");
                 }
             }
             finally
@@ -379,13 +490,12 @@ namespace XInspector.Tests.Editor
                 using (var tree = BuildTree(target))
                 {
                     var node = Find(tree.Root, "loadout");
-                    var array = node.ValueEntry.SerializedProperty;
                     var state = StateOf(node, "剑");
 
-                    Assert.That(state.EnsureListRows(array), Is.EqualTo(new[] { true, false }));
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { true, false }));
 
                     state.Query = "盾";
-                    Assert.That(state.EnsureListRows(array), Is.EqualTo(new[] { false, true }));
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { false, true }));
                 }
             }
             finally
@@ -407,10 +517,10 @@ namespace XInspector.Tests.Editor
                     var array = node.ValueEntry.SerializedProperty;
                     var state = StateOf(node, "盾");
 
-                    Assert.That(state.EnsureListRows(array).Length, Is.EqualTo(2));
+                    Assert.That(state.EnsureListRows(node).Length, Is.EqualTo(2));
 
                     array.arraySize = 3;
-                    Assert.That(state.EnsureListRows(array).Length, Is.EqualTo(3), "新元素是末元素的副本，故也跟着命中。");
+                    Assert.That(state.EnsureListRows(node).Length, Is.EqualTo(3), "新元素是末元素的副本，故也跟着命中。");
                 }
             }
             finally
@@ -432,11 +542,11 @@ namespace XInspector.Tests.Editor
                     var state = StateOf(node, "不存在的东西");
 
                     Assert.That(
-                        SearchMatcher.HasAnyRow(state.EnsureListRows(node.ValueEntry.SerializedProperty)),
+                        SearchMatcher.HasAnyRow(state.EnsureListRows(node)),
                         Is.False);
 
                     state.Query = "   ";
-                    Assert.That(state.EnsureListRows(node.ValueEntry.SerializedProperty), Is.Null, "空白查询不产生掩码。");
+                    Assert.That(state.EnsureListRows(node), Is.Null, "空白查询不产生掩码。");
                 }
             }
             finally
@@ -455,6 +565,32 @@ namespace XInspector.Tests.Editor
         private static PropertyTree BuildTree(ScriptableObject target)
         {
             return PropertyTree.Create(new SerializedObject(target));
+        }
+
+        /// <summary>改一个字符串叶子的值，并让树看到它。</summary>
+        /// <param name="target">目标资产。</param>
+        /// <param name="tree">属性树。</param>
+        /// <param name="path">序列化路径。</param>
+        /// <param name="value">新值。</param>
+        private static void SetString(ScriptableObject target, PropertyTree tree, string path, string value)
+        {
+            var serializedObject = new SerializedObject(target);
+            serializedObject.FindProperty(path).stringValue = value;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            tree.SerializedObject.Update();
+        }
+
+        /// <summary>改一个数组的长度，并让树看到它。</summary>
+        /// <param name="target">目标资产。</param>
+        /// <param name="tree">属性树。</param>
+        /// <param name="path">数组字段路径。</param>
+        /// <param name="size">新长度。</param>
+        private static void SetArraySize(ScriptableObject target, PropertyTree tree, string path, int size)
+        {
+            var serializedObject = new SerializedObject(target);
+            serializedObject.FindProperty(path).arraySize = size;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            tree.SerializedObject.Update();
         }
 
         /// <summary>给某个宿主编一份搜索状态并设好查询。</summary>
@@ -589,6 +725,46 @@ namespace XInspector.Tests.Editor
         /// <summary>复合成员：子节点里带分组。</summary>
         [Searchable]
         public SearchStats stats = new SearchStats();
+    }
+
+    /// <summary>同一搜索宿主下两个**同尺寸**的列表——掩码缓存必须按宿主分家。</summary>
+    [Serializable]
+    internal class TwoListHost
+    {
+        /// <summary>第一个列表。</summary>
+        [ListDrawerSettings]
+        public List<string> swords = new List<string> { "剑", "盾" };
+
+        /// <summary>第二个列表（与第一个同尺寸、值不同）。</summary>
+        [ListDrawerSettings]
+        public List<string> wands = new List<string> { "弓", "杖" };
+    }
+
+    /// <summary>两个同尺寸列表的对照资产（搜索标在复合宿主上）。</summary>
+    [HideMonoScript]
+    internal sealed class TwoListSearchFixture : ScriptableObject
+    {
+        /// <summary>宿主：两个列表都在它下面，共用一份搜索状态。</summary>
+        [Searchable]
+        public TwoListHost host = new TwoListHost();
+    }
+
+    /// <summary>元素里嵌一个内层列表——外层列表是搜索宿主（深度 &gt; 1 的宿主穿透场景）。</summary>
+    [Serializable]
+    internal class SearchDepthRow
+    {
+        /// <summary>内层列表。</summary>
+        [ListDrawerSettings]
+        public List<string> items = new List<string> { "剑" };
+    }
+
+    /// <summary>深度搜索对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class SearchDepthFixture : ScriptableObject
+    {
+        /// <summary>外层：搜索宿主 + 元素层（容器由 [Searchable] 顺带注入）。</summary>
+        [Searchable]
+        public List<SearchDepthRow> rows = new List<SearchDepthRow> { new SearchDepthRow() };
     }
 
     /// <summary>展开判据的对照资产。</summary>

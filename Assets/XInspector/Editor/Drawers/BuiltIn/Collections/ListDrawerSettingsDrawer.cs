@@ -245,7 +245,7 @@ namespace XInspector.Editor
         {
             var removeIndex = -1;
             var model = property.State.Get<TableModel>();
-            var rows = RowsOf(scope, array, model);
+            var rows = RowsOf(scope, property, model);
 
             if (scope.IsActive && !SearchMatcher.HasAnyRow(rows))
             {
@@ -297,7 +297,7 @@ namespace XInspector.Editor
 
         /// <summary>这次搜索下的行掩码；没在搜索时为 <c>null</c>（等于不过滤）。</summary>
         /// <param name="scope">搜索作用域。</param>
-        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="property">集合节点（缓存键里带它的**身份**——一份状态可能服务多个集合）。</param>
         /// <param name="model">表格模型；不是表格时为 <c>null</c>。</param>
         /// <returns>逐行的掩码或 <c>null</c>。</returns>
         /// <remarks>
@@ -305,14 +305,16 @@ namespace XInspector.Editor
         /// （含复合元素下面任意一层的叶子）匹配——元素标签是 <c>Element 3</c> 那种索引名，
         /// 让它参与等于全中。
         /// </remarks>
-        private static bool[] RowsOf(SearchScope scope, SerializedProperty array, TableModel model)
+        private static bool[] RowsOf(SearchScope scope, InspectorProperty property, TableModel model)
         {
             if (!scope.IsActive)
             {
                 return null;
             }
 
-            return model != null ? scope.State.EnsureTableRows(array, model.Columns) : scope.State.EnsureListRows(array);
+            return model != null
+                ? scope.State.EnsureTableRows(property, model.Columns)
+                : scope.State.EnsureListRows(property);
         }
 
         /// <summary>画一行：复合元素自己画折叠头、单值元素交给原生控件，行尾是可选的「−」。</summary>

@@ -209,10 +209,13 @@ namespace XInspector.Editor
         private bool[] _listRows;
         private string _listQuery;
         private int _listSize = -1;
+        private InspectorProperty _listHost;
 
         private bool[] _tableRows;
         private string _tableQuery;
         private int _tableSize = -1;
+        private InspectorProperty _tableHost;
+        private TableColumn[] _tableColumns;
 
         #endregion
 
@@ -265,26 +268,40 @@ namespace XInspector.Editor
         /// <summary>
         /// 算一遍（必要时）列表的行掩码。
         /// </summary>
-        /// <param name="array">列表的序列化属性。</param>
+        /// <param name="collection">集合节点（缓存键里带**节点身份**）。</param>
         /// <returns>逐行的掩码；不过滤时为 <c>null</c>。</returns>
         /// <remarks>
+        /// <para>
         /// **行只按值匹配**：元素标签是 <c>Element 3</c> 这种索引名，让它参与的话，
         /// 任何含 <c>element</c> 的查询都会全中。
+        /// </para>
+        /// <para>
+        /// <b>缓存键必须带宿主身份。</b> 一份状态可能服务多个集合：外层 <c>[Searchable]</c>
+        /// 的查询经 <see cref="SearchScope.Find"/> 会落到元素**里面**那个集合的行掩码上
+        /// （元素层深度 &gt; 1 之后这是常态），复合宿主里也可以并排两个同尺寸集合——
+        /// 只比「查询 + 长度」会让两个集合**串掩码**（静默筛错行）。比的是**节点引用**
+        /// （零分配；重建后是新节点、自然重算）；不要比 <c>SerializedProperty</c>——
+        /// 那是按路径重取的独立实例，每次都会 miss。
+        /// </para>
         /// </remarks>
-        public bool[] EnsureListRows(SerializedProperty array)
+        public bool[] EnsureListRows(InspectorProperty collection)
         {
+            var array = collection?.ValueEntry?.SerializedProperty;
             var query = Query?.Trim();
 
-            if (!SearchMatcher.IsActive(query))
+            if (array == null || !SearchMatcher.IsActive(query))
             {
                 return null;
             }
 
-            if (_listRows != null && _listSize == array.arraySize && string.Equals(_listQuery, query, StringComparison.Ordinal))
+            if (_listRows != null && ReferenceEquals(_listHost, collection) &&
+                _listSize == array.arraySize &&
+                string.Equals(_listQuery, query, StringComparison.Ordinal))
             {
                 return _listRows;
             }
 
+            _listHost = collection;
             _listQuery = query;
             _listSize = array.arraySize;
 
@@ -305,23 +322,31 @@ namespace XInspector.Editor
         /// <summary>
         /// 算一遍（必要时）表格的行掩码。
         /// </summary>
-        /// <param name="array">表格的序列化属性。</param>
+        /// <param name="collection">表格节点（缓存键里带**节点身份**，理由同
+        /// <see cref="EnsureListRows"/>）。</param>
         /// <param name="columns">列。</param>
         /// <returns>逐行的掩码；不过滤时为 <c>null</c>。</returns>
-        public bool[] EnsureTableRows(SerializedProperty array, TableColumn[] columns)
+        /// <remarks>列集合也进缓存键——同一节点换了列模型（重建/换表格形态）必须重算。</remarks>
+        public bool[] EnsureTableRows(InspectorProperty collection, TableColumn[] columns)
         {
+            var array = collection?.ValueEntry?.SerializedProperty;
             var query = Query?.Trim();
 
-            if (!SearchMatcher.IsActive(query))
+            if (array == null || !SearchMatcher.IsActive(query))
             {
                 return null;
             }
 
-            if (_tableRows != null && _tableSize == array.arraySize && string.Equals(_tableQuery, query, StringComparison.Ordinal))
+            if (_tableRows != null && ReferenceEquals(_tableHost, collection) &&
+                ReferenceEquals(_tableColumns, columns) &&
+                _tableSize == array.arraySize &&
+                string.Equals(_tableQuery, query, StringComparison.Ordinal))
             {
                 return _tableRows;
             }
 
+            _tableHost = collection;
+            _tableColumns = columns;
             _tableQuery = query;
             _tableSize = array.arraySize;
 
