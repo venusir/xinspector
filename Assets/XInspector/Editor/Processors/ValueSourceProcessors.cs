@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -104,12 +105,18 @@ namespace XInspector.Editor
 
     /// <summary>
     /// <see cref="ValueDropdownAttribute"/>：把「选项来自哪个成员」在**构建期**解析出来。
+    /// <para>
+    /// 解析走 <see cref="MemberReferenceResolver"/> 的四级阶梯，故来源既可以是**序列化**的
+    /// 数组 / List 成员，也可以是普通字段 / 属性 / 无参方法（声明类型须实现
+    /// <see cref="IList"/>）。两个形态的消费侧不同（一个吃句柄、一个吃托管值），
+    /// 由 <see cref="ValueDropdownState"/> 上哪一个来源非 <c>null</c> 判别。
+    /// </para>
     /// </summary>
     /// <remarks>
     /// 判定「源与目标类型是否一致」**不在这里做**，而在复制那一刻由
-    /// <c>SerializedValueCopier</c> 做。理由是那需要知道元素的托管类型（反射），
-    /// 而 <see cref="SerializedProperty"/> 只给得出 <c>propertyType</c> 与枚举成员名；
-    /// 「类型对不上就按索引复制」在枚举上会静默写错，用枚举成员名比对即可挡住，
+    /// <c>SerializedValueCopier</c> / <c>ReflectedValueCopier</c> 做。理由是那需要知道元素的
+    /// 托管类型（反射），而 <see cref="SerializedProperty"/> 只给得出 <c>propertyType</c>
+    /// 与枚举成员名；「类型对不上就按索引复制」在枚举上会静默写错，用枚举成员名比对即可挡住，
     /// 且这条判定放在复制处**离得最近**、也能无头测试。
     /// </remarks>
     internal sealed class ValueDropdownProcessor : AttributeProcessor<ValueDropdownAttribute>
@@ -124,20 +131,22 @@ namespace XInspector.Editor
         {
             var state = property.State.GetOrCreate<ValueDropdownState>();
 
-            SerializedMemberResolver.TryResolve(
-                property, attribute.ValuesGetter, MemberScope.Object, MemberKind.Array,
-                out var source, out var reason);
-
-            if (source == null)
+            if (!MemberReferenceResolver.TryResolveList(
+                    property, attribute.ValuesGetter, MemberScope.Object,
+                    out var sourceList, out var source, out var elementType, out var reason))
             {
                 Debug.LogWarning(
                     $"[XInspector] 属性「{property.Path}」上的 [ValueDropdown] 选项来源「{attribute.ValuesGetter}」" +
                     $"无法解析：{reason}。该特性已忽略，字段退回普通绘制。" +
-                    "注意来源必须是**序列化**的数组或 List 字段——Odin 的 $/@ 表达式与方法调用本包不做。");
+                    "来源可以是**序列化**的数组 / List，或声明类型实现 IList 的普通字段 / 属性 / 无参方法" +
+                    "（只实现 IEnumerable 的源不收——string 也只实现 IEnumerable<char>，" +
+                    "放行会静默变出字符选项表；Odin 的 $/@ 表达式语言本包不做）。");
                 return;
             }
 
             state.Source = source;
+            state.SourceList = sourceList;
+            state.ElementType = elementType;
             state.Resolved = true;
         }
 
@@ -147,12 +156,32 @@ namespace XInspector.Editor
     /// <summary>
     /// <see cref="ValueDropdownAttribute"/> 的解析结果，挂在 <see cref="PropertyState"/> 上。
     /// </summary>
+    /// <remarks>
+    /// <b>两个形态共用一个状态对象</b>，判别式是「哪一个来源非 <c>null</c>」——
+    /// 不另设枚举或布尔开关：「谁有谁没有」是硬事实，再加一个字段就得维护它与事实同步。
+    /// 两者都为空表示解析失败（<see cref="Resolved"/> 为 <c>false</c>）。
+    /// </remarks>
     internal sealed class ValueDropdownState
     {
-        /// <summary>提供选项的数组/List 成员；解析失败为 <c>null</c>。</summary>
+        /// <summary>**序列化**形态的来源：数组 / List 的活句柄；反射形态为 <c>null</c>。</summary>
         public SerializedProperty Source;
 
-        /// <summary>来源是否解析成功。</summary>
+        /// <summary>
+        /// **反射**形态的来源：每帧现读的读取器（实例缺失或来源给回空引用时为 <c>null</c>）；
+        /// 序列化形态为 <c>null</c>。
+        /// </summary>
+        public Func<IList> SourceList;
+
+        /// <summary>
+        /// 反射形态的**元素声明类型**（从成员声明类型推，推不出来为 <c>null</c>）——
+        /// 选项标签按它格式化；序列化形态恒为 <c>null</c>。
+        /// </summary>
+        public Type ElementType;
+
+        /// <summary>
+        /// 来源是否解析成功；为 <c>true</c> 时 <see cref="Source"/> 与 <see cref="SourceList"/>
+        /// **恰有一个**非 <c>null</c>。
+        /// </summary>
         public bool Resolved;
     }
 

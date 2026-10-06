@@ -44,7 +44,11 @@ namespace XInspector.Editor
         /// <summary>Vector2。</summary>
         Vector2 = 2,
 
-        /// <summary>数组或 List（判定依据是 <see cref="SerializedProperty.isArray"/>）。</summary>
+        /// <summary>
+        /// 数组或 List（判定依据是 <see cref="SerializedProperty.isArray"/>，
+        /// **但字符串不算**——它在若干语境被 Unity 算作 <c>isArray</c>，见
+        /// <see cref="SerializedMemberResolver.IsKind"/>）。
+        /// </summary>
         Array = 3,
     }
 

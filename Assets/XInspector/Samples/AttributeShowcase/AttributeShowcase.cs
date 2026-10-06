@@ -413,6 +413,29 @@ namespace XInspector.Samples
         [ValueDropdown("difficultyOptions", AppendNextDrawer = true)]
         public string appendedDifficulty = "简单";
 
+        /// <summary>来源是**无参方法**：选项每次弹出时现算一遍（这里跟着上面的数组走）。</summary>
+        /// <returns>与 <see cref="difficultyOptions"/> 同内容的列表。</returns>
+        private List<string> MakeDifficulties()
+        {
+            return new List<string>(difficultyOptions);
+        }
+
+        /// <summary>
+        /// 来源是**方法**——Odin 里最常见的写法（<c>[ValueDropdown(nameof(GetOptions))]</c>）。
+        /// 方法返回的列表**不必序列化**，也不必是字段。
+        /// </summary>
+        [ValueDropdown(nameof(MakeDifficulties))]
+        public string difficultyFromMethod = "普通";
+
+        /// <summary>
+        /// 来源是**普通属性**（只有 <c>get</c>，Unity 不序列化它）。
+        /// </summary>
+        public List<int> LevelOptions => new List<int> { 1, 10, 20, 50 };
+
+        /// <summary>来源是属性：选项是普通的整数列表，不必是序列化数组。</summary>
+        [ValueDropdown(nameof(LevelOptions))]
+        public int levelFromProperty = 10;
+
         #endregion
 
         #region 资产选择

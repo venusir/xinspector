@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEditor;
@@ -20,8 +21,14 @@ namespace XInspector.Editor
     /// 替换形态必须自己套 <see cref="EditorGUI.DisabledScope"/>——末端绘制器那层只读保护被绕过了。
     /// </para>
     /// <para>
+    /// <b>数据源有两个形态</b>（见 <see cref="ValueDropdownState"/>）：序列化的数组 / List
+    /// （句柄形态）与「声明类型实现 <see cref="IList"/> 的字段 / 属性 / 无参方法」（反射形态）。
+    /// 两者的差别被收在两处：选项表怎么造、选中的值怎么写回——绘制那一段是共用的。
+    /// </para>
+    /// <para>
     /// 选项表（树形分层、排序、取值名）在纯函数 <see cref="ValueDropdownOptions"/> 里，
-    /// 复制值在 <see cref="SerializedValueCopier"/> 里；本类只负责画与弹菜单。
+    /// 复制值在 <see cref="SerializedValueCopier"/> 与 <see cref="ReflectedValueCopier"/> 里；
+    /// 本类只负责画与弹菜单。
     /// </para>
     /// <para>
     /// 弹出层用 <see cref="GenericMenu"/>，**不自建窗口**：官方那个带搜索框、图标、
@@ -49,6 +56,12 @@ namespace XInspector.Editor
             var serializedProperty = property.ValueEntry?.SerializedProperty;
             if (serializedProperty == null)
             {
+                // 目标必须是序列化成员：反射成员在本包只读（写回无落点），
+                // 而本特性存在的意义就是**写**一个值。以前这里静默退回，用户看不到任何解释。
+                DrawerWarnings.Once(
+                    property,
+                    nameof(ValueDropdownDrawer) + ".backend",
+                    DrawerWarnings.TypeMismatch(property, "[ValueDropdown]", "Unity 的序列化后端"));
                 CallNextDrawer(property, label);
                 return;
             }
@@ -145,13 +158,34 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 弹出选项菜单；选中则复制值。
+        /// 弹出选项菜单；选中则写回。按来源形态分派到两套——选项表怎么造、值怎么写回不同，
+        /// 其余（去重告警的键、菜单的构造方式、弹出位置）共用。
         /// </summary>
         /// <remarks>
-        /// 用 <c>GenericMenu.MenuFunction2</c> + 「选项下标」当 <c>userData</c>，
+        /// 用 <c>GenericMenu.MenuFunction2</c> + 一个载荷当 <c>userData</c>，
         /// **不为每个选项建闭包**——那样一个菜单就会分配 n 个委托。
         /// </remarks>
         private static void ShowMenu(
+            InspectorProperty property,
+            SerializedProperty serializedProperty,
+            ValueDropdownAttribute attribute,
+            ValueDropdownState state)
+        {
+            if (state.Source != null)
+            {
+                ShowSerializedMenu(property, serializedProperty, attribute, state);
+                return;
+            }
+
+            ShowReflectedMenu(property, serializedProperty, attribute, state);
+        }
+
+        /// <summary>序列化形态的菜单：来源是数组句柄，选项逐个取自它的元素。</summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="serializedProperty">目标的序列化属性。</param>
+        /// <param name="attribute">特性实例。</param>
+        /// <param name="state">解析结果。</param>
+        private static void ShowSerializedMenu(
             InspectorProperty property,
             SerializedProperty serializedProperty,
             ValueDropdownAttribute attribute,
@@ -161,9 +195,7 @@ namespace XInspector.Editor
 
             if (options.Count == 0)
             {
-                DrawerWarnings.Once(property, nameof(ValueDropdownDrawer) + ".empty",
-                    $"[XInspector] 属性「{property.Path}」上的 [ValueDropdown] 选项来源是空的，" +
-                    "下拉框里没有任何可选项（字段本身照常可用）。");
+                DrawerWarnings.Once(property, nameof(ValueDropdownDrawer) + ".empty", EmptySourceWarning(property));
                 return;
             }
 
@@ -173,17 +205,79 @@ namespace XInspector.Editor
 
             for (var i = 0; i < options.Count; i++)
             {
-                menu.AddItem(new GUIContent(options[i].Path), false, OnSelected, new Selection(source, i, target));
+                menu.AddItem(new GUIContent(options[i].Path), false, OnSerializedSelected, new Selection(source, i, target));
             }
 
             menu.DropDown(new Rect(Event.current.mousePosition, Vector2.zero));
         }
 
         /// <summary>
-        /// 菜单回调：把第 <c>index</c> 个选项复制进目标。
+        /// 反射形态的菜单：**此刻**才现读来源（点击之前一次都不读，用户的方法因此不会被每帧调用）。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="serializedProperty">目标的序列化属性。</param>
+        /// <param name="attribute">特性实例。</param>
+        /// <param name="state">解析结果。</param>
+        /// <remarks>
+        /// 「取不到」与「是空的」分开告警：前者是实例为空（嵌套实例被置空、方法给回 null），
+        /// 后者是来源确实没有元素。两条都在**点击时**报——挪进绘制期就变成每帧调一次用户代码。
+        /// </remarks>
+        private static void ShowReflectedMenu(
+            InspectorProperty property,
+            SerializedProperty serializedProperty,
+            ValueDropdownAttribute attribute,
+            ValueDropdownState state)
+        {
+            var source = state.SourceList();
+
+            if (source == null)
+            {
+                DrawerWarnings.Once(property, nameof(ValueDropdownDrawer) + ".missing",
+                    $"[XInspector] 属性「{property.Path}」上的 [ValueDropdown] 选项来源此刻取不到" +
+                    "（嵌套实例为空，或来源成员给回了空引用）。字段本身照常可用。");
+                return;
+            }
+
+            var options = ValueDropdownOptions.Build(
+                source, state.ElementType, attribute.FlattenTreeView, attribute.SortDropdownItems);
+
+            if (options.Count == 0)
+            {
+                DrawerWarnings.Once(property, nameof(ValueDropdownDrawer) + ".empty", EmptySourceWarning(property));
+                return;
+            }
+
+            var menu = new GenericMenu();
+            var target = serializedProperty.Copy();
+            var declaredType = property.Type;
+
+            for (var i = 0; i < options.Count; i++)
+            {
+                // 载荷里带的是**这一条的值本身**，不是「列表 + 下标」——理由见 Selection 的注释。
+                menu.AddItem(
+                    new GUIContent(options[i].Path),
+                    false,
+                    OnReflectedSelected,
+                    new Selection(source[options[i].Index], target, declaredType));
+            }
+
+            menu.DropDown(new Rect(Event.current.mousePosition, Vector2.zero));
+        }
+
+        /// <summary>「来源是空的」那条告警的文本（两个形态共用）。</summary>
+        /// <param name="property">目标属性。</param>
+        /// <returns>告警文本。</returns>
+        private static string EmptySourceWarning(InspectorProperty property)
+        {
+            return $"[XInspector] 属性「{property.Path}」上的 [ValueDropdown] 选项来源是空的，" +
+                   "下拉框里没有任何可选项（字段本身照常可用）。";
+        }
+
+        /// <summary>
+        /// 序列化形态的菜单回调：把第 <c>index</c> 个选项复制进目标。
         /// </summary>
         /// <param name="userData">打包好的「来源 + 下标 + 目标」。</param>
-        private static void OnSelected(object userData)
+        private static void OnSerializedSelected(object userData)
         {
             var selection = (Selection)userData;
 
@@ -195,27 +289,56 @@ namespace XInspector.Editor
             }
         }
 
+        /// <summary>
+        /// 反射形态的菜单回调：把选中的托管值写进目标。
+        /// </summary>
+        /// <param name="userData">打包好的「值 + 目标 + 目标的声明类型」。</param>
+        private static void OnReflectedSelected(object userData)
+        {
+            var selection = (Selection)userData;
+
+            if (ReflectedValueCopier.TryAssign(
+                    selection.Value, selection.Target, selection.DeclaredType, out var reason))
+            {
+                return;
+            }
+
+            Debug.LogWarning(
+                $"[XInspector] [ValueDropdown] 属性「{selection.Target.propertyPath}」上的这次选择已忽略：" +
+                $"{reason}。来源里那些值与字段类型不一致的选项写不进去——本包不做数值互转。");
+        }
+
         #endregion
 
         /// <summary>
-        /// 菜单回调的载荷：来源数组、选中的下标、目标属性。
+        /// 菜单回调的载荷：目标属性，外加**其中一个形态**的来源信息。
         /// </summary>
         /// <remarks>
-        /// <see cref="SerializedProperty"/> 是**活句柄**，跨帧有效，故可以捕获进菜单回调；
-        /// 用 <c>Copy()</c> 另取一份是为了不干扰绘制路径上正在用的那一个。
+        /// <b>两个形态的取法刻意不同，这不是疏漏：</b>
+        /// <see cref="SerializedProperty"/> 是**活句柄**（跨帧有效），故序列化形态可以只记
+        /// 「数组 + 下标」，回调时再取那一个元素；反射形态记的却是**菜单构造那一刻的值本身**——
+        /// 回调发生在菜单关闭之后，中间可能隔好几帧，而方法源每调一次就新建一个列表，
+        /// 那时再按下标去取，取到的可能已经不是用户看到的那一条了。
+        /// 捕获值对象让「看到的标签」与「写进去的值」逐字是同一个。
         /// </remarks>
         private readonly struct Selection
         {
-            /// <summary>选项来源（数组）。</summary>
+            /// <summary>序列化形态的选项来源（数组）；反射形态为 <c>null</c>。</summary>
             public readonly SerializedProperty Source;
 
-            /// <summary>选中的下标。</summary>
+            /// <summary>序列化形态选中的下标；反射形态不用。</summary>
             public readonly int Index;
 
-            /// <summary>要写入的目标。</summary>
+            /// <summary>反射形态选中的值（**快照**）；序列化形态为 <c>null</c>。</summary>
+            public readonly object Value;
+
+            /// <summary>要写入的目标（活句柄，两个形态共用）。</summary>
             public readonly SerializedProperty Target;
 
-            /// <summary>以三段构造。</summary>
+            /// <summary>目标的声明类型（反射形态写回时要它校验对象引用）；序列化形态为 <c>null</c>。</summary>
+            public readonly Type DeclaredType;
+
+            /// <summary>以序列化形态的三段构造。</summary>
             /// <param name="source">选项来源。</param>
             /// <param name="index">选中的下标。</param>
             /// <param name="target">目标属性。</param>
@@ -223,7 +346,22 @@ namespace XInspector.Editor
             {
                 Source = source;
                 Index = index;
+                Value = null;
                 Target = target;
+                DeclaredType = null;
+            }
+
+            /// <summary>以反射形态的三段构造。</summary>
+            /// <param name="value">选中的值（快照）。</param>
+            /// <param name="target">目标属性。</param>
+            /// <param name="declaredType">目标的声明类型。</param>
+            public Selection(object value, SerializedProperty target, Type declaredType)
+            {
+                Source = null;
+                Index = 0;
+                Value = value;
+                Target = target;
+                DeclaredType = declaredType;
             }
         }
     }
@@ -387,7 +525,7 @@ namespace XInspector.Editor
     /// 是最难向使用者解释的一类不一致。
     /// </para>
     /// <para>
-    /// <b>为什么需要 <paramref name="declaredType"/>：</b><see cref="SerializedProperty"/>
+    /// <b>为什么需要一个声明类型参数：</b><see cref="SerializedProperty"/>
     /// 给得出 <c>propertyType</c>，却给不出对象引用字段的 **CLR 声明类型**
     /// （<c>Transform</c> 还是 <c>GameObject</c>？）。那个类型只能从树节点上取
     /// （<see cref="InspectorProperty.Type"/>）。传 <c>null</c> 或 <c>object</c> 时按「未知」处理，
@@ -686,8 +824,9 @@ namespace XInspector.Editor
         /// <param name="sort"><c>true</c> 时按名字排序。</param>
         /// <returns>选项表；来源为空或无数组元素时返回空表。</returns>
         /// <remarks>
-        /// 每帧重建（选项随来源的值变化才算对），故这里**不缓存**——
-        /// 缓存会让来源被改后菜单还显示旧选项。
+        /// **每次弹出菜单时**重建一次（选项随来源的值变化才算对），故这里**不缓存**——
+        /// 缓存会让来源被改后菜单还显示旧选项。它不是每帧路径：
+        /// <c>ShowMenu</c> 在点击时才调它。
         /// </remarks>
         public static List<Option> Build(SerializedProperty source, bool flatten, bool sort)
         {
@@ -718,6 +857,71 @@ namespace XInspector.Editor
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 由**反射来源**构造选项表——与 <see cref="Build(SerializedProperty, bool, bool)"/>
+        /// 同一套分层、排序与「空文本 → （空）」的规矩，只是值来自托管对象而不是序列化句柄。
+        /// </summary>
+        /// <param name="source">选项来源（实现 <see cref="IList"/> 的集合）；可为 <c>null</c>。</param>
+        /// <param name="elementType">
+        /// 元素的**声明类型**；推不出来时给 <c>null</c>（那时退回运行时类型，见
+        /// <see cref="DescribeValue(object, Type)"/>）。
+        /// </param>
+        /// <param name="flatten"><c>true</c> 时不分层（路径里的 <c>/</c> 原样显示）。</param>
+        /// <param name="sort"><c>true</c> 时按名字排序。</param>
+        /// <returns>选项表；来源为空或没有元素时返回空表。</returns>
+        /// <remarks>
+        /// 调用方在这一步**才**现读来源（<c>state.SourceList()</c>），故来源为 <c>null</c>
+        /// 表示「此刻取不到实例」——那是与「有值但是空的」不同的另一种情况，
+        /// 由调用方分开告警。
+        /// </remarks>
+        public static List<Option> Build(IList source, Type elementType, bool flatten, bool sort)
+        {
+            var result = new List<Option>();
+
+            if (source == null || source.Count == 0)
+            {
+                return result;
+            }
+
+            for (var i = 0; i < source.Count; i++)
+            {
+                var name = DescribeValue(source[i], elementType);
+
+                if (string.IsNullOrEmpty(name))
+                {
+                    // 与序列化形态同款：空字符串在菜单里是一行看不见的东西，得明说。
+                    name = "(空)";
+                }
+
+                result.Add(new Option(flatten ? Flatten(name) : name, i));
+            }
+
+            if (sort)
+            {
+                result.Sort(CompareByPath);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 把一个**托管值**描述成一行可读文本（反射源的选项标签）。
+        /// </summary>
+        /// <param name="value">值，可为 <c>null</c>。</param>
+        /// <param name="declaredType">元素的声明类型；未知时为 <c>null</c>。</param>
+        /// <returns>文本，不会为 <c>null</c>。</returns>
+        /// <remarks>
+        /// <b>转调 <see cref="ReflectedValueFormatter.Format"/>，不另写一套。</b>
+        /// 那是本包回答「一个值显示成什么」的唯一入口——<c>[ShowInInspector]</c> 的只读展示
+        /// 用的是同一个，两处答案不该有两个。
+        /// 元素声明类型推不出来时用**运行时类型**兜底：不这么做，数字会落到跟随当前文化的
+        /// <c>ToString()</c>（德语环境下小数点会变成逗号）。
+        /// </remarks>
+        public static string DescribeValue(object value, Type declaredType)
+        {
+            return ReflectedValueFormatter.Format(value, declaredType ?? value?.GetType());
         }
 
         /// <summary>

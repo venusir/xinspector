@@ -197,7 +197,11 @@ namespace XInspector.Editor
                 case MemberKind.Vector2:
                     return property.propertyType == SerializedPropertyType.Vector2;
                 case MemberKind.Array:
-                    return property.isArray;
+                    // **字符串要挡掉**：Unity 在若干语境把它算作 isArray（见 ValueDropdownTarget
+                    // 的同款说明），而它当选项来源只会得到一张空表——「解析成功却什么都没有」
+                    // 是本包最忌讳的静默形态。`[ValueDropdown]` 标在字符串**字段**上另说，
+                    // 那是目标不是来源。
+                    return property.isArray && property.propertyType != SerializedPropertyType.String;
                 default:
                     return false;
             }
