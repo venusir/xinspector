@@ -39,7 +39,7 @@ namespace XInspector.Editor
                 Debug.LogWarning(
                     $"[XInspector] 属性「{property.Path}」上的 [TableList] 无法生效：{reason}。" +
                     "该字段按普通列表绘制。");
-                EnsureListSettings(attributes);
+                CollectionDrawerLayout.EnsureListSettings(attributes);
                 return;
             }
 
@@ -48,28 +48,7 @@ namespace XInspector.Editor
             state.ShowIndexLabels = model.ShowIndexLabels;
             state.AlwaysExpanded = model.AlwaysExpanded;
 
-            EnsureListSettings(attributes);
-        }
-
-        #endregion
-
-        #region Private Helpers
-
-        /// <summary>
-        /// 节点上没有 <see cref="ListDrawerSettingsAttribute"/> 时补一份默认实例（已经标了就不动）。
-        /// </summary>
-        /// <param name="attributes">该节点的特性列表，可直接增删。</param>
-        private static void EnsureListSettings(IList<Attribute> attributes)
-        {
-            for (var i = 0; i < attributes.Count; i++)
-            {
-                if (attributes[i] is ListDrawerSettingsAttribute)
-                {
-                    return;
-                }
-            }
-
-            attributes.Add(new ListDrawerSettingsAttribute());
+            CollectionDrawerLayout.EnsureListSettings(attributes);
         }
 
         #endregion

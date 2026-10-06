@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -88,7 +89,9 @@ namespace XInspector.Editor
 
                 if (removeIndex >= 0)
                 {
-                    if (!CollectionMutation.TryRemove(serializedProperty, removeIndex))
+                    // 增删连同 [OnCollectionChanged] 的回调一起走（见 CollectionChangeInvoker）：
+                    // 两个回调夹住的正是「写进序列化数据」这一步。
+                    if (!CollectionChangeInvoker.ApplyRemove(property, serializedProperty, removeIndex))
                     {
                         // 删不掉：长度不可变的数组（固定缓冲那种）。告警而不是「再删一次」——
                         // 多删一个元素是静默改数据，不做。
@@ -99,7 +102,13 @@ namespace XInspector.Editor
                 }
                 else if (append)
                 {
-                    CollectionMutation.Add(serializedProperty);
+                    if (!CollectionChangeInvoker.ApplyAdd(property, serializedProperty))
+                    {
+                        // 加不进去与删不掉同款：告警一次，绝不「再试一次」。
+                        DrawerWarnings.Once(property, nameof(ListDrawerSettingsDrawer) + ".fixedAdd",
+                            $"[XInspector] 属性「{property.Path}」的集合加不了元素（长度不可变的数组？），" +
+                            "该次追加已忽略。");
+                    }
                 }
             }
             finally
@@ -293,6 +302,33 @@ namespace XInspector.Editor
             return serializedProperty != null
                 && serializedProperty.isArray
                 && serializedProperty.propertyType != SerializedPropertyType.String;
+        }
+
+        /// <summary>
+        /// 特性列表里没有列表设置时补一份。
+        /// </summary>
+        /// <param name="attributes">节点当前的特性列表（构建期，可写）。</param>
+        /// <remarks>
+        /// <para>
+        /// <c>[TableList]</c> 与 <c>[OnCollectionChanged]</c> 都要它：前者自己不会画行、
+        /// 后者要一个增删的落点，而增删**只有集合绘制器有**。少了这一步，
+        /// 特性就「写了没反应」——本包最忌讳的静默。
+        /// </para>
+        /// <para>
+        /// 幂等：已经有 <c>[ListDrawerSettings]</c> 就原样返回，故几个处理器各调一次也只会补一份。
+        /// </para>
+        /// </remarks>
+        public static void EnsureListSettings(IList<Attribute> attributes)
+        {
+            for (var i = 0; i < attributes.Count; i++)
+            {
+                if (attributes[i] is ListDrawerSettingsAttribute)
+                {
+                    return;
+                }
+            }
+
+            attributes.Add(new ListDrawerSettingsAttribute());
         }
 
         #endregion

@@ -86,6 +86,42 @@ namespace XInspector.Editor
         public readonly List<ValueChangedEntry> Entries = new List<ValueChangedEntry>();
     }
 
+    /// <summary><see cref="OnCollectionChangedAttribute"/> 的一个方向的回调。</summary>
+    internal sealed class CollectionCallback
+    {
+        /// <summary>方法名（特性里写的那个）。</summary>
+        public string Name;
+
+        /// <summary>逐目标解析出的方法；解析失败时为 <c>null</c>。</summary>
+        public MethodInfo[] Methods;
+
+        /// <summary>逐目标的嵌套实例来源；顶层为 <c>null</c>（见 <see cref="NestedInstanceScope"/>）。</summary>
+        public ReflectedAccessor[] Scopes;
+
+        /// <summary>
+        /// 这个方法收不收 <c>(CollectionChangeInfo, object)</c> 那两个参数。
+        /// </summary>
+        /// <remarks>
+        /// 构建期定案。绘制期照它决定要不要备实参数组——按 <see cref="Methods"/> 现推
+        /// 会把反射读放进每帧路径（虽然只在增删那一帧，但本仓的口径是能定案就定案）。
+        /// </remarks>
+        public bool TakesInfo;
+    }
+
+    /// <summary><see cref="OnCollectionChangedAttribute"/> 的每属性状态。</summary>
+    /// <remarks>
+    /// 变更的**时机**由集合绘制器在施加点前后触发（见 <c>CollectionChangeInvoker</c>），
+    /// 这里只存「到时候该调谁」。
+    /// </remarks>
+    internal sealed class CollectionChangedState
+    {
+        /// <summary>改动施加**之前**的回调；没配时为 <c>null</c>。</summary>
+        public CollectionCallback Before;
+
+        /// <summary>改动施加**之后**的回调；没配时为 <c>null</c>。</summary>
+        public CollectionCallback After;
+    }
+
     /// <summary>
     /// <see cref="OnInspectorGUIAttribute"/> 的处理器：构建期解析出要调用的绘制方法。
     /// </summary>
@@ -195,5 +231,109 @@ namespace XInspector.Editor
                 Scopes = scopes,
             });
         }
+    }
+
+    /// <summary>
+    /// <see cref="OnCollectionChangedAttribute"/> 的处理器：构建期解析两个方向的回调，
+    /// 并保证这个特性**不会写了个寂寞**。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>没标 <c>[ListDrawerSettings]</c> 时注入一份。</b> 集合的增删只有集合绘制器有落点，
+    /// 不注入就会「写了没反应」——本包最忌讳的静默。代价是该字段的外观从原生变为自绘
+    /// （与 <c>[TableList]</c> 的既有先例同款，写进包 README）。
+    /// </para>
+    /// <para>
+    /// 标在非集合上时**告警并忽略**：那时既没有可触发的改动，注入也没有意义。
+    /// </para>
+    /// </remarks>
+    internal sealed class CollectionChangedProcessor : AttributeProcessor<OnCollectionChangedAttribute>
+    {
+        #region Private Fields
+
+        /// <summary>两个回调都收的两种形状，**按顺序试**。</summary>
+        private static readonly Type[][] Shapes =
+        {
+            Type.EmptyTypes,
+            new[] { typeof(CollectionChangeInfo), typeof(object) },
+        };
+
+        #endregion
+
+        /// <inheritdoc/>
+        protected override void ProcessSelf(
+            InspectorProperty property,
+            OnCollectionChangedAttribute attribute,
+            IList<Attribute> attributes)
+        {
+            if (!CollectionDrawerLayout.CanDraw(property.ValueEntry?.SerializedProperty))
+            {
+                Debug.LogWarning(
+                    $"[XInspector] 属性「{property.Path}」上的 [OnCollectionChanged] 只支持数组或 List，"
+                    + "该特性已忽略（没有增删就无从触发）。");
+                return;
+            }
+
+            CollectionDrawerLayout.EnsureListSettings(attributes);
+
+            var state = property.State.GetOrCreate<CollectionChangedState>();
+            state.Before = Resolve(property, attribute.Before, "改动前回调");
+            state.After = Resolve(property, attribute.After, "改动后回调");
+        }
+
+        #region Private Helpers
+
+        /// <summary>解析一个方向的方法名；没配这个方向时返回 <c>null</c>。</summary>
+        /// <param name="property">属性。</param>
+        /// <param name="methodName">方法名；<c>null</c> 表示这个方向不要。</param>
+        /// <param name="direction">方向的中文名（告警文案用）。</param>
+        /// <returns>回调条目；解析不到时返回 <c>null</c>。</returns>
+        private static CollectionCallback Resolve(InspectorProperty property, string methodName, string direction)
+        {
+            if (methodName == null)
+            {
+                return null;
+            }
+
+            var methods = NamedMethodResolver.Resolve(
+                property, methodName, $"[OnCollectionChanged] 的{direction}", Shapes, out var scopes, out _);
+
+            if (methods == null)
+            {
+                return null;
+            }
+
+            return new CollectionCallback
+            {
+                Name = methodName,
+                Methods = methods,
+                Scopes = scopes,
+                TakesInfo = TakesInfo(methods),
+            };
+        }
+
+        /// <summary>
+        /// 这批方法收不收那两个参数。
+        /// </summary>
+        /// <param name="methods">逐目标解析出的方法。</param>
+        /// <returns>收参数返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 取**第一个解析成功**的那一份：<c>MethodInvoker</c> 遇到 <c>methods[0] == null</c> 直接返回，
+        /// 而各目标的形状已被解析器强制统一，故任取一份非空的都一样。
+        /// </remarks>
+        private static bool TakesInfo(MethodInfo[] methods)
+        {
+            for (var i = 0; i < methods.Length; i++)
+            {
+                if (methods[i] != null)
+                {
+                    return methods[i].GetParameters().Length > 0;
+                }
+            }
+
+            return false;
+        }
+
+        #endregion
     }
 }

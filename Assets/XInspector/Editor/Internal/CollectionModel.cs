@@ -64,7 +64,7 @@ namespace XInspector.Editor
         {
             reason = null;
 
-            var elementType = ElementTypeOf(field?.FieldType);
+            var elementType = CollectionElement.TypeOf(field?.FieldType);
             if (elementType == null)
             {
                 reason = "只对数组与 List<T> 有效";
@@ -103,33 +103,6 @@ namespace XInspector.Editor
         #endregion
 
         #region Private Helpers
-
-        /// <summary>取集合的元素类型；不是数组 / <c>List&lt;T&gt;</c> 时返回 <c>null</c>。</summary>
-        /// <param name="collectionType">列表字段的声明类型。</param>
-        /// <returns>元素类型；不适用时 <c>null</c>。</returns>
-        /// <remarks>
-        /// 用反射看声明类型而不是序列化属性：Unity 在若干语境下把 <c>string</c> 也算作 <c>isArray</c>，
-        /// 而元素类型只有声明类型说得清。
-        /// </remarks>
-        private static Type ElementTypeOf(Type collectionType)
-        {
-            if (collectionType == null)
-            {
-                return null;
-            }
-
-            if (collectionType.IsArray)
-            {
-                return collectionType.GetElementType();
-            }
-
-            if (collectionType.IsGenericType && collectionType.GetGenericTypeDefinition() == typeof(List<>))
-            {
-                return collectionType.GetGenericArguments()[0];
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// 收集可成列的成员：可序列化的字段，排除静态、<c>[HideInInspector]</c>、
@@ -251,6 +224,49 @@ namespace XInspector.Editor
         private static int CompareByMetadataToken(FieldInfo a, FieldInfo b)
         {
             return a.MetadataToken.CompareTo(b.MetadataToken);
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// 集合字段的声明类型与元素类型之间的换算。
+    /// </summary>
+    /// <remarks>
+    /// 表格建模与集合回调（<c>[OnCollectionChanged]</c> 报「被删掉的是什么」）都要这一问，
+    /// 而答案必须只有一份——两处算出来的元素类型不一致，表现是「表格认得出、回调读不出值」。
+    /// </remarks>
+    internal static class CollectionElement
+    {
+        #region Public API
+
+        /// <summary>
+        /// 取集合的元素类型；不是数组 / <c>List&lt;T&gt;</c> 时返回 <c>null</c>。
+        /// </summary>
+        /// <param name="collectionType">列表字段的声明类型。</param>
+        /// <returns>元素类型；不适用时 <c>null</c>。</returns>
+        /// <remarks>
+        /// 用反射看声明类型而不是序列化属性：Unity 在若干语境下把 <c>string</c> 也算作 <c>isArray</c>，
+        /// 而元素类型只有声明类型说得清。
+        /// </remarks>
+        public static Type TypeOf(Type collectionType)
+        {
+            if (collectionType == null)
+            {
+                return null;
+            }
+
+            if (collectionType.IsArray)
+            {
+                return collectionType.GetElementType();
+            }
+
+            if (collectionType.IsGenericType && collectionType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                return collectionType.GetGenericArguments()[0];
+            }
+
+            return null;
         }
 
         #endregion

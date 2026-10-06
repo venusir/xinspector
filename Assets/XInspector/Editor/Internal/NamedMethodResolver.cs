@@ -30,11 +30,61 @@ namespace XInspector.Editor
         /// <returns>逐目标的方法表；一个都解析不到时返回 <c>null</c>。</returns>
         /// <remarks>
         /// 部分目标解析不到时**不整体失败**：能调的照调，调不了的跳过，但留一条告警。
+        /// <para>
+        /// 这是**形状收窄成「无参」的特例**——要收多种参数表用另一个重载。
+        /// </para>
         /// </remarks>
         public static MethodInfo[] Resolve(
             InspectorProperty property,
             string methodName,
             string usage,
+            out ReflectedAccessor[] scopes,
+            out string reason)
+        {
+            return ResolveCore(property, methodName, usage, null, out scopes, out reason);
+        }
+
+        /// <summary>
+        /// 逐目标解析一个方法，**参数表落在给定形状表里**即可。
+        /// </summary>
+        /// <param name="property">挂着该特性的属性。</param>
+        /// <param name="methodName">方法名。</param>
+        /// <param name="usage">用于告警文案的用法名，如 <c>[OnCollectionChanged]</c>。</param>
+        /// <param name="shapes">可接受的参数表，按顺序试；其中空数组表示「无参」。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源；顶层为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；全部目标都解析成功时为 <c>null</c>。</param>
+        /// <returns>逐目标的方法表；一个都解析不到时返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// <b>逐目标的形状必须一致。</b> 调用侧只有**一份**实参数组
+        /// （见 <see cref="MethodInvoker.Invoke(MethodInfo[], object[], object[], bool, string)"/>），
+        /// 形状不同的那个目标会抛 <c>TargetParameterCountException</c> 并被吞掉——
+        /// 表现为「这个目标的回调静默地没跑」。故以**第一个解析成功的目标**的形状为准，
+        /// 形状不同的目标按「解析不到」处理（跳过 + 告警）。
+        /// </remarks>
+        public static MethodInfo[] Resolve(
+            InspectorProperty property,
+            string methodName,
+            string usage,
+            Type[][] shapes,
+            out ReflectedAccessor[] scopes,
+            out string reason)
+        {
+            return ResolveCore(property, methodName, usage, shapes, out scopes, out reason);
+        }
+
+        /// <summary>找一条**第一个**目标能解析成功的路径：先按实例类型，再按形状表。</summary>
+        /// <param name="property">挂着该特性的属性。</param>
+        /// <param name="methodName">方法名。</param>
+        /// <param name="usage">用于告警文案的用法名。</param>
+        /// <param name="shapes">形状表；<c>null</c> 表示旧口径（只收无参、沿用旧失败文案）。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>逐目标的方法表。</returns>
+        private static MethodInfo[] ResolveCore(
+            InspectorProperty property,
+            string methodName,
+            string usage,
+            Type[][] shapes,
             out ReflectedAccessor[] scopes,
             out string reason)
         {
@@ -69,6 +119,7 @@ namespace XInspector.Editor
 
             var methods = new MethodInfo[targets.Length];
             var missing = 0;
+            Type[] accepted = null;
 
             for (var i = 0; i < targets.Length; i++)
             {
@@ -90,13 +141,33 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                methods[i] = MethodResolver.ByName(type, methodName, out var failure);
+                string failure;
+                var resolved = shapes == null
+                    ? MethodResolver.ByName(type, methodName, out failure)
+                    : MethodResolver.ByName(type, methodName, shapes, out failure);
 
-                if (methods[i] == null)
+                if (resolved == null)
                 {
                     missing++;
                     reason = reason ?? failure;
+                    continue;
                 }
+
+                if (accepted == null)
+                {
+                    accepted = ParameterTypesOf(resolved);
+                }
+                else if (!HasShape(resolved, accepted))
+                {
+                    // 形状不一致：这个目标调不了（实参数组只有一份），跳过并说明。
+                    missing++;
+                    reason = reason
+                        ?? $"各目标上解析到的「{methodName}」形状不一致（有的收参数、有的不收），"
+                           + "本包只按同一种形状调用。";
+                    continue;
+                }
+
+                methods[i] = resolved;
             }
 
             if (missing == targets.Length)
@@ -114,6 +185,46 @@ namespace XInspector.Editor
             }
 
             return methods;
+        }
+
+        /// <summary>取一个方法的参数表。</summary>
+        /// <param name="method">方法。</param>
+        /// <returns>参数类型，按声明顺序。</returns>
+        private static Type[] ParameterTypesOf(MethodInfo method)
+        {
+            var parameters = method.GetParameters();
+            var types = new Type[parameters.Length];
+
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                types[i] = parameters[i].ParameterType;
+            }
+
+            return types;
+        }
+
+        /// <summary>这个方法的参数表是不是给定的那一份。</summary>
+        /// <param name="method">方法。</param>
+        /// <param name="shape">期望的参数表。</param>
+        /// <returns>一致返回 <c>true</c>。</returns>
+        private static bool HasShape(MethodInfo method, Type[] shape)
+        {
+            var parameters = method.GetParameters();
+
+            if (parameters.Length != shape.Length)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < shape.Length; i++)
+            {
+                if (parameters[i].ParameterType != shape[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
