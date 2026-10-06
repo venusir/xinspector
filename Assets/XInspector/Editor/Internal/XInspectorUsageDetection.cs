@@ -87,6 +87,13 @@ namespace XInspector.Editor
                     // 嵌套类型**内部**带特性的类型会被按需展开（见 NestedMemberExpansion）——
                     // 判据必须看得见同一批类型，否则类型不被接管、嵌套层的特性**静默失效**。
                     // 这是同一种漏法的又一面（前几面：方法、属性、字段声明类型）。
+                    //
+                    // **集合的元素层（2026-10-06）不在这里**，这是核对过的结论、不是遗漏：
+                    // 元素层的安全阀要求「元素类型用到本包 **且** 集合被本包接管」，而接管凭的是
+                    // **字段自己的**特性（[ListDrawerSettings] / [Searchable] / [OnCollectionChanged]）
+                    // ——上面那句 HasSupportedAttribute 已经扫到了。判据与安全阀因此**逐字镜像**：
+                    // 没被接管的集合不建元素层（元素里的特性本就无处生效），判据也不该说「用到了本包」。
+                    // 两条用例钉着这条镜像（XInspectorUsageDetectionTests）。
                     if (NestedMemberExpansion.WouldExpand(fields[i].FieldType))
                     {
                         return true;

@@ -231,6 +231,30 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 集合被本包接管、且**元素类型用到了本包**时为真——与元素层的安全阀镜像：
+        /// 那种集合真的会建元素层，元素里的特性真的会生效。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_被接管的集合其元素类型用特性为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ElementTypeUsageFixture)), Is.True);
+        }
+
+        /// <summary>
+        /// 控制项：**元素类型用到了本包、但集合自己没被接管**时为假——安全阀逐字镜像的另一半：
+        /// 那种集合不建元素层（元素里的特性本就无处生效），判据因此不该说「用到了本包」。
+        /// <para>
+        /// 这条同时钉住「判据**不需要**沿字段类型解包集合」这个核对结论：接管凭的是
+        /// **字段自己的**特性，而判据一直在扫字段。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_没被接管的集合的元素类型不算()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(UnmanagedElementTypeUsageFixture)), Is.False);
+        }
+
+        /// <summary>
         /// 只挂 <c>[Searchable]</c> 的类型为真——它**没有自己的绘制器**（搜索框由宿主绘制器顺带画），
         /// 全靠处理器那一半被认出来。处理器写错了基类，这条就红。
         /// </summary>
@@ -486,6 +510,21 @@ namespace XInspector.Tests.Editor
         /// <summary>只标了列表设置——靠绘制器那一半被认出来。</summary>
         [ListDrawerSettings]
         public int[] values = { 1 };
+    }
+
+    /// <summary>集合被本包接管、元素类型也用到了本包的资产。</summary>
+    internal sealed class ElementTypeUsageFixture : ScriptableObject
+    {
+        /// <summary><c>[ListDrawerSettings]</c> 是元素层的**容器项**——两者都真才建层。</summary>
+        [ListDrawerSettings]
+        public List<ElementItem> items = new List<ElementItem> { new ElementItem() };
+    }
+
+    /// <summary>元素类型用到了本包、但集合自己一个特性都没标的资产（控制项）。</summary>
+    internal sealed class UnmanagedElementTypeUsageFixture : ScriptableObject
+    {
+        /// <summary>没被接管 → 不建元素层 → 元素里的特性本就无处生效。</summary>
+        public List<ElementItem> items = new List<ElementItem> { new ElementItem() };
     }
 
     /// <summary>只挂搜索特性的资产。</summary>
