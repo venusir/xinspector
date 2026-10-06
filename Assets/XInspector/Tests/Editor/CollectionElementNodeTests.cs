@@ -211,6 +211,54 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 规模
+
+        /// <summary>
+        /// 规模用例：1000 个元素照样建得出来，且对账是 O(1)。
+        /// </summary>
+        /// <remarks>
+        /// 元素节点化是**按需**的，但一旦发生，节点数就是「元素个数 × 元素字段数」。
+        /// 这条用例把**规模是可预期的**钉住：不设静默上限（悄悄只节点化前 N 个是本包最忌讳的
+        /// 「静默」），绘制路径上也没有非线性的事（对账只比长度）。
+        /// **实测**（2026-10-06，本机）：1000 个元素、约 5000 个节点，建树 574 ms——
+        /// 一次性成本（每次选中重建一次），换来的是元素里的特性生效；不设上限。
+        /// 耗时由 <c>TestContext</c> 打出来，环境变化时能一眼看见数量级有没有变。
+        /// </remarks>
+        [Test]
+        public void 一千个元素照样建得出来()
+        {
+            var target = ScriptableObject.CreateInstance<CollectionElementScaleFixture>();
+            try
+            {
+                for (var i = 0; i < 1000; i++)
+                {
+                    target.items.Add(new ElementItem());
+                }
+
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var tree = BuildTree(target);
+                watch.Stop();
+                TestContext.Progress.WriteLine(
+                    $"[规模] 1000 个元素建树耗时 {watch.ElapsedMilliseconds} ms");
+
+                var items = Find(tree.Root, "items");
+
+                Assert.That(items.Children.Count, Is.EqualTo(1000));
+                Assert.That(items.Children[999].Path, Is.EqualTo("items.Array.data[999]"));
+                Assert.That(items.Children[999].Children.Count, Is.GreaterThan(0), "每个元素各是一棵子树。");
+                Assert.That(
+                    CollectionElementSync.Reconcile(items),
+                    Is.False,
+                    "对账只比长度（O(1)），长度没变就不重建。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region 安全阀的边界（用到了本包却不建层——一律告警，不静默）
 
         /// <summary>没有容器（字段上没有任何会让本包接管它的特性）时不建层，并告警一次。</summary>
@@ -514,5 +562,14 @@ namespace XInspector.Tests.Editor
         /// <summary>层照建，但元素里的反射成员不出现（告警一次）。</summary>
         [ListDrawerSettings]
         public List<InspectedElementItem> items = new List<InspectedElementItem> { new InspectedElementItem() };
+    }
+
+    /// <summary>规模用例的对照资产：元素在测试里现填（1000 个）。</summary>
+    [HideMonoScript]
+    internal sealed class CollectionElementScaleFixture : ScriptableObject
+    {
+        /// <summary>元素类型用到本包 → 每个元素各建一棵子树。</summary>
+        [ListDrawerSettings]
+        public List<ElementItem> items = new List<ElementItem>();
     }
 }

@@ -214,8 +214,9 @@ namespace XInspector.Editor
                 if (string.Equals(name, "Array", StringComparison.Ordinal) || name.IndexOf('[') >= 0)
                 {
                     reason =
-                        $"路径段「{name}」是数组/列表的段——按元素取实例是「元素节点化」的领域，" +
-                        "本包还没有那条路";
+                        $"路径段「{name}」是数组/列表的段——按索引取实例是**元素层的读路径**，" +
+                        "本包还没有那条路（元素节点化本身已于 2026-10-06 落地，它不经过这里：" +
+                        "序列化那一半走 FindProperty，见 CollectionElementExpansion）";
                     return false;
                 }
 
