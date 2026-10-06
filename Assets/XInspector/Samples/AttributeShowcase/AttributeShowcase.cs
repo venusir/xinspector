@@ -854,6 +854,22 @@ namespace XInspector.Samples
         };
 
         /// <summary>
+        /// **搜索 + 元素层**（2026-10-07 补上的组合样本）：与上面的 <c>party</c> 同一个元素类型，
+        /// 只是宿主开了搜索。两件事一起看：**元素里的分组框与里面的字段照常画**（宿主开着搜索
+        /// 也不会把框筛空），以及**行匹配同时比序列化值与元素里反射成员的当前值**——
+        /// 搜 `140` 试试，只有 `Power = hp + level × 10` 恰为 140 的那一行留下，
+        /// 而 140 这个数**没有存在任何字段里**。
+        /// </summary>
+        [Searchable]
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public List<ElementShowcaseItem> searchableParty = new List<ElementShowcaseItem>
+        {
+            new ElementShowcaseItem { hp = 30, level = 2, name = "游侠" },
+            new ElementShowcaseItem { hp = 5, alive = false, level = 1, name = "倒下的法师" },
+            new ElementShowcaseItem { hp = 100, level = 4, name = "守卫" },
+        };
+
+        /// <summary>
         /// **元素层深度 &gt; 1**：外层元素类型里又嵌着集合——**内层的元素也照常节点化**，
         /// 内层元素类型里写的条件与 `[Button]` 同样生效（取/调的是那一行**内层**元素实例）。
         /// 最多 4 层；自引用类型（元素类型里又装自己）会在「类型链」那一步被挡并告警。
