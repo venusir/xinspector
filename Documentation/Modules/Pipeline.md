@@ -1353,7 +1353,10 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 
 ### 遗留
 
-- **嵌套类型的类级特性**仍不生效（只在被检视的最外层类型上收集），展开过而带它时告警。
+- ~~**嵌套类型的类级特性**仍不生效（只在被检视的最外层类型上收集），展开过而带它时告警。~~
+  **2026-10-06（第十八批）已结案**：**分组族**（`PropertyGroupAttribute` 及其条件子类）分发到
+  它的成员，两处告警撤除；其余类级特性仍只对被检视的最外层类型生效（不告警，口径写进 README）。
+  见 §二十一。
 - **集合元素节点化**仍未做——它与本轮无关，仍是「让特性作用于元素」仅剩的那一半。
 
 ---
@@ -1597,7 +1600,7 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 |---|---|
 | 元素阀（`CollectionElementExpansion`） | 两条腿都数：删掉配套的 `ReadPathOnly`（枚举 / `Decide` 分支 / 告警 case）与 `FindUnsupportedInElement` 的第二类扫描；`ContainsSupportedFields` 那个从此恒为 true 的 `includeNonSerializedMembers` 参数一并删掉 |
 | `ExpandChildren` 的 `withReflectedMembers` | 删掉（元素层与嵌套层同一条路） |
-| `WarnAboutInertTypeGroups` | 加元素层祖先守卫——元素类型上的类级分组由集合级扫描报一次，按元素报会刷屏 |
+| `WarnAboutInertTypeGroups` | 加元素层祖先守卫——元素类型上的类级分组由集合级扫描报一次，按元素报会刷屏（**2026-10-06 第十八批追记：两者连同元素侧的 `FindUnsupportedInElement`/`Scan` 一并撤除**——类级分组在嵌套 / 元素层真的生效了，见 §二十一） |
 | `AppendNestedReflectedMembers` | 逐目标循环改调 `NestedInstanceScope.Compile`（两处近乎逐字相同，是漂移点）；**一格都编译不出来时不再静默**——类型上确有节点成员却取不到实例时告警一次 |
 
 ### 落地时确认的边界（与嵌套层同款，各有用例）
@@ -1689,7 +1692,93 @@ specified filter」；官方两个绘制器 `AssetListAttributeDrawer<TList, TEl
 
 ---
 
-## 二十一、审计记忆
+## 二十一、第十八批：类级分组进嵌套层与元素层（2026-10-06）
+
+**做了什么**：类型自己带的 `[BoxGroup]` 一族（含 `[ShowIfGroup]` / `[HideIfGroup]`）分发到
+它的成员——嵌套类型与集合元素类型都算。**能力轮，特性计数 +0**；它是「嵌套 / 元素类型
+成为一等公民」这条线的**最后一个欠账**（§十四 → §十五 → §十六 → §十八 → §十九 之后的收官）。
+两处「类级特性只在被检视的最外层类型上收集」的构建期告警随之撤除。
+
+### 决定一：来源分两档，复合容器读**容器的声明类型**
+
+根读根节点自身的特性列表（既有收集通道 `CollectTypeAttributes`，不动）；嵌套 / 元素的
+复合成员节点读 `parentProperty.Type.GetCustomAttributes(typeof(PropertyGroupAttribute), true)`。
+
+**绝不读 `parentProperty.Attributes`**——那装的是**字段自己的**特性：字段上写一个
+`[BoxGroup("X")]`，会被误当成这个类型的类级分组再分发给它的孩子。这与
+`ClassLevelInlinePropertyProcessor` 读 `field.FieldType` 是同一条纪律（**判据要看「标特性的
+那一处」**，CLAUDE.md 已固化）。`inherit: true` 与根同口径（根就是 `GetCustomAttributes(true)`，
+分组族的 `AttributeUsage` 也都是 `Inherited = true`）；「只取第一个」照旧，且只承诺「恰好一份」
+——`GetCustomAttributes` 的顺序不作承诺。
+
+**处理器只注入、不加前缀。** 前缀的唯一来源是装配期的
+`AssembleNestedLevel → PrefixGroupAttributes`；两处都加会叠成 `stats/stats/组`。于是最终路径是
+`stats/类级组/成员自有组`——「类级恒在最外层」这条语义**逐字继承**自根上，不需要重新定义。
+
+**一条编译期边界**：分组族的 `AttributeUsage` 只到 `AttributeTargets.Class`——标到 struct 上
+**编译不过**，因此值类型元素不会被类级分组光顾。这是好事（响亮拒绝而不是静默），写进文档即可。
+
+### 决定二：判据一份读，且**这次第三道闸不在传导链上**
+
+新增 `NestedMemberExpansion.FindClassLevelGroup` / `HasEffectiveClassLevelGroup`
+（= 标了，**且「有成员可分」**——后半挡的是「标了分组却没有成员的类型」被元素阀放行或触发
+接管：那会建出一层什么都画不出来的东西；过度接管与漏接管方向相反、同属静默）。
+
+三处加腿，**镜像 `IsClassLevelInlineMarked` 的既有放置**：
+
+| 落点 | 加什么 | 为什么不能省给递归 |
+|---|---|---|
+| `ShouldExpand` | `HasEffectiveClassLevelGroup(member.Type)` | 直接腿 |
+| `HasSupportedMember` | `HasEffectiveClassLevelGroup(field.FieldType)` | 属性版递归**有条件**（`hasVisibleChildren` 不满足就跳过），跳过的情形靠这条兜 |
+| `HasSupportedField` | `HasEffectiveClassLevelGroup(type)`（**自检腿**） | 纯反射递归**无条件**，自检腿一条就够；且 `WouldExpand` 问的是类型**自己**，逐字段腿根本够不着 |
+
+**`IsUsedBy` 与元素阀不改代码、只改注释**：它们分别经 `WouldExpand` 与
+`ContainsSupportedFields` 到达上面那条自检腿——一份读，不新增第二处定义。
+`IsCompositeCandidate` 的 `hasVisibleChildren` 闸**不动**，只补注释：它在**收集期**跑、早于
+第一趟处理器，读的是 Unity 的序列化形状，与注入无关。§十六 教训里的「第三道闸」这次**本来
+就不在传导链上**——但要知道它在哪（顺着调用链从入口问到出口，每一处提前返回都是一个潜在的闸）。
+
+### 决定三：分组条件的容器链回退（不做则半条能力静默）
+
+类级 `[ShowIfGroup]` 在成员**全部**自带分组时只当路径前缀、特性本身到不了任何节点。
+根上早有专门回退，但判据 `rootAttr.GroupID == property.Path` 只对根成立——嵌套层里条件会
+整份丢失且**零告警**。本轮把来源二由「根」推广为「**父链就近到远**」：根读节点特性列表
+（处理器可能改写过它，改成反射会漏掉那类注入），嵌套 / 元素容器读容器的声明类型；匹配写成
+「容器路径 + 声明路径 == 本节点路径」——根的空路径让它**退化成原判据，根上行为逐字不变**；
+就近优先（嵌套声明压过根上同名）。
+
+**被否决的替代方案**：让分发处理器在「成员有自有分组」分支里额外注入条件特性本身。
+它更省事，但会改掉根上已被用例钉住的语义（`类级声明经根上回退生效` 断言「类级特性本身
+到不了节点」），且改变 `[TabGroup]` 这类祖先节点的特性构成。
+
+### 决定四：拆两处告警、**不加新的**
+
+- `WarnAboutInertTypeGroups`（嵌套侧）与 `FindUnsupportedInElement` / `Scan` / `IsOpaque`
+  （元素侧）整组删除——后者只扫「类级分组」这一类，删后恒为空，**变空即删**。
+- **不新增替代告警**：其余类级特性（`[Title]`、`[InfoBox]` 之类）仍只在被检视的最外层类型上
+  生效、依旧不告警——一个类型同时用于根与嵌套字段是常规写法，一律告警会成噪音。
+  口径写进包 README：**类级分发的只有分组族**（`[InlineProperty]` 是另一条既有通道）。
+- 记录在案的近似：`[SerializeReference]` 字段的声明类型带类级分组时，`IsUsedBy` 会判真
+  而展开被多态闸挡住——与 `[InlineProperty]` 同款的既有近似，不修。
+
+### 元素层与规模
+
+注入随 `CreateElementLayer` 与 `RebuildElementLayer` 的第一趟处理器重跑，在挂链与装配之前
+（与构建期逐条对应）——重建后类级分组自然还在，仍补了专门用例。每个元素各是各的组
+（`items.Array.data[i]/组`）。元素节点自己不会被搬进分组（`Attributes` 恒空、`Member == null`，
+`AssembleNestedLevel` 的早退成立）——补了守卫用例。`FindClassLevelGroup` 是每（容器 × 子成员）
+一次反射调用，构建期与重建路径各一次；1000 元素规模用例照旧通过。
+
+### 一处流程教训：**「待翻转的用例」要先读夹具**
+
+探索期把三条既有用例记成「本轮要翻转」，核过之后发现夹具用的是 `[Title]`（**非分组族**）——
+本轮只让分组族生效，那三条**行为未变**，改法是**留作对照组**并把措辞从「类级特性」收窄成
+「类级**非分组**特性」，另补分组族的正向用例。**「看起来该翻转」与实际翻转之间隔着
+「夹具到底标了什么」**——只看用例名与所在文件会得出错误的改动清单。
+
+---
+
+## 二十二、审计记忆
 
 **2026-10-04（第七轮）：「没有公开无参构造函数」的告警打错了收件人。**
 
