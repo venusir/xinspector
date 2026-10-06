@@ -61,8 +61,7 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
    一个写错的匹配条件就能让某属性链为空，症状是「它静默地什么都不画」——最难归因的
    一类问题。显式追加让链条永不为空。
 
-### 四条与嵌套层有关的契约（2026-10-06 起）
-
+### 五条与嵌套层有关的契约（2026-10-06 起）
 - **成员过滤器只作用于顶层。** `memberFilter` 是为「这个对象的哪些顶层字段进树」而设的
   （窗口路径用它排除 `EditorWindow` 自己的内部字段）；套到嵌套子节点上会把整层静默滤掉。
 - **嵌套层的成员引用先找同级、再回落根上的绝对名。** 嵌套层里写 `[ShowIf("flag")]` 指的是
@@ -83,6 +82,14 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
   （`nested = new …`、Undo、预制体 revert）之后会**静默陈旧**；延迟回调（右键菜单还挂在屏幕上时
   用户可以改字段）尤其要注意这一点。**值类型实例上的方法调用一律拒绝**（装箱后改的是副本）。
   新增任何「要拿实例」的节点种类时，都要走这条出口并配一条钉住作用域的用例。
+- **自己渲染子节点的绘制器，要认「子节点策略」。** 页签与水平分组通过 `PropertyState` 上的
+  `GroupChildrenLayout` 决定「画哪几个子节点」，`[Searchable]` 用 `SearchScope` 决定
+  「哪几个被筛掉」。两者都要求**跳过 `Draw()`**，而不是去写 `VisibilityResolver`——
+  那个槽是覆盖式写入的，每帧写它会把 `[ShowIf]` 装的闭包**永久顶掉**；
+  被筛掉的节点 `IsVisible` 必须保持为真。判断「有没有在过滤」也要沿父链上溯
+  （`SearchScope.Find`），只看直接父节点会漏——嵌套分组节点的父节点往往是另一个分组节点。
+  嵌套层的分组装配会把成员节点的子节点换成**分组节点**，所以这条对 `ChildrenDrawer`
+  同样是常走的路，不是边角。
 
 ### `[DrawerPriority]` 怎么选
 

@@ -747,6 +747,42 @@ namespace XInspector.Samples
             new TableSampleRow { level = 2, name = "哥布林" },
         };
 
+        /// <summary>
+        /// 可搜索的列表：标题行下面多一行搜索框，输入「哥布」试试——只留下命中的那一行。
+        /// 行按**值**比（复合元素递归到它的字段），`−` 与索引标签用的仍是真实下标。
+        /// </summary>
+        [Searchable]
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public List<TableSampleRow> roster = new List<TableSampleRow>
+        {
+            new TableSampleRow { level = 1, name = "史莱姆" },
+            new TableSampleRow { level = 2, name = "哥布林" },
+            new TableSampleRow { level = 3, name = "石像鬼" },
+        };
+
+        /// <summary>
+        /// 增删时回调：点「+」或「−」，Console 里会出现一条 `[XInspector] …` 的日志。
+        /// **成对**触发（改动前 / 改动后）；长度不可变的数组删不掉时只有改动前那一次。
+        /// </summary>
+        [OnCollectionChanged(nameof(BeforeScoresChanged), nameof(AfterScoresChanged))]
+        public List<int> scores = new List<int> { 10, 20 };
+
+        /// <summary>改动**之前**：拿得到改动类型、下标，以及被删掉的那个值。</summary>
+        /// <param name="info">这次改动的描述。</param>
+        /// <param name="value">涉及的元素值；追加时为 <c>null</c>。</param>
+        private void BeforeScoresChanged(CollectionChangeInfo info, object value)
+        {
+            Debug.Log($"[XInspector] scores 改动前：{info.Type} 下标 {info.Index}，值 {value ?? "（追加）"}");
+        }
+
+        /// <summary>改动**之后**：此时序列化数据已经变了，但**目标对象上的集合仍是旧的**。</summary>
+        /// <param name="info">这次改动的描述。</param>
+        /// <param name="value">涉及的元素值；追加时为 <c>null</c>。</param>
+        private void AfterScoresChanged(CollectionChangeInfo info, object value)
+        {
+            Debug.Log($"[XInspector] scores 改动后：{info.Type} 下标 {info.Index}");
+        }
+
         #endregion
 
         #region 调试

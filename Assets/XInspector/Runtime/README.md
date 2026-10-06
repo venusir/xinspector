@@ -352,6 +352,18 @@ public float[] baked;                                  // 去掉增删能力，�
 [TableList(ShowIndexLabels = true)]
 public List<EnemyWave> waves;                          // 表格：每行一个元素、每列一个成员
 
+[Searchable]
+public List<EnemyWave> roster;                         // 搜索框：按值过滤行（可与 [TableList] 同用）
+
+[Searchable]
+public Stats stats;                                    // 搜索框：按字段名/值过滤子成员
+
+[OnCollectionChanged(nameof(Before), nameof(After))]
+public List<int> scores;                               // 增删时回调（改动前 / 改动后）
+
+private void Before(CollectionChangeInfo info, object value) { }
+private void After(CollectionChangeInfo info, object value) { }
+
 [RequiredListLength(3)]
 public string[] team;                                  // 长度校验（只读 arraySize，不需要自绘）
 
@@ -374,7 +386,13 @@ public class EnemyWave
 | `[TableList]` 单独用 | 构建期会补一份 `[ListDrawerSettings]`——不必手写；两者并存时「增删/只读」取后者，「索引列/恒展开」取前者 |
 | 表格列 | 顺序 = 元素类型的声明顺序（有元素时按序列化顺序校一遍，基类在前）；列宽由 `[TableColumnWidth]` 给定、不给则弹性均分；复合类型不做单元格（画占位并告警一次，要彻底去掉用 `[HideInTables]`） |
 | 表格的降级 | 元素不是复合类型（`List<int>`、`string[]`……）时构建期告警一次 + 退回普通列表绘制 |
-| 不做 | 拖拽排序、多选、分页、滚动、列宽拖拽、`CustomAddFunction` 一族、用元素成员的值当行标签、字典、`[TableMatrix]`、`[AssetList]`、`[Searchable]`——**旋钮一律不声明**（写了会编译不过，而不是静默无效） |
+| `[Searchable]` | 字段下方一行搜索框，过滤**它的子成员**：子成员**标签或值**命中即显示（大小写不敏感的子串）。标在数组/List 上过滤的是**行**，行只按值比（元素标签是 `Element 3` 那种索引名，拿来匹配等于搜不着）——复合元素递归到任意一层的叶子，表格按**任一单元格**的值。分组名命中时**整组保留**（不然会得到空框），只有后代命中时自己画、组内逐个再筛；`−` 与索引标签用的仍是**真实下标** |
+| `[Searchable]` 的重算时机 | 命中集在**查询变化或数组长度变化**时重算一次；绘制路径只查表（无反射、无分配）。代价：搜索框没动时改字段值不会立刻刷新命中集，动一下查询即刷新 |
+| `[Searchable]` 的副作用 | 数组/List 上没标 `[ListDrawerSettings]` 时构建期**补一份**；复合字段会因此**展开成真节点**（从「整份交给 Unity」变成本包的折叠头 + 缩进，里面的特性随之生效）。标在标量、`[SerializeReference]`、`[ShowInInspector]` 成员上时构建期告警一次（没有可筛选的子成员） |
+| `[OnCollectionChanged]` | 集合**在 Inspector 里被增删**时调用指定方法：`(string before, string after)`，两个方向都可省。方法两种形状：`()` 或 `(CollectionChangeInfo info, object value)`（后者第二个参数就是 `info.Value`） |
+| `[OnCollectionChanged]` 的时机 | 两个回调夹住的是「**写进序列化数据**」那一步（官方那句 *through the inspector*）。**成对与否的判据是长度真的变了**：长度不可变的数组删不掉／加不进时只有改动前、没有改动后 |
+| `[OnCollectionChanged]` 的边界 | **回调触发时目标对象上的托管集合仍是旧的**（绘制路径只改内存副本，落盘在宿主这一帧绘制之后）；窗口工具栏的「重置为默认值」不经过集合绘制器，**不触发**；字段没有 `[ListDrawerSettings]` 时构建期补一份（同 `[TableList]`）；标在非集合上时告警并忽略 |
+| 不做 | 拖拽排序、多选、分页、滚动、列宽拖拽、`CustomAddFunction` 一族、用元素成员的值当行标签、字典、`[TableMatrix]`、`[AssetList]`、类型级的 `[Searchable]`——**旋钮一律不声明**（写了会编译不过，而不是静默无效） |
 
 ### 按钮族
 
@@ -430,6 +448,7 @@ public class EnemyWave
 | `[OnValueChanged]` 的判据 | 「绘制这一趟里值前后不一致」，故不必跨帧记旧值、没有第一帧误报；取快照类型化、不装箱 |
 | 不支持的类型 | 数组、`Bounds` 这类没覆盖到的类型**告警一次且不触发**，不假装监听着 |
 | `[CustomContextMenu]` | 菜单出现在**字段自己那一行**（Unity 头部菜单没有公开注入点）；同一字段挂多项时由第一项负责弹菜单 |
+| `[OnCollectionChanged]` | 见上面的「集合与表格」一节：两个方向夹住的是**写进序列化数据**那一步，成对与否看长度有没有真的变 |
 | 与 Odin 的差异 | 六个都不做 resolved string：方法名就是本类型上的方法名，没有 `$`／`@`／表达式／带参调用 |
 
 ### 其余分组特性
