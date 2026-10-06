@@ -109,6 +109,14 @@ namespace XInspector.Samples
         /// </summary>
         public NestedShowcaseStats stats = new NestedShowcaseStats();
 
+        /// <summary>对照组：根上的同名方法——嵌套层的按钮**不该**调到它。</summary>
+        [Button("根上的重置（对照）")]
+        private void ResetStats()
+        {
+            orderedFirst = 1;
+            orderedLast = 2;
+        }
+
         /// <summary>只带原生装饰器的嵌套类型——不展开，整份仍由 Unity 画（外观与从前一致）。</summary>
         public NestedShowcaseNative nativeNested;
 
@@ -896,6 +904,24 @@ namespace XInspector.Samples
         /// </summary>
         [BoxGroup("嵌套层里的分组")]
         public int armor = 25;
+
+        /// <summary>
+        /// 嵌套层的**反射成员**：它不在 Unity 的序列化里，但照样画出来（只读）。
+        /// 取值读的是**这个嵌套实例**，不是根对象。
+        /// </summary>
+        [ShowInInspector]
+        public int Total => hp + armor;
+
+        /// <summary>
+        /// 嵌套层的**按钮**：点它调的是**这个嵌套实例**上的方法。
+        /// 根组件上也有一个同名方法作对照——调用不会跑到那边去。
+        /// </summary>
+        [Button("嵌套层里的按钮")]
+        private void ResetStats()
+        {
+            hp = 100;
+            armor = 25;
+        }
     }
 
     /// <summary>只带原生装饰器的嵌套类型——用来对照「没用到本包的类型外观不变」。</summary>

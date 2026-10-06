@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+### Added — 嵌套层的读路径（能力轮，特性计数 +0）
+
+- **嵌套 `[Serializable]` 类型里的反射能力第一次生效**：`[ShowInInspector]` 的普通属性与
+  非序列化字段成为真节点，取值读的是**那个嵌套实例**；条件族指向反射字段/属性/无参方法的
+  两级也通了；`[Button]` 一族（含 `[OnInspectorGUI]`）与按名回调
+  （`[OnValueChanged]` / `[CustomContextMenu]` / `[InlineButton]`）**调的是嵌套实例的方法**。
+- **技术路线**：Unity 没有公开 API 从 `SerializedProperty` 拿到嵌套托管实例
+  （`boxedValue` 只是序列化数据的装箱快照，读不到非序列化成员、也给不出可调用的活实例），
+  故用「根目标 + 按 `propertyPath` 逐段编译式下钻」——构建期合成一条委托链，
+  绘制期只有委托调用。**链每帧现读**：父字段被重新赋值（`nested = new …`、Undo、
+  预制体 revert）之后跟着走，不会静默陈旧。
+- **两条边界**：**值类型（struct）实例上的方法不调用**（链上会装箱，改的是副本，
+  改动会丢——按钮画成禁用并写明原因）；**嵌套实例为空**时读值显示「—」、方法跳过该目标。
+- **只读承诺的准确表述**：反射**值后端**仍然只读（`SetValue` 恒抛）；但嵌套层的
+  `[Button]` 一族是**方法调用**，会写、Inspector 路径记撤销。两者不是一回事。
+
+### Fixed
+
+- **嵌套字段上的按名回调会静默调错对象**：解析取的是 `Owner.Targets`（根对象），
+  嵌套字段上写 `[OnValueChanged("Bump")]` 而根类型恰好有同名方法时，会被调走——
+  按钮有反应，只是反应发生在另一个对象上。现改在**同一个嵌套实例**的类型上解析。
+- **路径访问器对 null 中间段做空传播**：`stats.inner.flag` 而 `inner` 为 null 时，
+  原先会每帧抛 NullReferenceException（托管对象与序列化数据不同，前者真的可以是 null）。
+
 ### Added — 嵌套层的分组装配
 
 - **嵌套 `[Serializable]` 类型里的分组特性第一次生效**：`[BoxGroup]` 一族框在复合字段
