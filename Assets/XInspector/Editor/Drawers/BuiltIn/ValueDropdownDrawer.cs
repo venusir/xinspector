@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace XInspector.Editor
 {
@@ -318,34 +321,330 @@ namespace XInspector.Editor
         /// <returns>一致返回 <c>true</c>。</returns>
         private static bool SameEnum(SerializedProperty left, SerializedProperty right)
         {
-            string[] leftNames;
-            string[] rightNames;
-
             try
             {
-                leftNames = left.enumNames;
-                rightNames = right.enumNames;
+                return EnumIdentity.SameNames(left.enumNames, right.enumNames);
             }
             catch (System.Exception)
             {
                 // enumNames 在极少数情况下会抛（属性已失效）。取不到就判为不一致，宁可不动。
                 return false;
             }
+        }
 
-            if (leftNames == null || rightNames == null || leftNames.Length != rightNames.Length)
+        #endregion
+    }
+
+    /// <summary>
+    /// 「两个枚举算不算同一个」——**两条写回通道共用的那一份判据**。
+    /// </summary>
+    /// <remarks>
+    /// 判据是「成员名与顺序逐字一致」：两个不同的枚举可以在同一序号上放着完全不同的东西，
+    /// 只比 <c>propertyType</c>（两边都是 <c>Enum</c>）会让那种情况**静默写错**。
+    /// 来源侧传 <c>Enum.GetNames</c>、目标侧传 <see cref="SerializedProperty.enumNames"/>，
+    /// 两边问的是同一个问题，就该由同一个函数回答——各写一遍迟早漂。
+    /// </remarks>
+    internal static class EnumIdentity
+    {
+        #region Public API
+
+        /// <summary>
+        /// 两组枚举成员名是否**同长、逐字相同、顺序一致**。
+        /// </summary>
+        /// <param name="left">左（来源）。</param>
+        /// <param name="right">右（目标）。</param>
+        /// <returns>一致返回 <c>true</c>；任一为 <c>null</c> 时返回 <c>false</c>。</returns>
+        public static bool SameNames(string[] left, string[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
             {
                 return false;
             }
 
-            for (var i = 0; i < leftNames.Length; i++)
+            for (var i = 0; i < left.Length; i++)
             {
-                if (!string.Equals(leftNames[i], rightNames[i], System.StringComparison.Ordinal))
+                if (!string.Equals(left[i], right[i], StringComparison.Ordinal))
                 {
                     return false;
                 }
             }
 
             return true;
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// 把**托管的选中值**写进序列化属性——<c>[ValueDropdown]</c> 反射源那条写回通道。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>与 <see cref="SerializedValueCopier"/> 是两条通道、同一份严格性。</b> 那边是
+    /// 句柄 → 句柄（选项来自序列化数组），这边是托管值 → 句柄（选项来自反射源）。
+    /// 两条都**先判完再写**，任何拒绝路径什么都不写；枚举的判据**物理上共用一份**
+    /// （见 <see cref="EnumIdentity"/>）——同一份数据走两条路得到不同的接受结论，
+    /// 是最难向使用者解释的一类不一致。
+    /// </para>
+    /// <para>
+    /// <b>为什么需要 <paramref name="declaredType"/>：</b><see cref="SerializedProperty"/>
+    /// 给得出 <c>propertyType</c>，却给不出对象引用字段的 **CLR 声明类型**
+    /// （<c>Transform</c> 还是 <c>GameObject</c>？）。那个类型只能从树节点上取
+    /// （<see cref="InspectorProperty.Type"/>）。传 <c>null</c> 或 <c>object</c> 时按「未知」处理，
+    /// 跳过那一层校验。
+    /// </para>
+    /// <para>
+    /// <b>拒绝面比那条通道宽得多，所以必须给出原因</b>：一条固定文案会把「它不是 Unity 对象」、
+    /// 「声明类型不符」、「枚举成员名对不上」说成同一句话，而这三件事的修法完全不同。
+    /// </para>
+    /// </remarks>
+    internal static class ReflectedValueCopier
+    {
+        #region Public API
+
+        /// <summary>
+        /// 尝试把托管值写进目标序列化属性。
+        /// </summary>
+        /// <param name="value">选中的值，可为 <c>null</c>。</param>
+        /// <param name="destination">目标属性。</param>
+        /// <param name="declaredType">目标的声明类型；未知时为 <c>null</c>。</param>
+        /// <param name="reason">拒绝的原因；成功时为 <c>null</c>。</param>
+        /// <returns>写入成功返回 <c>true</c>；拒绝返回 <c>false</c>（**什么都不写**）。</returns>
+        public static bool TryAssign(
+            object value, SerializedProperty destination, Type declaredType, out string reason)
+        {
+            reason = null;
+
+            if (destination == null)
+            {
+                reason = "目标是空的（该属性没有序列化后端）";
+                return false;
+            }
+
+            switch (destination.propertyType)
+            {
+                case SerializedPropertyType.Integer when IsIntegral(value):
+                    destination.longValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                    return true;
+
+                case SerializedPropertyType.Boolean when value is bool flag:
+                    destination.boolValue = flag;
+                    return true;
+
+                case SerializedPropertyType.Float when value is float || value is double:
+                    destination.doubleValue = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                    return true;
+
+                // 空字符串与空值都当「清空」——Unity 本来就把 null 存成空串。
+                case SerializedPropertyType.String when value == null:
+                    destination.stringValue = string.Empty;
+                    return true;
+
+                case SerializedPropertyType.String when value is string text:
+                    destination.stringValue = text;
+                    return true;
+
+                case SerializedPropertyType.Color when value is Color color:
+                    destination.colorValue = color;
+                    return true;
+
+                // Color32 → Color 是 Unity 定义的隐式转换，无损。
+                case SerializedPropertyType.Color when value is Color32 color32:
+                    destination.colorValue = color32;
+                    return true;
+
+                case SerializedPropertyType.Enum:
+                    return TryAssignEnum(value, destination, out reason);
+
+                case SerializedPropertyType.ObjectReference:
+                    return TryAssignObject(value, destination, declaredType, out reason);
+
+                case SerializedPropertyType.Vector2 when value is Vector2 vector2:
+                    destination.vector2Value = vector2;
+                    return true;
+
+                case SerializedPropertyType.Vector3 when value is Vector3 vector3:
+                    destination.vector3Value = vector3;
+                    return true;
+
+                case SerializedPropertyType.Vector4 when value is Vector4 vector4:
+                    destination.vector4Value = vector4;
+                    return true;
+
+                case SerializedPropertyType.Rect when value is Rect rect:
+                    destination.rectValue = rect;
+                    return true;
+
+                case SerializedPropertyType.Bounds when value is Bounds bounds:
+                    destination.boundsValue = bounds;
+                    return true;
+
+                case SerializedPropertyType.Quaternion when value is Quaternion quaternion:
+                    destination.quaternionValue = quaternion;
+                    return true;
+            }
+
+            reason = Mismatch(destination, value);
+            return false;
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        /// <summary>
+        /// 枚举那一格：按**成员名**定位，且要求两边是同一个枚举。
+        /// </summary>
+        /// <param name="value">选中的值。</param>
+        /// <param name="destination">目标属性。</param>
+        /// <param name="reason">拒绝的原因。</param>
+        /// <returns>写入成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 判据与 <see cref="SerializedValueCopier"/> **同源**（见 <see cref="EnumIdentity"/>），
+        /// 不更宽也不更严——更宽会把那条通道挡住的静默写错放回来，
+        /// 更严则让同一份 <c>List&lt;MyEnum&gt;</c> 换个来源形态就得到不同的接受结论。
+        /// </remarks>
+        private static bool TryAssignEnum(object value, SerializedProperty destination, out string reason)
+        {
+            reason = null;
+
+            if (!(value is Enum))
+            {
+                reason = Mismatch(destination, value);
+                return false;
+            }
+
+            string[] targetNames;
+
+            try
+            {
+                targetNames = destination.enumNames;
+            }
+            catch (Exception)
+            {
+                // enumNames 在极少数情况下会抛（属性已失效）。取不到就判为不一致，宁可不动。
+                reason = "取不到目标枚举的成员名（属性可能已失效）";
+                return false;
+            }
+
+            var sourceType = value.GetType();
+
+            if (!EnumIdentity.SameNames(Enum.GetNames(sourceType), targetNames))
+            {
+                reason =
+                    $"两个枚举的成员名或顺序不一致（来源是 {ReflectedAccessor.DescribeType(sourceType)}，" +
+                    $"目标有 {targetNames?.Length ?? 0} 个成员）——无法确认它们是同一个枚举";
+                return false;
+            }
+
+            var name = Enum.GetName(sourceType, value);
+
+            if (name == null)
+            {
+                // [Flags] 的组合值没有单一成员名，按序号写会写错——宁可不动。
+                reason = $"选中的枚举值是多个标志位的组合（{value}），没有单一的成员名，写不进去";
+                return false;
+            }
+
+            var index = Array.IndexOf(targetNames, name);
+
+            if (index < 0)
+            {
+                // 名字集合刚刚比对过，走到这里说明它中途变了；照样不写。
+                reason = $"目标枚举里找不到名为「{name}」的成员";
+                return false;
+            }
+
+            destination.enumValueIndex = index;
+            return true;
+        }
+
+        /// <summary>
+        /// 对象引用那一格：先看**是不是 Unity 对象**，再看**能不能赋给声明类型**。
+        /// </summary>
+        /// <param name="value">选中的值。</param>
+        /// <param name="destination">目标属性。</param>
+        /// <param name="declaredType">目标的声明类型；未知时为 <c>null</c>。</param>
+        /// <param name="reason">拒绝的原因。</param>
+        /// <returns>写入成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>两道校验缺一不可。</b> 只做第一道的话，<c>Transform</c> 字段会被塞进
+        /// <c>GameObject</c>；只做第二道的话，普通托管对象会被塞进
+        /// <c>objectReferenceValue</c>——那是 Unity 会报错的路径，而我们的纪律是**不写就明说**。
+        /// </remarks>
+        private static bool TryAssignObject(
+            object value, SerializedProperty destination, Type declaredType, out string reason)
+        {
+            reason = null;
+
+            // 这里刻意用**引用比较**判空：Unity 的「已销毁对象」引用不为 null、按 Unity 的语义却是空，
+            // 而这两种情况在下面分开处置（真空与已销毁都写 null，非 Unity 对象要拒绝）。
+            if (value == null)
+            {
+                destination.objectReferenceValue = null;
+                return true;
+            }
+
+            if (!(value is Object unity))
+            {
+                reason =
+                    $"目标是对象引用，而选中的值是 {ReflectedValueFormatter.TypeName(value.GetType())}" +
+                    "——它不是 Unity 对象";
+                return false;
+            }
+
+            // 已销毁的对象：它按 Unity 的语义就是空，写进去等于清空（用户看到的标签本来也是 None）。
+            if (unity == null)
+            {
+                destination.objectReferenceValue = null;
+                return true;
+            }
+
+            if (declaredType != null && declaredType != typeof(object) && !declaredType.IsInstanceOfType(unity))
+            {
+                reason =
+                    $"目标的声明类型是 {ReflectedAccessor.DescribeType(declaredType)}，" +
+                    $"而选中的值是 {ReflectedAccessor.DescribeType(unity.GetType())}";
+                return false;
+            }
+
+            destination.objectReferenceValue = unity;
+            return true;
+        }
+
+        /// <summary>
+        /// 值是不是「能原样放进 <c>long</c>」的整型。
+        /// </summary>
+        /// <param name="value">值。</param>
+        /// <returns>是返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>逐类型判，不用 <c>Type.GetTypeCode</c></b>：装箱枚举的 <c>TypeCode</c> 是它的底层
+        /// 整数类型，用类型码会把「枚举值写进 int 字段」也放行——那正是本包点名要挡的静默错写。
+        /// </para>
+        /// <para>
+        /// <c>ulong</c> 不在内：<c>long.MaxValue</c> 之外的范围表达不了，截断是错的，宁可拒绝。
+        /// </para>
+        /// </remarks>
+        private static bool IsIntegral(object value)
+        {
+            return value is sbyte || value is byte || value is short || value is ushort ||
+                   value is int || value is uint || value is long;
+        }
+
+        /// <summary>构造一句「类型对不上」的中文原因。</summary>
+        /// <param name="destination">目标属性。</param>
+        /// <param name="value">选中的值。</param>
+        /// <returns>原因文本。</returns>
+        private static string Mismatch(SerializedProperty destination, object value)
+        {
+            if (value == null)
+            {
+                return $"目标是 {destination.propertyType}，而选中的值是空值——只有字符串与对象引用收空值";
+            }
+
+            return $"目标是 {destination.propertyType}，而选中的值是 " +
+                   $"{ReflectedValueFormatter.TypeName(value.GetType())}——两者不能互转";
         }
 
         #endregion
