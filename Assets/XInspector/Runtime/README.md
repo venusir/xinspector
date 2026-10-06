@@ -193,6 +193,8 @@ public static string BuildTag = "静态成员也可以标";
 ```csharp
 [DisplayAsString]                 public int computedId;      // 只读文本
 [DisplayAsString(true)]           public string json;         // 允许折行溢出
+[DisplayAsString(20)]             public string sized;        // 字号 20
+[DisplayAsString(16, true)]       public string rich;         // 富文本
 [ToggleLeft]                      public bool enableTracing;  // 开关在左
 [ProgressBar(0, 100)]             public float health;        // 可拖动的进度条
 [EnumToggleButtons]               public DamageType damage;   // 一排按钮
@@ -206,6 +208,7 @@ public static string BuildTag = "静态成员也可以标";
 | 类型不符 | **告警并退回普通绘制**，字段不会消失。每种特性的支持类型见上表 |
 | `[ProgressBar]` 的越界值 | **不钳制数据**，只把条画到端点。要钳制请配 `[MinValue]`/`[MaxValue]` |
 | `[DisplayAsString]` 的复合类型 | 数组与嵌套结构退回普通绘制——显示成什么形状没有显然的答案 |
+| `[DisplayAsString]` 的重载 | 非 `TextAlignment` 的六个官方重载**都声明**（`()`、`(bool)` 与四个带 `FontSize` / `EnableRichText` 的组合）；带 `TextAlignment` 的八个**永久不做**（Unity 类型，Runtime 零 Unity 依赖是编译期强制的）。官方那个 `Format` 字段**不声明**——语义没核清。字号 `0` ＝ 编辑器默认；提了字号或富文本的属性样式缓存在 `PropertyState` 上，**默认路径逐字不变** |
 | 多对象编辑 | `[DisplayAsString]` 值不一致时显示 `—`（与 Unity 一致）；`[ProgressBar]` 值不一致时不可拖动；`[PropertyRange]` 值不一致时退回普通绘制（滑块没有「混合值」形态） |
 | `[DelayedProperty]` 的类型面 | 支持 `int`/`float`/`double`/`string`；`long` 仅在值处于 `int` 范围内时可画（延迟控件只有 `int` 版本） |
 | `[EnumPaging]` 与 `[Flags]` | 位标志没有「上一项/下一项」的顺序语义，告警并退回普通绘制 |
@@ -242,6 +245,7 @@ public static string BuildTag = "静态成员也可以标";
 | `Extensions` 只过滤对话框 | 不校验手填的值，也不拦已选的值——标错了不该让字段用不了 |
 | `[MinMaxSlider]` 的边界 | 可以是字面量、一个 `Vector2` 成员、两个 `float` 成员或混搭；那三个「成员」**也可以是普通字段/属性或无参方法**（2026-10-06 起）。**只作用 `Vector2`**（`Vector2Int` 不做：值后端不支持它）。边界出现 NaN/无穷时退回普通绘制；动态成员的值被改成倒置时**自动换序** |
 | `[PreviewField]` 的方块 | **方块是预览、不是控件**——可编辑的是旁边那个对象字段（原生控件，拖拽赋值照常）。宽度不够时字段排到下一行。默认高度 64、默认对齐 `Left`，都由本包定 |
+| `[PreviewField]` 方块的落点 | 2026-10-07 起方块本身也是落点：**Ctrl+点击清空、Ctrl+拖拽替换**（判定是纯函数 `PreviewFieldDrop`）。与 `[AssetList]` 的规则**刻意不同**：那边只收工程资产，**这里场景对象本来就合法**。只读或多选值不一致时整块跳过（写单值会铺到全部目标）；被拒时光标禁入且落下时告警一次 |
 | `[ValueDropdown]` 的树形 | 选项里带 `/` 就**分子菜单**（与 Odin 一致，默认就是树形）；`FlattenTreeView = true` 拍平成一层 |
 | `[ColorPalette]` 的调色板 | **工程内的一份资产**（右键 `Create/XInspector/Color Palette` 建 `XInspectorColorPalette`），不是编辑器偏好——那样能进版本控制、能团队共享。`[ColorPalette("名字")]` 按**资产文件名**找（大小写不敏感、改名即改名）；`[ColorPalette]` 用工程里**唯一**那份，零份或多份时**告警并退回普通绘制**（多份时列候选名）。找不到**不让字段消失** |
 | `[ColorPalette]` 的形态 | **透传型**：字段上方一行色块（当前值命中的那格**描一圈白边**，容差 1/255），点一下填进去；原生颜色字段照常在下面。格子 16 像素、间距 2 像素是**本包自定值**，放不下折行而不缩格子。**多选值不一致时整行不画**（点一下会把主目标的颜色铺到全部目标）。**只作用单个 `Color` 字段**——数组与 `List<Color>` 不做 |

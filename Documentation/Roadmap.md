@@ -337,9 +337,15 @@ Odin 是「能改但不保存」，本包是「不给改」。代价是少了一
 不必是 `UnityEngine.Object`（那种目标只收 `[ShowInInspector]` 的成员，且不可重置）。
 注意它**只解决「检视谁由子类说了算」**，没有解决下面那条。
 
+**2026-10-07 补了两个切口**：`DrawEditors()`（**内容区**——与 Odin 同名不同义，
+那边是「逐个 `Editor` 调 `OnInspectorGUI`」）与 `WindowPadding`（本包自定形状：
+单值四边同宽，默认 0 走与原实现逐字相同的路径）。`Initialize()` **判不做**——
+`OnEnable` 就是那个钩子，而树刻意是惰性的。见 Pipeline §二十八。
+
 **仍未做**：带对象选择器的浮空 Inspector（`GetTarget()` 不含 target 槽位的 UI，
 那是「另一个产品形态」——见本文件 §十二 与 [Pipeline §二 第 12 条](Modules/Pipeline.md)）、
-字段拖拽重排、窗口内 Undo、窗口布局的自定义持久化。
+字段拖拽重排、窗口内 Undo、窗口布局的自定义持久化、`OdinMenuEditorWindow` 一族（独立大件）。
+`[OnInspectorGUI]` 混入自定义 IMGUI 的那半 L5 已做（方法上的无参形式）。
 
 **UI Toolkit：不做。** 整套管线是 IMGUI 的（`EditorGUILayout`、`DrawerChain` 的即时模式语义）。
 改成 UI Toolkit 是重写而不是移植。除非 Unity 弃用 IMGUI。

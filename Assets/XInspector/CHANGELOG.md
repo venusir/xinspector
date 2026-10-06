@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+### Added — 窗口两个切口、`[DisplayAsString]` 重载、`[PreviewField]` 方块落点（特性计数 +0）
+
+- **窗口基类补两个可覆写的切口**：`DrawEditors()`（**内容区**）与 `WindowPadding`
+  （四边同宽的留白，默认 0）。前者把 `Attach` 与 `Draw` 的**配对**收进一个方法——
+  覆写 `OnGUI` 容易漏掉第一步，症状是画上一帧的目标或什么都不画。
+  `DrawEditors` **与 Odin 同名不同义**（那边是「逐个 `Editor` 调 `OnInspectorGUI`」，
+  本包只有一个目标），留名字是为了让从 Odin 迁来的人找得到落点。
+  `WindowPadding` 是**本包自定形状**（单值四边同宽）；**默认 0 走与原实现逐字相同的路径**。
+- **`[DisplayAsString]` 补齐非 `TextAlignment` 的四个重载**：`(int)`、`(bool, int)`、
+  `(int, bool)`、`(bool, int, bool)`，配上 `FontSize` / `EnableRichText` 两个选项。
+  官方 14 个重载里另外 8 个带 `TextAlignment`（Unity 类型）——**永久不做**（Runtime 零
+  Unity 依赖是编译期强制的）。默认路径**逐字不动**；提了字号/富文本的属性把样式缓存在
+  `PropertyState` 上（绘制器是无状态共享单例）。官方另有的 `Format` 字段**不声明**
+  （语义没核清，按「不猜形状」的先例不做）。
+- **`[PreviewField]` 的预览方块成了落点**：Ctrl+点击清空、Ctrl+拖拽替换。
+  旁边那个原生对象字段**早就**支持拖放，这里补的是**方块**。判定抽成纯函数
+  `PreviewFieldDrop`——它与 `[AssetList]` 的拖放规则**刻意不同**：那边只收工程资产，
+  这里是对象字段，**场景对象本来就合法**。只读与多选一律跳过（写单值会铺到全部目标）。
+- **判「不做」的一条**：窗口的 `Initialize()` 不做——本包的 `OnEnable` 就是那个钩子，
+  而树刻意是惰性的；再加一个同义虚方法只会造出「两个都该覆写」的困惑。理由记进了 OdinGap。
+
 ### Added — `[ColorPalette]`（特性计数 87 → 88）
 
 - **调色板存哪这层设计定下来了：工程内的资产**。`XInspectorColorPalette`（右键

@@ -457,8 +457,9 @@ L6 的容器 / 元素 / 回调 / 搜索 / 资产列表，以及两条「嵌套 /
 | 画**属性与方法** | ✅ 已实现（2026-10-04 L3）：`[ShowInInspector]` 收普通属性与非序列化字段、方法节点收 `[Button]` 一族 | — |
 | `GetTarget()`：渲染**任意**对象（不必可序列化、不必是 `UnityEngine.Object`） | ✅ 已实现（2026-10-04 L3）：`protected virtual object GetTarget()` | — |
 | `[OnInspectorGUI]`：混入自定义 IMGUI | ✅（方法上的无参形式，L5 已做） | — |
-| `Initialize()` / `WindowPadding` | ❌ 缺 | 无（轻量） |
-| `DrawEditors`：整段编辑器混入 | ❌ 缺 | 与 `[OnInspectorGUI]` 同源，缺的只是一个理由 |
+| `Initialize()` | ❌ **本包不做**（`OnEnable` 就是那个钩子） | — |
+| `WindowPadding` | ✅ 已实现（2026-10-07）：本包自定形状（单值四边同宽、默认 0） | — |
+| `DrawEditors`：整段编辑器混入 | ✅ 已实现（2026-10-07）：语义是**本包的「内容区」**，与 Odin 同名不同义 | — |
 | `OdinMenuEditorWindow` + `OdinMenuTree`（`AddAllAssetsAtPath`、图标、多选、菜单样式） | ❌ 缺 | **独立大件** |
 
 **一处刻意的差异，不是缺口：** Odin **不让你覆写 `OnGUI`**（要求覆写 `DrawEditors`
@@ -667,11 +668,13 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
 | Odin 有 | 本项目 | 依赖 |
 |---|---|---|
 | `OdinEditorWindow`：画**字段** | ✅ `XInspectorEditorWindow` | — |
-| 画**属性与方法** | ✗ | L3 |
-| `GetTarget()`：渲染**任意**对象（不必可序列化、甚至不必是 `UnityEngine.Object`） | ✗ | L3 |
-| `[OnInspectorGUI]` / `DrawEditors`：混入自定义 IMGUI | ✗ | L5 |
-| `Initialize()` / `WindowPadding` | ✗ | 轻 |
-| `OdinMenuEditorWindow` + `OdinMenuTree`：菜单树窗口（`AddAllAssetsAtPath`、图标、多选、样式） | ✗ | **独立大件** |
+| 画**属性与方法** | ✅（L3 起；本表此前漏更新） | — |
+| `GetTarget()`：渲染**任意**对象（不必可序列化、甚至不必是 `UnityEngine.Object`） | ✅（L3 起；本表此前漏更新） | — |
+| `[OnInspectorGUI]`：混入自定义 IMGUI | ✅ 方法上的无参形式（L5 起；本表此前漏更新） | — |
+| `DrawEditors`：混入自定义 IMGUI | ✅（2026-10-07）：**与 Odin 同名不同义**——那边是「逐个 `Editor` 调 `OnInspectorGUI`」，本包只有一个目标，语义是**内容区**；留名字是为了可搜索性 | — |
+| `WindowPadding` | ✅（2026-10-07）：**本包自定形状**，单值四边同宽、默认 0 | — |
+| `Initialize()` | ❌ **本包不做**：`OnEnable` 就是那个钩子（树刻意是惰性的），再加一个同义虚方法只会造出「两个都该覆写」的困惑。见 Pipeline §二十八 决定三 | — |
+| `OdinMenuEditorWindow` + `OdinMenuTree`：菜单树窗口（`AddAllAssetsAtPath`、图标、多选、样式） | ❌ | **独立大件** |
 
 另外 Odin 的窗口**不让你覆写 `OnGUI`**（要你覆写 `DrawEditors` 或用 `[OnInspectorGUI]`）——
 本包的基类允许覆写 `OnGUI`，这是有意的差异（我们的窗口没有 Odin 那套内部绘制循环）。
