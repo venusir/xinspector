@@ -783,6 +783,26 @@ namespace XInspector.Samples
             Debug.Log($"[XInspector] scores 改动后：{info.Type} 下标 {info.Index}");
         }
 
+        /// <summary>
+        /// **元素里的特性第一次生效**：元素类型 <see cref="ElementShowcaseItem"/> 的成员上标着
+        /// 条件、分组与顺序——展开任意一行看看，它们和顶层字段一样工作。
+        /// 元素类型没用到本包的集合照旧整份交给 Unity（见上面的原生对照）。
+        /// </summary>
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public List<ElementShowcaseItem> party = new List<ElementShowcaseItem>
+        {
+            new ElementShowcaseItem { hp = 30, level = 2, name = "游侠" },
+            new ElementShowcaseItem { hp = 5, alive = false, level = 1, name = "倒下的法师" },
+        };
+
+        /// <summary>
+        /// `[ReadOnly]` 标在列表上：**整块（含每个元素）都变灰**——与上面那个 `IsReadOnly`
+        /// 旋钮的差别正在这里（旋钮只关增删按钮，元素照常可编辑）。
+        /// </summary>
+        [ReadOnly]
+        [ListDrawerSettings]
+        public float[] lockedWeights = { 0.5f, 1.5f };
+
         #endregion
 
         #region 调试
@@ -895,6 +915,29 @@ namespace XInspector.Samples
 
         /// <summary>上界。</summary>
         public float max;
+    }
+
+    /// <summary>
+    /// 展示**元素里的特性**用的元素类型：条件、分组、顺序各来一样——
+    /// 它们全都跟着元素节点化第一次生效。
+    /// </summary>
+    [Serializable]
+    public class ElementShowcaseItem
+    {
+        /// <summary>条件开关——**元素内部**的成员。</summary>
+        public bool alive = true;
+
+        /// <summary>跟随同层的 <c>alive</c>：取消勾选（或直接用下面那个已取消的）这一行消失。</summary>
+        [ShowIf(nameof(alive))]
+        public int hp = 20;
+
+        /// <summary>框在元素**内部**的分组里（分组路径以元素路径为前缀）。</summary>
+        [BoxGroup("属性")]
+        public int level = 1;
+
+        /// <summary>排到元素那一层的最前。</summary>
+        [PropertyOrder(-1f)]
+        public string name = "新队员";
     }
 
     /// <summary>展示 <c>[TableList]</c> 用的行类型：一列定宽、一列弹性、一列不进表格。</summary>
