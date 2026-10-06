@@ -651,6 +651,258 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 元素层：活值通道
+
+        /// <summary>
+        /// 元素里的**反射成员**按当前值参与行匹配（此前只比序列化值，故那种元素搜不到）。
+        /// </summary>
+        /// <remarks>夹具第一行 <c>level = 30</c> ⇒ <c>Doubled = "60"</c>，序列化字段里没有 "60"。</remarks>
+        [Test]
+        public void 元素里的反射成员的值参与行匹配()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "rows");
+                    var state = StateOf(node, "60");
+
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { true, false, false }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 活值通道**只比值、不比标签**——与序列化那一半同款（元素标签是 <c>Element 0</c>，
+        /// 让它参与的话任何含 <c>element</c> 的查询都会全中）。
+        /// </summary>
+        [Test]
+        public void 元素里的反射成员不按标签匹配()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "rows");
+                    var state = StateOf(node, "Doubled");
+
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { false, false, false }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素为 <c>null</c> 时读不到值（算「不一致」），不算命中，也不抛。</summary>
+        [Test]
+        public void 元素为null时反射成员不算命中()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "rows");
+
+                    Assert.DoesNotThrow(() => StateOf(node, "60").EnsureListRows(node));
+                    Assert.That(StateOf(node, "60").EnsureListRows(node)[2], Is.False, "第三行是 null 元素。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 反射成员的 getter 抛异常时不算命中，也**不在搜索路径上告警**（该错误在成员未被
+        /// 过滤时由终端自己画出来——不静默；而按元素各报一条只会刷屏）。
+        /// </summary>
+        [Test]
+        public void 元素里的反射成员出错时不算命中()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableThrowingFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "rows");
+
+                    Assert.DoesNotThrow(() => StateOf(node, "Boom").EnsureListRows(node));
+                    Assert.That(
+                        StateOf(node, "Boom").EnsureListRows(node),
+                        Is.EqualTo(new[] { false, false }),
+                        "连标签都不比——活值通道只认值。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 元素里的反射值命中 ⇒ **集合节点自己**留下（否则整块集合会连同那一行一起消失）。
+        /// </summary>
+        /// <remarks>
+        /// 只有「集合在另一个宿主**里面**」的形态测得到：宿主直接是集合时，它的子节点全是
+        /// 元素节点，`Collect` 在第一步就跳过了，那条分支根本走不到。
+        /// </remarks>
+        [Test]
+        public void 元素里的反射值命中时集合节点自己留下()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "host");
+                    var group = Find(host, "host/宿主里的分组");
+                    var rows = Find(group, "host.rows");
+
+                    StateOf(host, "60").EnsureNodes(host);
+
+                    var state = StateOf(host, "60");
+                    Assert.That(
+                        state.VisibilityOf(rows),
+                        Is.EqualTo(SearchVisibility.KeepAll),
+                        "行掩码只挑行、不挑集合，集合自己得留下。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>命中的集合的**祖先分组**算「靠后代命中」那一档。</summary>
+        [Test]
+        public void 元素里的反射值命中时祖先分组是过滤档()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "host");
+                    var group = Find(host, "host/宿主里的分组");
+
+                    var state = StateOf(host, "60");
+                    state.EnsureNodes(host);
+
+                    Assert.That(state.VisibilityOf(group), Is.EqualTo(SearchVisibility.Filtered));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>节点级那一半：复合宿主里的反射成员按值命中，整棵子树保留。</summary>
+        [Test]
+        public void 复合宿主里的反射成员按值命中()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "host");
+                    var total = Find(host, "host.Total");
+
+                    var state = StateOf(host, "99");
+                    state.EnsureNodes(host);
+
+                    Assert.That(state.VisibilityOf(total), Is.EqualTo(SearchVisibility.KeepAll));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 元素层**重建**之后行掩码重算——哪怕长度与查询都没变。
+        /// </summary>
+        /// <remarks>
+        /// 掩码的输入是元素节点（活值从那儿读），而元素层能在净长度不变时因脏标记重建；
+        /// 键里因此带了**首个元素节点**这个身份。
+        /// 顺带钉住既有契约：「搜索框没动时改值不刷新命中集」。
+        /// </remarks>
+        [Test]
+        public void 元素层重建后行掩码重算()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "rows");
+                    var state = StateOf(node, "60");
+
+                    Assert.That(state.EnsureListRows(node), Is.EqualTo(new[] { true, false, false }));
+
+                    target.rows[0].level = 5; // Doubled：60 → 10
+
+                    Assert.That(
+                        state.EnsureListRows(node),
+                        Is.EqualTo(new[] { true, false, false }),
+                        "键没变 ⇒ 照旧给缓存（既有契约：查询或长度变化才重算）。");
+
+                    CollectionElementExpansion.MarkLayerDirty(node);
+                    Assert.That(CollectionElementSync.ReconcileAll(tree), Is.GreaterThan(0), "脏标记该让这一层重建。");
+
+                    Assert.That(
+                        state.EnsureListRows(node),
+                        Is.EqualTo(new[] { false, false, false }),
+                        "重建换了元素节点 ⇒ 键 miss ⇒ 按新值重算。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 表格行**不**按反射成员匹配——表格不建元素层，而列模型只收序列化字段，
+        /// 那些成员在表格里根本看不见（「用户搜的是看得见的东西」）。
+        /// </summary>
+        [Test]
+        public void 表格行不按反射成员匹配()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var node = Find(tree.Root, "table");
+                    var model = node.State.Get<TableModel>();
+
+                    Assert.That(model, Is.Not.Null, "表格模型要在（[TableList] 建的）。");
+
+                    var state = StateOf(node, "60");
+                    Assert.That(state.EnsureTableRows(node, model.Columns), Is.EqualTo(new[] { false }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>构建被测的树。</summary>
@@ -822,12 +1074,12 @@ namespace XInspector.Tests.Editor
     }
 
     /// <summary>
-    /// 元素类型：带分组与复合成员——搜索生效时元素里的容器末端必须照常画。
+    /// 元素类型：带分组、复合成员与**反射成员**——容器末端与活值通道都靠它。
     /// </summary>
     [Serializable]
     internal sealed class SearchElementRow
     {
-        /// <summary>分组里的成员（元素里的分组节点靠它出现）。</summary>
+        /// <summary>分组里的成员（元素里的分组节点靠它出现，活值那一格也拿它算）。</summary>
         [BoxGroup("元素里的分组")]
         public int level = 1;
 
@@ -840,23 +1092,86 @@ namespace XInspector.Tests.Editor
 
         /// <summary>没分组也没复合的普通成员——行值匹配的老路。</summary>
         public string tag = "普通";
+
+        /// <summary>活值：跟着 <see cref="level"/> 走（level=30 → "60"）。</summary>
+        [ShowInInspector]
+        public int Doubled => level * 2;
+    }
+
+    /// <summary>
+    /// 复合宿主：集合在它**里面**——「集合节点自己会不会被节点级筛掉」只有这个形态测得到
+    /// （宿主直接是集合时，它的子节点全是元素节点，那条分支根本走不到）。
+    /// </summary>
+    [Serializable]
+    internal class SearchReflectedHost
+    {
+        /// <summary>节点级的反射成员——活值通道的**节点级**那一半。</summary>
+        [ShowInInspector]
+        public int Total => 99;
+
+        /// <summary>
+        /// 带元素层的集合，且它在**分组里面**——祖先被算成过滤档那一条靠它测。
+        /// <c>[ListDrawerSettings]</c> 少不了：没有自绘容器就没有画元素行的落点，
+        /// 元素层根本不会建（那是既有的、构建期会告警的边界）。
+        /// </summary>
+        [BoxGroup("宿主里的分组")]
+        [ListDrawerSettings]
+        public List<SearchElementRow> rows = new List<SearchElementRow>
+        {
+            new SearchElementRow { level = 30 },
+        };
     }
 
     /// <summary>元素层 + 搜索的对照资产。</summary>
     [HideMonoScript]
     internal sealed class SearchableElementFixture : ScriptableObject
     {
-        /// <summary>元素里带分组与复合成员——宿主搜索生效时它们必须照常画。</summary>
+        /// <summary>元素里带分组与复合成员——宿主搜索生效时它们必须照常画；还带一个 null 元素。</summary>
         [Searchable]
         public List<SearchElementRow> rows = new List<SearchElementRow>
         {
-            new SearchElementRow(),
+            new SearchElementRow { level = 30 },
             new SearchElementRow { tag = "哥布林" },
+            null,
         };
 
         /// <summary>对照组：**不在元素里**的复合成员，子节点照旧按命中集筛。</summary>
         [Searchable]
         public SearchStats plain = new SearchStats();
+
+        /// <summary>复合宿主：集合在它里面。</summary>
+        [Searchable]
+        public SearchReflectedHost host = new SearchReflectedHost();
+
+        /// <summary>表格：列模型只收序列化字段——反射成员不参与（不建元素层）。</summary>
+        [Searchable]
+        [TableList]
+        public List<SearchElementRow> table = new List<SearchElementRow>
+        {
+            new SearchElementRow { level = 30 },
+        };
+    }
+
+    /// <summary>会抛的反射成员——活值通道不该被它带崩，也不该把它算成命中。</summary>
+    [Serializable]
+    internal sealed class SearchThrowingRow
+    {
+        /// <summary>恒抛的 getter。</summary>
+        [ShowInInspector]
+        public int Boom => throw new InvalidOperationException("搜索不该把出错的值当命中");
+    }
+
+    /// <summary>会抛的夹具单独一处：它的 Console 行为与别的用例互不干扰。</summary>
+    [HideMonoScript]
+    internal sealed class SearchableThrowingFixture : ScriptableObject
+    {
+        /// <summary>两个元素都恒抛。</summary>
+        [Searchable]
+        public List<SearchThrowingRow> rows = new List<SearchThrowingRow>
+        {
+            new SearchThrowingRow(),
+            new SearchThrowingRow(),
+        };
     }
 
     /// <summary>同一搜索宿主下两个**同尺寸**的列表——掩码缓存必须按宿主分家。</summary>

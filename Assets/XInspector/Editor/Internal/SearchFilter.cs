@@ -75,7 +75,22 @@ namespace XInspector.Editor
         /// <param name="query">查询（已 trim）。</param>
         /// <returns>命中返回 <c>true</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 只看节点自己，**不看后代**——「靠后代命中」是调用方的事（它要记得那一档）。
+        /// </para>
+        /// <para>
+        /// <b>值这一路有两条：序列化后端与反射后端。</b> 判据按**能力**写（有没有
+        /// <see cref="PropertyValueEntry.SerializedProperty"/>），不按具体类型写 switch——
+        /// 「值 → 显示文本」仍只有一份实现（<see cref="ReflectedValueEntry.TryGetDisplayText"/>），
+        /// 这里只是多了一条「谁来把值读出来」。
+        /// </para>
+        /// <para>
+        /// <b>反射那一路只在「真的有一个可显示的值」时算命中</b>：不一致（多目标不同值、
+        /// 某目标上没有这个成员、嵌套实例取不到——元素为 <c>null</c> 是常态）与出错，
+        /// 终端画的分别是「—」与报错框，算命中会让「搜到的」与「看见的」对不上。
+        /// 用户 getter 抛异常时**不在这里告警**：同一元素类型的 N 个元素会各报一条只差下标的
+        /// 告警，而那个错误在成员未被过滤时由终端自己画出来——不静默。
+        /// </para>
         /// </remarks>
         public static bool NodeMatchesSelf(InspectorProperty node, string query)
         {
@@ -85,7 +100,87 @@ namespace XInspector.Editor
             }
 
             var entry = node.ValueEntry;
-            return entry?.SerializedProperty != null && PropertyMatches(entry.SerializedProperty, query, 0);
+
+            if (entry?.SerializedProperty != null)
+            {
+                return PropertyMatches(entry.SerializedProperty, query, 0);
+            }
+
+            return entry is ReflectedValueEntry reflected
+                && reflected.TryGetDisplayText(out var text, out _, out _)
+                && TextMatches(query, text);
+        }
+
+        /// <summary>
+        /// 一棵子树里的**反射成员**有没有活值命中（只比值，不比标签）。
+        /// </summary>
+        /// <param name="node">子树的根。</param>
+        /// <param name="query">查询（已 trim）。</param>
+        /// <returns>命中返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 只认 <see cref="InspectorPropertyKind.ReflectedMember"/> 那一支，且**递归**——
+        /// 元素层深度 &gt; 1 时内层元素里的反射成员也要数得到。
+        /// </remarks>
+        public static bool ReflectedValueMatches(InspectorProperty node, string query)
+        {
+            var children = node?.Children;
+
+            if (children == null || string.IsNullOrEmpty(query))
+            {
+                return false;
+            }
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                var child = children[i];
+
+                if (child.Kind == InspectorPropertyKind.ReflectedMember &&
+                    child.ValueEntry is ReflectedValueEntry reflected &&
+                    reflected.TryGetDisplayText(out var text, out _, out _) &&
+                    TextMatches(query, text))
+                {
+                    return true;
+                }
+
+                if (ReflectedValueMatches(child, query))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 一个**集合**的元素子树里有没有反射成员的活值命中。
+        /// </summary>
+        /// <param name="collection">集合节点。</param>
+        /// <param name="query">查询（已 trim）。</param>
+        /// <returns>命中返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 走 <see cref="CollectionElementLayerState.Nodes"/>——下标与 <c>Array.data[i]</c>
+        /// 一一对应，与集合绘制器取元素节点**同源**。没有元素层时（含表格形态）恒为
+        /// <c>false</c>：表格里看不见反射成员（列模型只收序列化字段），不参与正是对的
+        /// ——「用户搜的是看得见的东西」。
+        /// </remarks>
+        public static bool ElementReflectedValueMatches(InspectorProperty collection, string query)
+        {
+            var nodes = collection?.State.Get<CollectionElementLayerState>()?.Nodes;
+
+            if (nodes == null)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                if (ReflectedValueMatches(nodes[i], query))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -211,6 +306,16 @@ namespace XInspector.Editor
         private int _listSize = -1;
         private InspectorProperty _listHost;
 
+        /// <summary>
+        /// 首个元素节点——元素层的**身份**，进行掩码的缓存键。
+        /// </summary>
+        /// <remarks>
+        /// 长度与查询都没变、元素层却重建过（<see cref="CollectionElementLayerState.Dirty"/>）
+        /// 时，掩码的输入（<c>layer.Nodes</c>）已经换了人；键不覆盖它就会复用旧结论。
+        /// 空列表时恒为 <c>null</c>——那时掩码长度为 0，没有内容可错。
+        /// </remarks>
+        private InspectorProperty _listFirstElement;
+
         private bool[] _tableRows;
         private string _tableQuery;
         private int _tableSize = -1;
@@ -283,6 +388,10 @@ namespace XInspector.Editor
         /// （零分配；重建后是新节点、自然重算）；不要比 <c>SerializedProperty</c>——
         /// 那是按路径重取的独立实例，每次都会 miss。
         /// </para>
+        /// <para>
+        /// <b>键里还有**元素层身份**</b>（首个元素节点）：元素层能在净长度不变时重建，
+        /// 那时宿主与长度都没变、掩码的输入却换了人。
+        /// </para>
         /// </remarks>
         public bool[] EnsureListRows(InspectorProperty collection)
         {
@@ -294,7 +403,16 @@ namespace XInspector.Editor
                 return null;
             }
 
+            // **元素层身份也进缓存键**：元素层能在净长度不变时因 Dirty 重建，
+            // 而重建换的是元素节点——掩码的输入（layer.Nodes）变了，键不覆盖它就不是
+            // 一份正确的缓存。与 _listHost 同一条纪律：比**节点引用**（零分配；重建后
+            // 是新节点、自然重算），不要比 SerializedProperty（那是按路径重取的独立实例，
+            // 每次都会 miss）。
+            var layer = collection.State.Get<CollectionElementLayerState>();
+            var firstElement = layer != null && layer.Nodes.Count > 0 ? layer.Nodes[0] : null;
+
             if (_listRows != null && ReferenceEquals(_listHost, collection) &&
+                ReferenceEquals(_listFirstElement, firstElement) &&
                 _listSize == array.arraySize &&
                 string.Equals(_listQuery, query, StringComparison.Ordinal))
             {
@@ -302,6 +420,7 @@ namespace XInspector.Editor
             }
 
             _listHost = collection;
+            _listFirstElement = firstElement;
             _listQuery = query;
             _listSize = array.arraySize;
 
@@ -313,7 +432,13 @@ namespace XInspector.Editor
             for (var i = 0; i < _listRows.Length; i++)
             {
                 var element = array.GetArrayElementAtIndex(i);
-                _listRows[i] = SearchMatcher.PropertyMatches(element, query, 0);
+
+                // 序列化那一路（连同子字段递归）逐字不动；新增的是**活值**那一路：
+                // 元素里的 [ShowInInspector] 成员按当前值参与匹配。
+                // 元素节点数对不上（没节点化、或树正在重建）时退回纯序列化判定，与从前逐字一致。
+                _listRows[i] = SearchMatcher.PropertyMatches(element, query, 0) ||
+                               (layer != null && i < layer.Nodes.Count &&
+                                SearchMatcher.ReflectedValueMatches(layer.Nodes[i], query));
             }
 
             return _listRows;
@@ -394,6 +519,17 @@ namespace XInspector.Editor
                 }
 
                 if (SearchMatcher.NodeMatchesSelf(child, query))
+                {
+                    MarkKeepAll(child);
+                    matched = true;
+                    continue;
+                }
+
+                // 元素里的**反射值**命中 ⇒ **这个集合自己**要留下。行掩码只挑行、不挑集合：
+                // 集合节点若被节点级筛掉，整块集合会连同刚命中的那一行一起消失。
+                // MarkKeepAll 只标到自己与**非元素**的后代（它自带同款守卫），
+                // 故这不会把元素子树塞进命中集——那条既有契约原样成立。
+                if (SearchMatcher.ElementReflectedValueMatches(child, query))
                 {
                     MarkKeepAll(child);
                     matched = true;

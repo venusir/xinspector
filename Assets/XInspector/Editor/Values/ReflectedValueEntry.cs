@@ -189,7 +189,9 @@ namespace XInspector.Editor
         /// <returns>拿到了一个可用于显示的值返回 <c>true</c>。</returns>
         /// <remarks>
         /// <para>
-        /// <b>这是绘制路径唯一的取值入口。</b> 一次调用最多把每个目标的 getter 各读一遍，
+        /// <b>绘制路径唯一的取值入口</b>，另有一个非绘制路径的消费者：
+        /// 搜索匹配（查询变化时调一次，见 <see cref="SearchMatcher.NodeMatchesSelf"/>）。
+        /// 一次调用最多把每个目标的 getter 各读一遍，
         /// 不像「先问 <see cref="HasMultipleDifferentValues"/> 再问 <see cref="GetValue"/>」
         /// 那样读两轮——用户的 getter 可能有开销，也可能有副作用。
         /// </para>
@@ -271,6 +273,37 @@ namespace XInspector.Editor
             }
 
             return haveFirst;
+        }
+
+        /// <summary>
+        /// 读一次值并直接给出**显示文本**——「读 + 格式化」收成一处。
+        /// </summary>
+        /// <param name="text">显示文本；没拿到可用值时（不一致或出错）为 <c>null</c>。</param>
+        /// <param name="mixed">各目标的值不一致（或实例取不到、某个目标上没有这个成员）。</param>
+        /// <param name="error">取值时用户代码抛出的异常消息；没有出错时为 <c>null</c>。</param>
+        /// <returns>拿到了可用于显示的文本返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>两个消费者，一份实现</b>：只读展示的末端绘制器，与**搜索匹配**。
+        /// 它们问的是同一个问题（「这个成员现在显示成什么」），答案不该有两个——
+        /// 各写一遍的话，「搜得到的东西」与「眼睛看见的东西」迟早对不上。
+        /// </para>
+        /// <para>
+        /// <b>它会真的把用户的 getter 读一遍。</b> 绘制路径每帧一次（那是展示的成本），
+        /// 搜索路径在**查询变化时**一次（见 <see cref="SearchMatcher"/> 的重算时机）。
+        /// </para>
+        /// </remarks>
+        public bool TryGetDisplayText(out string text, out bool mixed, out string error)
+        {
+            text = null;
+
+            if (!TryGetDisplayValue(out var value, out mixed, out error))
+            {
+                return false;
+            }
+
+            text = ReflectedValueFormatter.Format(value, ValueType);
+            return true;
         }
 
         #endregion

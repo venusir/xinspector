@@ -50,7 +50,9 @@ namespace XInspector.Editor
                 return;
             }
 
-            if (!entry.TryGetDisplayValue(out var value, out var mixed, out var error))
+            // 走 TryGetDisplayText 而不是自己「取值 + 格式化」：搜索匹配用的是同一个入口，
+            // 两处答案必须是一个（见它的 remarks）。
+            if (!entry.TryGetDisplayText(out var text, out _, out var error))
             {
                 if (error != null)
                 {
@@ -64,7 +66,7 @@ namespace XInspector.Editor
                 return;
             }
 
-            DrawText(label, ReflectedValueFormatter.Format(value, entry.ValueType));
+            DrawText(label, text);
         }
 
         #endregion
