@@ -42,6 +42,9 @@ namespace XInspector.Editor
 
         /// <summary>逐目标解析出的方法。</summary>
         public MethodInfo[] Methods;
+
+        /// <summary>逐目标的嵌套实例来源；顶层为 <c>null</c>（见 <see cref="NestedInstanceScope"/>）。</summary>
+        public ReflectedAccessor[] Scopes;
     }
 
     /// <summary><see cref="CustomContextMenuAttribute"/> 的每属性状态。</summary>
@@ -71,6 +74,9 @@ namespace XInspector.Editor
 
         /// <summary>逐目标解析出的方法；解析失败时为 <c>null</c>。</summary>
         public MethodInfo[] Methods;
+
+        /// <summary>逐目标的嵌套实例来源；顶层为 <c>null</c>（见 <see cref="NestedInstanceScope"/>）。</summary>
+        public ReflectedAccessor[] Scopes;
     }
 
     /// <summary><see cref="OnValueChangedAttribute"/> 的每属性状态。</summary>
@@ -153,7 +159,9 @@ namespace XInspector.Editor
             {
                 Attribute = attribute,
                 MenuItem = attribute.MenuItem,
-                Methods = NamedMethodResolver.Resolve(property, attribute.MethodName, "[CustomContextMenu]", out _),
+                Methods = NamedMethodResolver.Resolve(
+                    property, attribute.MethodName, "[CustomContextMenu]", out var scopes, out _),
+                Scopes = scopes,
             };
 
             state.Entries.Add(entry);
@@ -182,7 +190,9 @@ namespace XInspector.Editor
             {
                 Attribute = attribute,
                 MethodName = attribute.MethodName,
-                Methods = NamedMethodResolver.Resolve(property, attribute.MethodName, "[OnValueChanged]", out _),
+                Methods = NamedMethodResolver.Resolve(
+                    property, attribute.MethodName, "[OnValueChanged]", out var scopes, out _),
+                Scopes = scopes,
             });
         }
     }

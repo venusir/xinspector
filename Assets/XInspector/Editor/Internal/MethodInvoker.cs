@@ -48,6 +48,39 @@ namespace XInspector.Editor
             bool undoEnabled,
             string undoLabel)
         {
+            Invoke(methods, targets, null, arguments, undoEnabled, undoLabel);
+        }
+
+        /// <summary>
+        /// 调用方法，**接收者由嵌套作用域现读**——嵌套层的按钮与回调走这一条。
+        /// </summary>
+        /// <param name="methods">逐目标解析出的方法，与 <paramref name="targets"/> 一一对应。</param>
+        /// <param name="targets">**根**目标对象；多选时是全部选中项。</param>
+        /// <param name="scopes">
+        /// 逐目标的嵌套实例来源；顶层传 <c>null</c>（那时接收者就是 <paramref name="targets"/> 本身）。
+        /// </param>
+        /// <param name="arguments">实参；无参方法传 <c>null</c> 或空数组。</param>
+        /// <param name="undoEnabled">是否记入 Undo（窗口路径为 <c>false</c>）。</param>
+        /// <param name="undoLabel">撤销栈里显示的这一步的名字。</param>
+        /// <remarks>
+        /// <para>
+        /// **Undo 仍记 <paramref name="targets"/>（根 Unity 对象）**——嵌套数据是根对象序列化
+        /// 数据的一部分，记它就够；也正因如此，**绝不能把实例数组当 <paramref name="targets"/> 传**：
+        /// 那些数组不是 <c>Object[]</c>，下面那条零分配的判据会**静默失效**，撤销就没了。
+        /// </para>
+        /// <para>
+        /// 接收者每帧现读（<c>scopes[i].Read(targets[i])</c>），所以用户把父字段重新赋值之后
+        /// 调的是**新**实例；实例取不到（父字段为空）的目标跳过，与「这个目标上没有这个方法」同款。
+        /// </para>
+        /// </remarks>
+        public static void Invoke(
+            MethodInfo[] methods,
+            object[] targets,
+            ReflectedAccessor[] scopes,
+            object[] arguments,
+            bool undoEnabled,
+            string undoLabel)
+        {
             if (methods == null || methods.Length == 0 || methods[0] == null)
             {
                 return;
@@ -86,10 +119,19 @@ namespace XInspector.Editor
 
             for (var i = 0; i < count; i++)
             {
-                if (TargetObjects.IsAlive(targets[i]) && methods[i] != null)
+                if (methods[i] == null || !TargetObjects.IsAlive(targets[i]))
                 {
-                    InvokeOn(methods[i], targets[i], arguments);
+                    continue;
                 }
+
+                // 接收者：顶层就是目标本身，嵌套层是沿路径**现读**到的那个实例。
+                var receiver = NestedInstanceScope.Read(scopes, targets, i);
+                if (receiver == null)
+                {
+                    continue;
+                }
+
+                InvokeOn(methods[i], receiver, arguments);
             }
         }
 

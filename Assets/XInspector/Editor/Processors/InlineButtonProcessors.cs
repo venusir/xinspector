@@ -27,6 +27,15 @@ namespace XInspector.Editor
         /// <summary>各按钮的宽度（像素）。首帧量一次就缓存下来。</summary>
         public float[] Widths = Array.Empty<float>();
 
+        /// <summary>
+        /// 逐目标的嵌套实例来源；顶层为 <c>null</c>。
+        /// </summary>
+        /// <remarks>
+        /// 各按钮共用一份（它只取决于这个属性在树上的位置，与是哪一个按钮无关）。
+        /// 调用时**现读**实例——绑死的实例在父字段被重新赋值之后会**静默地陈旧**。
+        /// </remarks>
+        public ReflectedAccessor[] Scopes;
+
         #endregion
 
         #region Public API
@@ -111,56 +120,24 @@ namespace XInspector.Editor
                 return;
             }
 
-            var targets = property.Owner?.Targets;
+            // 解析循环与 [OnValueChanged]/[CustomContextMenu] 共用一份实现——它连同
+            // 「嵌套层在实例上找、值类型实例拒绝」一起收敛在 NamedMethodResolver 里。
+            // 这里只负责把结果摊进逐按钮的状态与 Tooltip。
+            var methods = NamedMethodResolver.Resolve(
+                property, attribute.MethodName, "[InlineButton]", out var scopes, out var reason);
 
-            if (targets == null || targets.Length == 0)
-            {
-                state.Labels[index] = new GUIContent(attribute.MethodName, "取不到目标对象，无法调用方法。");
-                return;
-            }
-
-            var methods = new MethodInfo[targets.Length];
-            var missing = 0;
-            string reason = null;
-
-            for (var i = 0; i < targets.Length; i++)
-            {
-                if (!TargetObjects.IsAlive(targets[i]))
-                {
-                    missing++;
-                    continue;
-                }
-
-                methods[i] = MethodResolver.ByName(targets[i].GetType(), attribute.MethodName, out var failure);
-
-                if (methods[i] == null)
-                {
-                    missing++;
-                    reason = reason ?? failure;
-                }
-            }
-
-            if (missing == targets.Length)
+            if (methods == null)
             {
                 // 一个都调不了：按钮照画但禁用，原因挂在 Tooltip 上（旁边的字段不受影响）。
                 state.Labels[index] = new GUIContent(
                     DisplayName(attribute),
                     $"{reason ?? "找不到方法。"}（[InlineButton] 标在 \"{property.Path}\" 上）");
-
-                Debug.LogWarning(
-                    $"[XInspector] 属性「{property.Path}」上的行内按钮「{attribute.MethodName}」无法调用：{reason}");
                 return;
-            }
-
-            if (missing > 0)
-            {
-                Debug.LogWarning(
-                    $"[XInspector] 属性「{property.Path}」上的行内按钮「{attribute.MethodName}」"
-                    + $"在 {missing} 个目标上找不到，这些目标将被跳过。");
             }
 
             state.Labels[index] = new GUIContent(DisplayName(attribute));
             state.Methods[index] = methods;
+            state.Scopes = scopes;
         }
 
         #endregion

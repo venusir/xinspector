@@ -63,7 +63,7 @@ namespace XInspector.Editor
                 {
                     if (GUILayout.Button(content, EditorStyles.miniButton, GUILayout.Width(width)))
                     {
-                        Click(property, methods, content.text);
+                        Click(property, methods, state.Scopes, content.text);
                     }
                 }
             }
@@ -98,11 +98,13 @@ namespace XInspector.Editor
         /// <param name="property">目标属性。</param>
         /// <param name="methods">逐目标解析出的方法。</param>
         /// <param name="undoLabel">撤销栈里显示的这一步的名字。</param>
-        private static void Click(InspectorProperty property, MethodInfo[] methods, string undoLabel)
+        private static void Click(
+            InspectorProperty property, MethodInfo[] methods, ReflectedAccessor[] scopes, string undoLabel)
         {
             var tree = property.Owner;
 
-            MethodInvoker.Invoke(methods, tree?.Targets, null, tree?.UndoEnabled ?? false, undoLabel);
+            MethodInvoker.Invoke(
+                methods, tree?.Targets, scopes, null, tree?.UndoEnabled ?? false, undoLabel);
         }
 
         #endregion

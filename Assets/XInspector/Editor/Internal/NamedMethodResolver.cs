@@ -31,9 +31,11 @@ namespace XInspector.Editor
             InspectorProperty property,
             string methodName,
             string usage,
+            out ReflectedAccessor[] scopes,
             out string reason)
         {
             reason = null;
+            scopes = null;
 
             var targets = property.Owner?.Targets;
 
@@ -41,6 +43,24 @@ namespace XInspector.Editor
             {
                 reason = "取不到目标对象，无法调用方法。";
                 return null;
+            }
+
+            // 嵌套层：方法要在**同一个嵌套实例**的类型上找，调用时也要在那个实例上——
+            // 在根对象上按名找，根上恰好有同名方法就会被静默调走。
+            var container = NestedInstanceScope.ContainerOf(property);
+            if (container != null)
+            {
+                if (container.Type != null && container.Type.IsValueType)
+                {
+                    // 值类型在链上会装箱，调用改的是副本——改动静默丢弃。
+                    // 与其让用户「点了没反应」，不如明说并让调用方把条目画成不可用。
+                    reason = $"「{container.Type.Name}」是值类型（struct）：方法调用改的是装箱副本，"
+                             + "改动会丢，因此不在它上面调用方法。";
+                    Debug.LogWarning($"[XInspector] 属性「{property.Path}」上的 {usage} 未生效：{reason}");
+                    return null;
+                }
+
+                scopes = NestedInstanceScope.Compile(targets, container.Path);
             }
 
             var methods = new MethodInfo[targets.Length];
@@ -54,7 +74,19 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                methods[i] = MethodResolver.ByName(targets[i].GetType(), methodName, out var failure);
+                // 嵌套层按**实例的类型**找；某个目标算不出实例类型就算它找不到。
+                var type = scopes == null
+                    ? targets[i].GetType()
+                    : (i < scopes.Length ? scopes[i]?.ValueType : null);
+
+                if (type == null)
+                {
+                    missing++;
+                    reason = reason ?? "取不到嵌套实例（父字段为空或路径解析不到）";
+                    continue;
+                }
+
+                methods[i] = MethodResolver.ByName(type, methodName, out var failure);
 
                 if (methods[i] == null)
                 {

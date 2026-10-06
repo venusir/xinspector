@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -196,6 +197,42 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 嵌套字段上的按名回调解析的是**同一个嵌套实例**的方法，不是根对象上的同名方法。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 夹具在根上放了一个**同名**方法。不这么放假，「解析到了根上」与「解析到了嵌套实例」
+        /// 在方法名上完全一样，这条就测不出「调错了对象」——而调错对象比「找不到」难查得多：
+        /// 按钮点下去有反应，只是反应发生在另一个对象上。
+        /// </para>
+        /// <para>
+        /// 判据取 <c>DeclaringType</c>：两个方法同名，只有声明类型能把它们分开。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void 嵌套字段的回调解析到嵌套实例()
+        {
+            var target = ScriptableObject.CreateInstance<CallbackScopeFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var state = Find(tree, "nested.watched").State.Get<ValueChangedState>();
+
+                    Assert.That(state.Entries.Count, Is.EqualTo(1));
+                    Assert.That(
+                        state.Entries[0].Methods[0].DeclaringType,
+                        Is.EqualTo(typeof(NestedCallbackSource)),
+                        "根上有一个同名方法，解析到它就会静默调错对象。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         /// <summary>值真的变了才判定为变。</summary>
         [Test]
         public void 值快照察觉变化()
@@ -264,11 +301,26 @@ namespace XInspector.Tests.Editor
         /// <returns>节点；找不到时返回 <c>null</c>。</returns>
         private static InspectorProperty Find(PropertyTree tree, string path)
         {
-            foreach (var child in tree.Root.Children)
+            return Search(tree.Root, path);
+        }
+
+        /// <summary>递归搜索——嵌套层的成员路径形如 <c>nested.watched</c>。</summary>
+        /// <param name="node">当前节点。</param>
+        /// <param name="path">目标路径。</param>
+        /// <returns>节点；不存在返回 <c>null</c>。</returns>
+        private static InspectorProperty Search(InspectorProperty node, string path)
+        {
+            foreach (var child in node.Children)
             {
                 if (child.Path == path)
                 {
                     return child;
+                }
+
+                var found = Search(child, path);
+                if (found != null)
+                {
+                    return found;
                 }
             }
 
@@ -314,6 +366,33 @@ namespace XInspector.Tests.Editor
 
         /// <summary>值变化的回调。</summary>
         private void OnWatchedChanged()
+        {
+        }
+    }
+
+    /// <summary>嵌套层按名回调的对照资产：根与嵌套层各有一个**同名**方法。</summary>
+    [HideMonoScript]
+    internal sealed class CallbackScopeFixture : ScriptableObject
+    {
+        /// <summary>陷阱：根上的同名方法。旧行为会解析到它。</summary>
+        public void OnNestedChanged()
+        {
+        }
+
+        /// <summary>嵌套层。</summary>
+        public NestedCallbackSource nested = new NestedCallbackSource();
+    }
+
+    /// <summary>嵌套层里带按名回调的类型。</summary>
+    [Serializable]
+    internal class NestedCallbackSource
+    {
+        /// <summary>值变化时调用同实例的方法。</summary>
+        [OnValueChanged(nameof(OnNestedChanged))]
+        public int watched;
+
+        /// <summary>真正该被调用的那个。</summary>
+        public void OnNestedChanged()
         {
         }
     }

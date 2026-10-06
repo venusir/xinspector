@@ -140,6 +140,7 @@ namespace XInspector.Editor
                 Methods = methods,
                 Names = names,
                 Targets = tree?.Targets,
+                Scopes = entries.Count > 0 ? entries[0].Scopes : null,
                 UndoEnabled = tree?.UndoEnabled ?? false,
             };
 
@@ -164,6 +165,7 @@ namespace XInspector.Editor
             MethodInvoker.Invoke(
                 payload.Methods[selected],
                 payload.Targets,
+                payload.Scopes,
                 null,
                 payload.UndoEnabled,
                 payload.Names[selected]);
@@ -178,8 +180,18 @@ namespace XInspector.Editor
             /// <summary>逐菜单项的文本，用作撤销栈里的名字。</summary>
             public string[] Names;
 
-            /// <summary>目标对象。</summary>
+            /// <summary>**根**目标对象（Undo 记的是它们）。</summary>
             public object[] Targets;
+
+            /// <summary>
+            /// 逐目标的嵌套实例来源；顶层为 <c>null</c>。
+            /// </summary>
+            /// <remarks>
+            /// <b>存访问器而不是实例：**菜单是延迟的**。</b> 菜单还挂在屏幕上时用户可以改父字段
+            /// （<c>nested = new …</c>、Undo、预制体 revert），那时绑死的实例已经过期——
+            /// 选中回调要读的是**那一刻**的实例。
+            /// </remarks>
+            public ReflectedAccessor[] Scopes;
 
             /// <summary>是否记 Undo。</summary>
             public bool UndoEnabled;
@@ -257,6 +269,7 @@ namespace XInspector.Editor
             MethodInvoker.Invoke(
                 entry.Methods,
                 tree?.Targets,
+                entry.Scopes,
                 null,
                 tree?.UndoEnabled ?? false,
                 label.text);

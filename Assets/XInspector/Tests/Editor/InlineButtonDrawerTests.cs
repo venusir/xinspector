@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -179,6 +180,70 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 嵌套层
+
+        /// <summary>
+        /// 嵌套字段上的行内按钮解析的是**同一个嵌套实例**的方法，不是根对象上的同名方法。
+        /// </summary>
+        /// <remarks>
+        /// 夹具在根上放了一个同名方法：不这么放假，两只在方法名上完全一样，
+        /// 「解析到了根上」与「解析到了嵌套实例」就分不开——而调错对象比「找不到」难查得多。
+        /// </remarks>
+        [Test]
+        public void 嵌套字段的行内按钮解析到嵌套实例()
+        {
+            var target = ScriptableObject.CreateInstance<InlineButtonScopeFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var state = StateOf(tree, "nested.pressed");
+
+                    Assert.That(state.Methods[0], Is.Not.Null);
+                    Assert.That(state.Methods[0][0], Is.Not.Null);
+                    Assert.That(
+                        state.Methods[0][0].DeclaringType,
+                        Is.EqualTo(typeof(InlineNestedSource)),
+                        "根上有一个同名方法，解析到它就会静默调错对象。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **值类型**实例上的行内按钮不可调用，且原因写在 Tooltip 上。
+        /// </summary>
+        /// <remarks>
+        /// 值类型在链上会装箱，方法调用改的是副本——改动**静默丢弃**。
+        /// 与其让用户「点了没反应」，不如把按钮画成禁用并把原因摆在脸上。
+        /// </remarks>
+        [Test]
+        public void 值类型实例上的行内按钮被拒绝()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("值类型"));
+
+            var target = ScriptableObject.CreateInstance<InlineButtonValueFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var state = StateOf(tree, "nested.pressed");
+
+                    Assert.That(state.Methods[0], Is.Null, "值类型实例上不解析方法。");
+                    Assert.That(state.Labels[0].tooltip, Does.Contain("值类型"), "原因要写在脸上。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>建一棵树。</summary>
@@ -194,11 +259,26 @@ namespace XInspector.Tests.Editor
         /// <returns>节点；找不到时返回 <c>null</c>。</returns>
         private static InspectorProperty Find(PropertyTree tree, string path)
         {
-            foreach (var child in tree.Root.Children)
+            return Search(tree.Root, path);
+        }
+
+        /// <summary>递归搜索——嵌套层的成员路径形如 <c>nested.resolved</c>。</summary>
+        /// <param name="node">当前节点。</param>
+        /// <param name="path">目标路径。</param>
+        /// <returns>节点；不存在返回 <c>null</c>。</returns>
+        private static InspectorProperty Search(InspectorProperty node, string path)
+        {
+            foreach (var child in node.Children)
             {
                 if (child.Path == path)
                 {
                     return child;
+                }
+
+                var found = Search(child, path);
+                if (found != null)
+                {
+                    return found;
                 }
             }
 
@@ -289,6 +369,55 @@ namespace XInspector.Tests.Editor
 
         /// <summary>带参数——行内按钮只接受无参方法。</summary>
         private void WithParameter(int value)
+        {
+        }
+    }
+
+    /// <summary>嵌套层行内按钮的对照资产：根与嵌套层各有一个**同名**方法。</summary>
+    [HideMonoScript]
+    internal sealed class InlineButtonScopeFixture : ScriptableObject
+    {
+        /// <summary>陷阱：根上的同名方法。</summary>
+        public void OnNestedPressed()
+        {
+        }
+
+        /// <summary>嵌套层。</summary>
+        public InlineNestedSource nested = new InlineNestedSource();
+    }
+
+    /// <summary>嵌套层里带行内按钮的类型。</summary>
+    [Serializable]
+    internal class InlineNestedSource
+    {
+        /// <summary>行内按钮：该调同实例的方法。</summary>
+        [InlineButton(nameof(OnNestedPressed))]
+        public int pressed;
+
+        /// <summary>真正该被调用的那个。</summary>
+        public void OnNestedPressed()
+        {
+        }
+    }
+
+    /// <summary>值类型实例上的行内按钮。</summary>
+    [HideMonoScript]
+    internal sealed class InlineButtonValueFixture : ScriptableObject
+    {
+        /// <summary>嵌套的**值类型**实例。</summary>
+        public InlineValueNested nested;
+    }
+
+    /// <summary>值类型的嵌套类型——方法调用会改到装箱副本上。</summary>
+    [Serializable]
+    internal struct InlineValueNested
+    {
+        /// <summary>行内按钮。</summary>
+        [InlineButton(nameof(OnPressed))]
+        public int pressed;
+
+        /// <summary>值类型上的方法。</summary>
+        public void OnPressed()
         {
         }
     }
