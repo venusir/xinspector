@@ -67,9 +67,10 @@ namespace XInspector
         {
             // 路径恒为「组/页」两段以上，故父路径必有值；拆出来存着是为了让
             // CloneForPath 改写 GroupID 之后仍能认出「这是容器还是页」——
-            // MemberwiseClone 会把这个字段原样带过去，而 GroupID 被改成容器路径。
+            // MemberwiseClone 会把这些字段原样带过去，而 GroupID 会被改写。
             TabsGroupID = PropertyGroupPath.GetParentPath(GroupID);
             TabName = PropertyGroupPath.GetLeafName(GroupID);
+            DeclaredPagePath = GroupID;
             UseFixedHeight = useFixedHeight;
         }
 
@@ -95,18 +96,58 @@ namespace XInspector
         #region Internal
 
         /// <summary>
+        /// 声明时的那条完整路径（<c>"组/页"</c>）。<see cref="PropertyGroupAttribute.CloneForPath"/>
+        /// 不改它——它记住的是「哪条路径声明的是**页**」。
+        /// </summary>
+        internal string DeclaredPagePath { get; }
+
+        /// <summary>
         /// 本特性所在节点是不是**容器**（而不是页）。
         /// </summary>
         /// <remarks>
-        /// 判定依据：容器的特性由 <see cref="PropertyGroupAttribute.CloneForPath"/>
-        /// 改写路径而来，<see cref="PropertyGroupAttribute.GroupID"/> 被改成了容器路径，而
-        /// <see cref="TabsGroupID"/> 因 MemberwiseClone 保持原值——两者相等即容器。
+        /// <para>
+        /// 判定依据：容器的特性由 <see cref="PropertyGroupAttribute.CloneForPath"/> 改写路径而来，
+        /// 路径**以 <see cref="TabsGroupID"/> 收尾**（段边界）而不是以页路径收尾。
+        /// </para>
+        /// <para>
+        /// <b>不能只比相等。</b> 路径被加前缀是常事——类级分组的分发会改写成
+        /// 「类级组名/原路径」，嵌套层的分组装配会改写成「父成员的序列化路径/原路径」。
+        /// 只比相等的话容器节点会被误判成页，症状是**页签栏整个不画**、各页内容顺次摊开
+        /// （静默的视觉故障，不丢数据）。
+        /// </para>
+        /// <para>
+        /// 第二个条件（不以 <see cref="DeclaredPagePath"/> 收尾）兜住自同名的边角——
+        /// <c>[TabGroup("T", "T")]</c> 的页路径 <c>"T/T"</c> 也以容器名 <c>"T"</c> 收尾。
+        /// </para>
         /// </remarks>
-        internal bool IsContainer => string.Equals(GroupID, TabsGroupID, StringComparison.Ordinal);
+        internal bool IsContainer =>
+            EndsWithSegment(GroupID, TabsGroupID) && !EndsWithSegment(GroupID, DeclaredPagePath);
 
         #endregion
 
         #region Private Helpers
+
+        /// <summary>路径是否以指定路径**按段**收尾（<c>"a/Ab"</c> 不以 <c>"b"</c> 收尾）。</summary>
+        /// <param name="path">完整路径。</param>
+        /// <param name="suffix">候选后缀，须已规范化。</param>
+        /// <returns>按段收尾返回 <c>true</c>。</returns>
+        private static bool EndsWithSegment(string path, string suffix)
+        {
+            if (suffix == null || path.Length < suffix.Length)
+            {
+                return false;
+            }
+
+            if (string.Equals(path, suffix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return path.Length > suffix.Length
+                   && path[path.Length - suffix.Length - 1] == PropertyGroupPath.Separator
+                   && string.CompareOrdinal(path, path.Length - suffix.Length, suffix, 0, suffix.Length) == 0;
+        }
+
 
         /// <summary>把组名与页签名拼成节点路径（两段都先规范化）。</summary>
         /// <param name="group">组名。</param>

@@ -96,6 +96,37 @@ namespace XInspector.Tests.Editor
             Assert.That(IndexOf<TabGroupDrawer>(member), Is.EqualTo(-1));
         }
 
+        /// <summary>
+        /// **路径被加前缀之后**容器仍被认出来——类级分组那条路径。
+        /// </summary>
+        /// <remarks>
+        /// 类级分组的分发（<c>ClassLevelGroupProcessor</c>）把成员的页签路径改写成
+        /// 「类级组名/页签组名/页签名」。若容器判定只比相等，容器节点会被误判成页——
+        /// 页签栏整个不画、各页内容顺次摊开。嵌套层的分组装配会走同一条加前缀的路径，
+        /// 故这条守卫同时罩住两处。
+        /// </remarks>
+        [Test]
+        public void 类级分组下的页容器仍被认出()
+        {
+            var target = ScriptableObject.CreateInstance<ClassLevelTabFixture>();
+
+            try
+            {
+                var root = PropertyTree.Create(new SerializedObject(target)).Root;
+                var container = Search(root, "类级/页签");
+
+                Assert.That(container, Is.Not.Null, "类级分组下的容器节点应当存在。");
+                Assert.That(container.Kind, Is.EqualTo(InspectorPropertyKind.Group));
+                Assert.That(container.Attributes.Get<TabGroupAttribute>().IsContainer, Is.True,
+                    "路径被类级分组加了前缀之后，容器仍应被认出来。");
+                Assert.That(IndexOf<TabGroupDrawer>(container), Is.GreaterThanOrEqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region 状态默认值
@@ -217,5 +248,18 @@ namespace XInspector.Tests.Editor
         [TabGroup("页签与框", "一")]
         [BoxGroup("页签与框")]
         public int framed;
+    }
+
+    /// <summary>类级分组 + 成员页签：类级分发会给成员的路径加上前缀。</summary>
+    [BoxGroup("类级")]
+    internal sealed class ClassLevelTabFixture : ScriptableObject
+    {
+        /// <summary>第一页的成员。</summary>
+        [TabGroup("页签", "一")]
+        public int first;
+
+        /// <summary>第二页的成员。</summary>
+        [TabGroup("页签", "二")]
+        public int second;
     }
 }
