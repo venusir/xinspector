@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -21,18 +22,40 @@ namespace XInspector.Editor
     /// 这条写进了 <see cref="InspectorProperty.RawChildren"/> 的形状契约。
     /// </para>
     /// <para>
-    /// <b>只做一层。</b> 元素**里面**的集合不节点化（见 <see cref="HasElementLayerAncestor"/>）：
-    /// 内层跟着递归的话，节点数会随外层元素个数乘性放大（10×10×10 就是千级节点）——
-    /// 那是**数据规模**的爆炸，不是类型深度的爆炸，<c>MaxDepth</c> 挡不住它。
+    /// <b>元素层可以递归（深度 &gt; 1），但有**两道守卫**。</b> 元素**里面**的集合也按需
+    /// 节点化，两道守卫各挡一类：
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>类型链去重</b>：候选集合的元素类型已出现在祖先元素层的元素类型链上
+    /// （自己套自己、或两个类型互相套）→ 不建层——再展开就是无限递归；</item>
+    /// <item><b>层数预算</b>（<see cref="MaxElementLayerDepth"/>，本包自定值）：带层状态的祖先数
+    /// 达到上限 → 不建层。</item>
+    /// </list>
+    /// <para>
+    /// 两道都是**响亮拒绝**（构建期告警），不是静默截断。注意预算挡的是**类型链**，
+    /// **不挡数据规模**：每层元素个数不受限，4 层 × 每层 N 个仍是乘性放大——
+    /// 那是「用户在每一层都显式写了容器与特性」的 opt-in 代价。
     /// </para>
     /// <para>
     /// <b>判据看不见的展开是静默，看得见却不发生的展开也必须是响的。</b>
-    /// 用到了本包却被挡住（没容器 / 表格形态 / 在元素层里面）时一律构建期告警一次；
+    /// 用到了本包却被挡住（没容器 / 表格形态 / 两道守卫）时一律构建期告警一次；
     /// 真的没用本包的什么都不说（那是「外观不变」的正常路径）。
     /// </para>
     /// </remarks>
     internal static class CollectionElementExpansion
     {
+        #region Private Fields
+
+        /// <summary>元素层的层数上限（本包自定值，与三处 <c>MaxDepth</c> 同档）。</summary>
+        /// <remarks>
+        /// 它挡的是「**合法但过大**」的类型链；自引用由类型链去重挡
+        /// （<see cref="ElementLayerDecision.RepeatedElementType"/>）。它**不挡数据规模**：
+        /// 每层元素个数不受限，4 层 × 每层 N 个仍是乘性放大。
+        /// </remarks>
+        internal const int MaxElementLayerDepth = 4;
+
+        #endregion
+
         #region Public Types
 
         /// <summary>
@@ -52,8 +75,11 @@ namespace XInspector.Editor
             /// <summary>用到了，但它是表格形态——表格仍按单元格画。</summary>
             Table,
 
-            /// <summary>用到了，但它在元素层里面——元素层只做一层。</summary>
-            Nested,
+            /// <summary>用到了，但元素类型已在祖先元素层的类型链上出现过——再展开就是无限递归。</summary>
+            RepeatedElementType,
+
+            /// <summary>用到了，但元素层祖先数已达上限（<see cref="MaxElementLayerDepth"/>）。</summary>
+            TooDeep,
         }
 
         #endregion
@@ -92,22 +118,26 @@ namespace XInspector.Editor
                 return ElementLayerDecision.Inert;
             }
 
-            // 表格形态本轮不节点化：单元格画法逐字不变（那是另一种容器呈现，不是元素层）。
+            // 表格形态不节点化：单元格画法逐字不变（那是另一种容器呈现，不是元素层）。
             if (collection.Attributes.Has<TableListAttribute>())
             {
                 return ElementLayerDecision.Table;
             }
 
-            // 深度：元素层里面不再建元素层。
-            if (HasElementLayerAncestor(collection))
-            {
-                return ElementLayerDecision.Nested;
-            }
-
             // 容器项：没有自绘容器就没有画元素行的落点（元素节点建了也没人画）。
+            // **排在两道守卫之前**：内层集合「既在元素层里、又没写容器」是常态，
+            // 报「加 [ListDrawerSettings]」才是可行动的（两守卫同时成立时先报它，
+            // 用户照做后会看到第二条——两步揭示，接受）。
             if (!collection.Attributes.Has<ListDrawerSettingsAttribute>())
             {
                 return ElementLayerDecision.NoContainer;
+            }
+
+            // 两道守卫（自引用 / 超预算）：沿父链一次走完，详见 LayerNestingBlock。
+            var block = LayerNestingBlock(collection, elementType);
+            if (block.HasValue)
+            {
+                return block.Value;
             }
 
             return ElementLayerDecision.Build;
@@ -136,24 +166,45 @@ namespace XInspector.Editor
             return NestedMemberExpansion.ContainsSupportedFields(elementType);
         }
 
-        /// <summary>这个节点是不是落在某个元素层**里面**（深度判据）。</summary>
-        /// <param name="node">节点。</param>
-        /// <returns>在里面返回 <c>true</c>。</returns>
+        /// <summary>
+        /// 元素层的两道守卫：沿父链**一次**走完——数出带层状态的祖先（元素层深度），
+        /// 并逐个比对元素类型（类型链去重）。
+        /// </summary>
+        /// <param name="collection">集合节点。</param>
+        /// <param name="elementType">它的元素类型。</param>
+        /// <returns>该被挡时返回对应结论；可以通过时返回 <c>null</c>。</returns>
         /// <remarks>
-        /// 沿父链上溯找带层状态的节点。构建期顶层成员的 <c>Parent</c> 还是 <c>null</c>
-        /// （分组装配之后才挂到根上），因此这条判据在构建期与绘制期都成立。
+        /// <para>
+        /// <b>类型链 = 祖先<em>元素层</em>的元素类型</b>，不是「所有祖先节点的类型」——
+        /// 中间那些复合层级（<c>A</c> 里嵌着 <c>B</c>）不进链，链上只有**真的建了元素层**的
+        /// 那些集合的元素类型。自引用（<c>Node{List&lt;Node&gt;}</c>）与互递归
+        /// （<c>A{B} B{List&lt;A&gt;}</c>）都在类型重现的那一层被挡——再展开就是无限递归。
+        /// </para>
+        /// <para>
+        /// <b>深度数的是带层状态的祖先数</b>，与 <c>NestedMemberExpansion.MaxDepth</c>
+        /// （类型下钻）不是一个刻度；索引段也不在这里计数。
+        /// </para>
         /// </remarks>
-        public static bool HasElementLayerAncestor(InspectorProperty node)
+        private static ElementLayerDecision? LayerNestingBlock(InspectorProperty collection, Type elementType)
         {
-            for (var current = node?.Parent; current != null; current = current.Parent)
+            var depth = 0;
+
+            for (var current = collection?.Parent; current != null; current = current.Parent)
             {
-                if (current.State.Get<CollectionElementLayerState>() != null)
+                if (current.State.Get<CollectionElementLayerState>() == null)
                 {
-                    return true;
+                    continue;
+                }
+
+                depth++;
+
+                if (elementType != null && ElementTypeOf(current) == elementType)
+                {
+                    return ElementLayerDecision.RepeatedElementType;
                 }
             }
 
-            return false;
+            return depth >= MaxElementLayerDepth ? ElementLayerDecision.TooDeep : (ElementLayerDecision?)null;
         }
 
         /// <summary>这个节点是不是某个元素层的**元素节点**。</summary>
@@ -201,8 +252,20 @@ namespace XInspector.Editor
         /// <summary>
         /// 判定的结论是「用到了本包但不建」时，报一次告警。
         /// </summary>
-        /// <param name="collection">集合节点（去重挂在它头上：一个集合只报一次）。</param>
+        /// <param name="collection">集合节点。</param>
         /// <param name="decision">判定结论。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>收件人上溯到最外层的元素层。</b> 被挡的内层集合在 N 个外层元素里各有一个节点，
+        /// 报在自己头上就是 N 条只差路径的同一句话；锚到**最外层**带层状态的祖先
+        /// （「这一族被挡集合」的共同宿主，且它在外层自己的重建中存活），账本才会只有一份。
+        /// 没有这样的祖先（深度 0 的被挡集合）时锚是自己——行为与从前逐字一致。
+        /// </para>
+        /// <para>
+        /// <b>键里带归一化路径</b>（<c>data[3]</c> → <c>data[*]</c>）：同一字段的 N 个元素实例
+        /// 落同一个键、报一条；同一外层下的不同字段仍各报一条。文案里仍报**真实路径**。
+        /// </para>
+        /// </remarks>
         public static void WarnBlocked(InspectorProperty collection, ElementLayerDecision decision)
         {
             var elementType = ElementTypeOf(collection);
@@ -218,16 +281,95 @@ namespace XInspector.Editor
                 case ElementLayerDecision.Table:
                     tail = "它是表格形态（[TableList]）——表格仍按单元格画，本轮不节点化";
                     break;
-                case ElementLayerDecision.Nested:
-                    tail = "它在元素层里面——元素层只做一层（内层跟着递归会让节点数随外层元素个数乘性放大）";
+                case ElementLayerDecision.RepeatedElementType:
+                    tail = "它的元素类型已经在祖先元素层的类型链上出现过（自己套自己，或两个类型" +
+                           "互相套）——再往里展开就是无限递归，这里不再建层";
                     break;
-                default:
+                case ElementLayerDecision.TooDeep:
+                    tail = $"它所在的元素层深度已达上限 {MaxElementLayerDepth} 层（本包自定值，" +
+                           "与 MaxDepth 同档）——再展开会让节点数随元素个数乘性膨胀";
+                    break;
+                case ElementLayerDecision.Build:
+                case ElementLayerDecision.Inert:
                     return;
+
+                // **不要改成 `default: return;`**——那会把将来新增的枚举成员静默吞掉
+                //（本仓最忌讳的形态）。这条 default 永远不该被走到；抛在这里，新成员
+                // 第一趟建树就会响亮撞上，用例也钉得住。
+                //
+                // （曾经想用「不加 default → 变量定值分析报 CS0165」当编译期陷阱：
+                // 不成立——C# 把没有 default 的 switch 一律当作**非穷尽**，于是 switch 之后
+                // 使用该变量**恒**报错，代码根本编译不过。）
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(decision), decision, "未处理的元素层判定结论。");
             }
 
-            DrawerWarnings.Once(collection, nameof(CollectionElementExpansion) + "." + decision,
+            var anchor = OutermostElementLayer(collection) ?? collection;
+            var key = nameof(CollectionElementExpansion) + "." + decision + "|" +
+                      NormalizeElementIndexes(collection.Path);
+
+            DrawerWarnings.Once(anchor, key,
                 $"[XInspector] 属性「{collection.Path}」的元素类型「{name}」用到了本包，" +
                 $"但元素里的特性不会生效：{tail}。");
+        }
+
+        /// <summary>沿父链找**最外层**带元素层状态的祖先；没有返回 <c>null</c>。</summary>
+        /// <param name="node">起点节点。</param>
+        /// <returns>最外层的那个集合节点；没有返回 <c>null</c>。</returns>
+        private static InspectorProperty OutermostElementLayer(InspectorProperty node)
+        {
+            var outermost = (InspectorProperty)null;
+
+            for (var current = node?.Parent; current != null; current = current.Parent)
+            {
+                if (current.State.Get<CollectionElementLayerState>() != null)
+                {
+                    outermost = current;
+                }
+            }
+
+            return outermost;
+        }
+
+        /// <summary>把路径里的元素下标归一化：<c>data[3]</c> → <c>data[*]</c>。</summary>
+        /// <param name="path">路径。</param>
+        /// <returns>归一化后的路径。</returns>
+        /// <remarks>
+        /// 只用于**告警去重的键**（文案里仍报真实路径）。构建 / 重建期跑，
+        /// 不在绘制路径上；<c>data[</c> 形态之外的一律原样保留。
+        /// </remarks>
+        private static string NormalizeElementIndexes(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder(path.Length);
+            var start = 0;
+
+            while (start < path.Length)
+            {
+                var index = path.IndexOf("data[", start, StringComparison.Ordinal);
+                if (index < 0)
+                {
+                    builder.Append(path, start, path.Length - start);
+                    break;
+                }
+
+                var close = path.IndexOf(']', index + 5);
+                if (close < 0)
+                {
+                    builder.Append(path, start, path.Length - start);
+                    break;
+                }
+
+                builder.Append(path, start, index - start);
+                builder.Append("data[*]");
+                start = close + 1;
+            }
+
+            return builder.ToString();
         }
 
         #endregion

@@ -538,6 +538,60 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>深度 &gt; 1（第十九批）：内层元素节点也不被搬进分组，内层类型上的类级分组照常装配。</summary>
+        [Test]
+        public void 内层元素节点不被搬进分组()
+        {
+            var target = ScriptableObject.CreateInstance<ElementDepthGroupFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var inner = Find(Find(tree.Root, "outer").Children[0], "outer.Array.data[0].inners");
+
+                for (var i = 0; i < inner.Children.Count; i++)
+                {
+                    Assert.That(inner.Children[i].Kind, Is.EqualTo(InspectorPropertyKind.Member));
+                    Assert.That(
+                        inner.Children[i].Path,
+                        Is.EqualTo($"outer.Array.data[0].inners.Array.data[{i}]"),
+                        "下标投影保持原序。");
+                }
+
+                var group = Find(inner.Children[0], "outer.Array.data[0].inners.Array.data[0]/内层类级组");
+                Assert.That(group.Kind, Is.EqualTo(InspectorPropertyKind.Group));
+                Assert.That(group.Attributes.Get<PropertyGroupAttribute>().GroupID, Is.EqualTo(group.Path));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>深度 &gt; 1：外层重建之后，新内层元素下的类级分组仍在。</summary>
+        [Test]
+        public void 重建后内层的类级分组仍在()
+        {
+            var target = ScriptableObject.CreateInstance<ElementDepthGroupFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                SetArraySize(target, tree, "outer", 2);
+
+                Assert.That(CollectionElementSync.ReconcileAll(tree), Is.GreaterThan(0));
+
+                var inner = Find(Find(tree.Root, "outer").Children[1], "outer.Array.data[1].inners");
+                var group = Find(inner.Children[0], "outer.Array.data[1].inners.Array.data[0]/内层类级组");
+
+                Assert.That(group.Kind, Is.EqualTo(InspectorPropertyKind.Group));
+                Assert.That(group.Attributes.Get<PropertyGroupAttribute>().GroupID, Is.EqualTo(group.Path));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region Private Helpers
@@ -853,6 +907,33 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>没有容器特性 → 不建层、告警一次。</summary>
         public List<GroupedElement> items = new List<GroupedElement> { new GroupedElement() };
+    }
+
+    /// <summary>深度二的外层元素类型——里面嵌一个内层集合。</summary>
+    [Serializable]
+    internal class GroupedDepthOuter
+    {
+        /// <summary>元素里的集合（深度 &gt; 1 起节点化）。</summary>
+        [ListDrawerSettings]
+        public List<GroupedDepthInner> inners = new List<GroupedDepthInner> { new GroupedDepthInner() };
+    }
+
+    /// <summary>深度二的内层元素类型——类级分组标在类型自己上。</summary>
+    [Serializable]
+    [BoxGroup("内层类级组")]
+    internal class GroupedDepthInner
+    {
+        /// <summary>普通字段。</summary>
+        public int plain = 1;
+    }
+
+    /// <summary>深度二的类级分组对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class ElementDepthGroupFixture : ScriptableObject
+    {
+        /// <summary>外层集合。</summary>
+        [ListDrawerSettings]
+        public List<GroupedDepthOuter> outer = new List<GroupedDepthOuter> { new GroupedDepthOuter() };
     }
 
     #endregion

@@ -230,8 +230,56 @@ namespace XInspector.Editor
         /// 登记制而不是每趟走树找：走树是 O(全部节点)，而名单只有几个元素、比较也只是读一次
         /// <c>arraySize</c>——这条路径每帧（其实是每个 GUI 事件）都要跑。
         /// 只有**真的建了层**的集合会进来，故绝大多数工程里它是空的。
+        /// <b>写路径只有 <see cref="AddElementCollection"/> 与
+        /// <see cref="UnregisterElementLayersIn"/> 两条</b>——「祖先恒先于后代」（DFS 先序）
+        /// 这条不变量由那两条维持，见 <see cref="CollectionElementSync.ReconcileAll"/>。
         /// </remarks>
         internal List<InspectorProperty> ElementCollections { get; } = new List<InspectorProperty>();
+
+        /// <summary>
+        /// 登记一个建了元素层的集合（幂等）。
+        /// </summary>
+        /// <param name="collection">集合节点。</param>
+        /// <remarks>
+        /// 幂等是保险而不是必需：今天的调用路径不会重复登记，但 <c>CreateElementLayer</c>
+        /// 既服务构建期也服务重建期，「不重复」该由代码说、而不是由调用方记。
+        /// </remarks>
+        internal void AddElementCollection(InspectorProperty collection)
+        {
+            if (!ElementCollections.Contains(collection))
+            {
+                ElementCollections.Add(collection);
+            }
+        }
+
+        /// <summary>
+        /// 递归注销一棵子树里登记过的元素层（那棵子树即将被释放）。
+        /// </summary>
+        /// <param name="node">子树根（含它自己）。</param>
+        /// <remarks>
+        /// <b>必须在该子树被 <see cref="DisposeNode"/> 之前调用</b>：释放会把节点状态袋
+        /// <c>Reset</c> 清空，之后再也认不出谁带过元素层，条目就成了强引用作废子树的僵尸。
+        /// 判据是**结构遍历**而不是路径前缀——<c>data[1]</c> 与 <c>data[10]</c> 的前缀比较
+        /// 会误伤，而遍历的代价与紧跟着的释放同阶。
+        /// </remarks>
+        internal void UnregisterElementLayersIn(InspectorProperty node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            if (node.State.Get<CollectionElementLayerState>() != null)
+            {
+                ElementCollections.Remove(node);
+            }
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                UnregisterElementLayersIn(children[i]);
+            }
+        }
 
         /// <summary>
         /// 绘制整棵树。

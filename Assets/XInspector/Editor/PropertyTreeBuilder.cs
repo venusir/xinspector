@@ -437,7 +437,7 @@ namespace XInspector.Editor
             RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
 
             // 登记进对账名单：此后每趟绘制之前 CollectionElementSync 都会看它一眼。
-            tree.ElementCollections.Add(collection);
+            tree.AddElementCollection(collection);
         }
 
         /// <summary>
@@ -505,6 +505,12 @@ namespace XInspector.Editor
         /// 它们的特性没变，重跑等于把「注入只发生一次」的契约破掉。
         /// </para>
         /// <para>
+        /// <b>元素层可以递归（深度 &gt; 1），所以这里比构建期多跑两件事</b>：释放旧子树
+        /// **之前**先注销它里面登记过的内层集合（之后状态袋已清、认不出），以及在第一趟
+        /// 处理器**之后**对**新**子树重走一遍元素层展开（否则外层改一次长度，内层元素层
+        /// 就静默消失）。
+        /// </para>
+        /// <para>
         /// <b>旧子树整体释放。</b> 状态袋里的 <c>IDisposable</c>（内嵌编辑器之类）不释放
         /// 就是重建一次泄漏一次；旧节点对象同时作废——不得跨同步点持有（见
         /// <see cref="CollectionElementExpansion"/> 的有效窗口）。
@@ -518,18 +524,22 @@ namespace XInspector.Editor
         internal static void RebuildElementLayer(InspectorProperty collection)
         {
             var layer = collection.State.Get<CollectionElementLayerState>();
+            var tree = collection.Owner;
             var serializedObject = collection.Owner?.SerializedObject;
 
-            if (layer == null || serializedObject == null)
+            if (layer == null || serializedObject == null || tree == null)
             {
                 return;
             }
 
             var children = collection.RawChildren;
 
-            // 1. 旧子树整体释放（状态随节点走）。
+            // 1. 旧子树整体释放（状态随节点走）。**注销必须紧挨在释放之前**：DisposeNode 会把
+            //    状态袋 Reset 清空，之后再走这棵树就认不出谁带过元素层，条目会变成
+            //    强引用作废子树的僵尸。外层集合自己不在被摘之列（我们从元素节点开始走）。
             for (var i = 0; i < children.Count; i++)
             {
+                tree.UnregisterElementLayersIn(children[i]);
                 PropertyTree.DisposeNode(children[i]);
             }
 
@@ -545,6 +555,17 @@ namespace XInspector.Editor
 
             // 3. 第一趟处理器：只跑新子树（父 / 根钩子不重跑）。
             RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
+
+            // 3.5 重走元素层展开：新子树里的集合（元素类型里的 `List<T>`）按判据建层/告警/
+            //     登记——与构建期逐条对应（构建期这一步在 PropertyTreeBuilder.Build 的
+            //     ExpandCollectionElements 里）。落位：在容器项注入（第一趟处理器）**之后**、
+            //     在挂链与分组装配**之前**（那两步的递归会一并覆盖新内层节点）。
+            //     对元素节点自身的判定是无害冗余：CanDraw 对 Generic 必然 Inert（构建期
+            //     本来就对它们判过一次）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                ExpandCollectionElementsIn(tree, children[i]);
+            }
 
             // 4. 挂链（递归覆盖新子树；带 [InlineProperty] 的折叠抑制也在这一步定案）。
             for (var i = 0; i < children.Count; i++)

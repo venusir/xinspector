@@ -41,6 +41,27 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="tree">属性树。</param>
         /// <returns>这一趟重建过几个层（测试与诊断用）。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>循环里每一轮重读 <c>Count</c>，不做快照、不提前缓存——这是契约。</b>
+        /// 元素层可以递归之后再叠一层：外层集合重建时会**摘掉**它子树里旧的内层登记、
+        /// 并把新的内层登记**追加到表尾**。这个「摘下 + 追加」在直读 <c>Count</c> 的
+        /// <c>for</c> 下是正确的，靠三条不变量：
+        /// </para>
+        /// <list type="number">
+        /// <item>登记是 **DFS 先序**：祖先的登记下标恒小于其后代（见
+        /// <c>PropertyTree.AddElementCollection</c> / <c>UnregisterElementLayersIn</c>）；</item>
+        /// <item>重建摘掉的恒是**自己的后代**且恒为死条目（其祖先子树刚被释放），下标恒 &gt; 当前
+        /// <c>i</c>——不会有活条目被跳过；</item>
+        /// <item>追加到表尾的新内层条目恒**新鲜**（<c>Dirty=false</c>、长度相等），同趟后续
+        /// <c>Reconcile</c> 是廉价 no-op。</item>
+        /// </list>
+        /// <para>
+        /// 被误改成快照或提前缓存 <c>Count</c> 的症状是「偶尔漏对账一个集合」——难归因，
+        /// 故这里写成注释而不是只靠测试。快照还违反「每帧路径禁分配」（本方法在每个
+        /// GUI 事件跑一次）。
+        /// </para>
+        /// </remarks>
         public static int ReconcileAll(PropertyTree tree)
         {
             if (tree == null)

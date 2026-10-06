@@ -299,12 +299,17 @@ namespace XInspector.Tests.Editor
             }
         }
 
-        /// <summary>元素层**里面**的集合不再建层（深度只做一层），并告警一次。</summary>
+        /// <summary>
+        /// 元素层**里面**的集合**照常建层**（2026-10-06 起深度 &gt; 1）——
+        /// 内层元素类型里的特性随之生效。
+        /// </summary>
+        /// <remarks>
+        /// 本轮之前这一条断言的是「不递归 + 告警只做一层」；两道守卫（类型链去重 / 层数预算）
+        /// 落地后判据反过来，且这一族**不再告警**。
+        /// </remarks>
         [Test]
-        public void 元素里的集合不递归并告警()
+        public void 元素里的集合递归建层()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("只做一层"));
-
             var target = ScriptableObject.CreateInstance<NestedCollectionElementFixture>();
             try
             {
@@ -314,7 +319,14 @@ namespace XInspector.Tests.Editor
                 Assert.That(outer.Children.Count, Is.EqualTo(1), "外层照常节点化。");
 
                 var inner = Find(outer.Children[0], "outer.Array.data[0].inner");
-                Assert.That(inner.Children.Count, Is.EqualTo(0), "内层不递归；内层元素类型里的特性不会生效。");
+                Assert.That(inner.Children.Count, Is.EqualTo(1), "内层也建层——它的元素成了真节点。");
+
+                Assert.That(
+                    Find(inner, "outer.Array.data[0].inner.Array.data[0]").Kind,
+                    Is.EqualTo(InspectorPropertyKind.Member),
+                    "内层元素的路径是两组索引对。");
+
+                LogAssert.NoUnexpectedReceived();
             }
             finally
             {
@@ -474,11 +486,11 @@ namespace XInspector.Tests.Editor
         public float ratio;
     }
 
-    /// <summary>元素里嵌套一个集合——深度只做一层。</summary>
+    /// <summary>元素里嵌套一个集合——深度 &gt; 1 起内层也节点化。</summary>
     [Serializable]
     internal class OuterWithCollection
     {
-        /// <summary>元素**里面**的集合：本轮不节点化。</summary>
+        /// <summary>元素**里面**的集合：自 2026-10-06（深度 &gt; 1）起照常建层。</summary>
         [ListDrawerSettings]
         public List<ElementItem> inner = new List<ElementItem> { new ElementItem() };
     }
@@ -567,11 +579,11 @@ namespace XInspector.Tests.Editor
         public List<ElementItem> rows = new List<ElementItem> { new ElementItem() };
     }
 
-    /// <summary>元素**里面**的集合——深度只做一层。</summary>
+    /// <summary>元素**里面**的集合——深度 &gt; 1 起递归建层。</summary>
     [HideMonoScript]
     internal sealed class NestedCollectionElementFixture : ScriptableObject
     {
-        /// <summary>外层照常节点化；内层不递归。</summary>
+        /// <summary>外层与内层都照常节点化。</summary>
         [ListDrawerSettings]
         public List<OuterWithCollection> outer = new List<OuterWithCollection> { new OuterWithCollection() };
     }
