@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -431,7 +433,260 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 列表源（[ValueDropdown] 那一格）
+
+        /// <summary>序列化的数组：**只要句柄**，不给读取器——消费侧本来就吃句柄。</summary>
+        [Test]
+        public void 序列化数组源给句柄不给读取器()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "rootAnchor"), "serializedOptions");
+
+                    Assert.That(resolved.Serialized, Is.Not.Null);
+                    Assert.That(resolved.Serialized.propertyPath, Is.EqualTo("serializedOptions"));
+                    Assert.That(resolved.Read, Is.Null, "序列化形态不编译读取器。");
+                    Assert.That(resolved.ElementType, Is.Null, "元素类型由句柄自己给。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>根层：**非序列化属性**当来源（反射那一级）。</summary>
+        [Test]
+        public void 根层解析到反射属性源()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "rootAnchor"), "Options");
+
+                    Assert.That(resolved.Serialized, Is.Null);
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<string> { "root-true" }));
+                    Assert.That(resolved.ElementType, Is.EqualTo(typeof(string)), "元素声明类型从 List<string> 推出来。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>根层：**非序列化字段**当来源（私有字段也要找得到）。</summary>
+        [Test]
+        public void 根层解析到反射字段源()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "rootAnchor"), "hiddenOptions");
+
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<string> { "h1", "h2" }));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 嵌套层里的成员引用指的是**同层**那个：根上放一个同名陷阱，读到嵌套那份才算对。
+        /// </summary>
+        [Test]
+        public void 嵌套层优先解析同层列表源()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "nested.anchor"), "Options");
+
+                    Assert.That(
+                        resolved.Read(),
+                        Is.EqualTo(new List<string> { "nested-false" }),
+                        "读的是嵌套实例那份；读到 root-true 就说明解析到了根上。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>无参方法当来源，且**每帧现读**：改了它依赖的字段之后跟着走。</summary>
+        [Test]
+        public void 方法源解析出列表读取器()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "nested.anchor"), "Numbers");
+
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<int> { 1 }));
+                    Assert.That(resolved.ElementType, Is.EqualTo(typeof(int)));
+
+                    SetBool(target, tree, "nested.sibling", true);
+
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<int> { 2 }), "开实例调用，每次吃当时的实例。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 只实现 <c>IEnumerable</c> 的源必须被拒绝，且原因要说清实到的是什么类型。
+        /// </summary>
+        /// <remarks>
+        /// <c>string</c> 也在这一格里：它只实现 <c>IEnumerable&lt;char&gt;</c>，
+        /// 放行会静默变出「字符选项表」。
+        /// </remarks>
+        [Test]
+        public void 只实现IEnumerable的源被拒绝()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var node = Find(tree.Root, "rootAnchor");
+
+                    Assert.That(
+                        MemberReferenceResolver.TryResolveList(
+                            node, "OnlyEnumerable", MemberScope.Object,
+                            out var read, out _, out _, out var hashSetReason),
+                        Is.False);
+                    Assert.That(read, Is.Null);
+                    Assert.That(hashSetReason, Does.Contain("数组或 List"));
+                    Assert.That(
+                        hashSetReason,
+                        Does.Contain("HashSet<Int32>"),
+                        "说清实到的是什么类型，且泛型名不带反引号元数。");
+
+                    Assert.That(
+                        MemberReferenceResolver.TryResolveList(
+                            node, "TextOptions", MemberScope.Object,
+                            out _, out _, out _, out var textReason),
+                        Is.False);
+                    Assert.That(textReason, Does.Contain("String"));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>嵌套实例为空时读取器给 <c>null</c>（列表没有「缺失值」可言），且**不抛**。</summary>
+        [Test]
+        public void 列表源实例为空时给null()
+        {
+            var target = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                using (var tree = PropertyTree.Create(new SerializedObject(target)))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "nested.anchor"), "Options");
+
+                    Assert.DoesNotThrow(() =>
+                    {
+                        target.nested = null;
+
+                        Assert.That(resolved.Read(), Is.Null);
+                    });
+
+                    target.nested = new MemberReferenceNested { sibling = true };
+
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<string> { "nested-true" }), "换掉实例之后跟着走。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>多目标下取**首个存活目标**——与其余三格同一条语义。</summary>
+        [Test]
+        public void 列表源取首个存活目标()
+        {
+            var first = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            var second = ScriptableObject.CreateInstance<MemberReferenceFixture>();
+            try
+            {
+                second.flag = false;
+
+                using (var tree = PropertyTreeBuilder.Build(new SerializedObject(first), new object[] { first, second }, null))
+                {
+                    var resolved = ResolveList(Find(tree.Root, "rootAnchor"), "Options");
+
+                    Assert.That(resolved.Read(), Is.EqualTo(new List<string> { "root-true" }), "读的是第一个目标那份。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(first);
+                Object.DestroyImmediate(second);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
+
+        /// <summary>解析出来的列表成员引用。</summary>
+        private readonly struct ListReference
+        {
+            /// <summary>反射来源的每帧读取器；序列化来源为 <c>null</c>。</summary>
+            public readonly Func<IList> Read;
+
+            /// <summary>序列化来源的活句柄；反射来源为 <c>null</c>。</summary>
+            public readonly SerializedProperty Serialized;
+
+            /// <summary>反射来源的元素声明类型（推不出来为 <c>null</c>）。</summary>
+            public readonly Type ElementType;
+
+            /// <summary>构造。</summary>
+            /// <param name="read">读取器。</param>
+            /// <param name="serialized">活句柄。</param>
+            /// <param name="elementType">元素声明类型。</param>
+            public ListReference(Func<IList> read, SerializedProperty serialized, Type elementType)
+            {
+                Read = read;
+                Serialized = serialized;
+                ElementType = elementType;
+            }
+        }
+
+        /// <summary>解析一个列表成员引用，失败即断言失败。</summary>
+        /// <param name="node">起点节点。</param>
+        /// <param name="memberName">成员名。</param>
+        /// <returns>解析结果。</returns>
+        private static ListReference ResolveList(InspectorProperty node, string memberName)
+        {
+            var ok = MemberReferenceResolver.TryResolveList(
+                node, memberName, MemberScope.Object,
+                out var read, out var serialized, out var elementType, out var reason);
+
+            Assert.That(ok, Is.True, reason);
+            return new ListReference(read, serialized, elementType);
+        }
 
         /// <summary>解析出来的 bool 成员引用。</summary>
         private readonly struct BooleanReference
@@ -622,6 +877,28 @@ namespace XInspector.Tests.Editor
         /// <summary>值对象内部有一个 bool 开关的字段——相对范围那一格用它。</summary>
         public MemberReferenceBox box = new MemberReferenceBox();
 
+        /// <summary>序列化的数组——列表源的**序列化**形态。</summary>
+        public string[] serializedOptions = { "x", "y" };
+
+        /// <summary>
+        /// 与嵌套层**同名**的非序列化列表属性（根上那份）——「看错对象」的陷阱。
+        /// 内容跟着 <see cref="flag"/> 走，多目标那一格因此能造出两份不同的列表。
+        /// </summary>
+        public List<string> Options => new List<string> { flag ? "root-true" : "root-false" };
+
+        /// <summary>
+        /// 非序列化的公开字段——反射字段那一格。用 <c>[NonSerialized]</c> 而不是私有字段：
+        /// 私有字段只被反射读，编译器会判成「赋值后从未使用」（CS0414）。
+        /// </summary>
+        [NonSerialized]
+        public List<string> hiddenOptions = new List<string> { "h1", "h2" };
+
+        /// <summary>只实现 <c>IEnumerable</c> 的源——必须被拒绝。</summary>
+        public HashSet<int> OnlyEnumerable => new HashSet<int> { 7 };
+
+        /// <summary>字符串源——必须被拒绝（它只实现 <c>IEnumerable&lt;char&gt;</c>）。</summary>
+        public string TextOptions => "abc";
+
         #endregion
 
         #region 嵌套层
@@ -690,6 +967,16 @@ namespace XInspector.Tests.Editor
         public float Computed()
         {
             return 2.5f;
+        }
+
+        /// <summary>与根同名的非序列化列表属性（嵌套层那份）——第 0 级该命中它。</summary>
+        public List<string> Options => new List<string> { sibling ? "nested-true" : "nested-false" };
+
+        /// <summary>无参返回列表的方法——反射方法那一格。</summary>
+        /// <returns>内容跟着 <see cref="sibling"/> 走，用来钉「每次调用吃当时的实例」。</returns>
+        public List<int> Numbers()
+        {
+            return new List<int> { sibling ? 2 : 1 };
         }
 
         /// <summary>让这个嵌套类型进管线（夹具的锚点，也是所有解析的起点）。</summary>

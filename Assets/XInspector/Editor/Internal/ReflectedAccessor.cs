@@ -118,7 +118,10 @@ namespace XInspector.Editor
         /// <summary>
         /// 编译一个**强类型**的读取器——「实例 → 当前值」。
         /// </summary>
-        /// <typeparam name="T">要求的成员类型（本包用到的是 <c>bool</c>、<c>float</c>、<c>Vector2</c>）。</typeparam>
+        /// <typeparam name="T">
+        /// 读取器要返回的类型。本包用到的是 <c>bool</c>、<c>float</c>、<c>Vector2</c>，
+        /// 以及 <c>[ValueDropdown]</c> 数据源那一格的 <c>IList</c>。
+        /// </typeparam>
         /// <param name="member">字段或属性。</param>
         /// <param name="reader">编译出的读取器；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
@@ -132,10 +135,16 @@ namespace XInspector.Editor
         /// 再多一个箱子没有意义。
         /// </para>
         /// <para>
-        /// <b><c>T</c> 是值类型时这里不插 <c>Convert</c></b>：<see cref="TryBuild"/> 给出的
-        /// 表达式本体已经是 <c>T</c>，照 <see cref="TryCreate"/> 那样再转一次 <c>object</c>
-        /// 等于每帧白送一次装箱。读取器进的是每帧路径（条件求值、<c>[MinMaxSlider]</c> 的边界），
-        /// 这条不是微优化。
+        /// <b>判定是「可赋值给 <c>T</c>」而不是「恰好是 <c>T</c>」</b>：列表那一格的
+        /// <c>T</c> 是 <see cref="System.Collections.IList"/>，而成员的声明类型是
+        /// <c>List&lt;string&gt;</c> 或某个数组——精确相等会把它们全拒掉。
+        /// 值类型没有隐式变体，故 <c>bool</c>/<c>float</c>/<c>Vector2</c> 三格的行为逐字不变。
+        /// </para>
+        /// <para>
+        /// <b>只在需要时才插 <c>Convert</c>，且只插一次（编译期）</b>：<c>body</c> 的类型是成员的
+        /// 声明类型，lambda 的返回类型是 <c>T</c>，两者不同时才补一次引用转换。
+        /// <c>T</c> 是值类型时 <c>body.Type == typeof(T)</c> 恒成立，于是**不插转换、不新增装箱**
+        /// ——读取器进的是每帧路径（条件求值、<c>[MinMaxSlider]</c> 的边界），这条不是微优化。
         /// </para>
         /// </remarks>
         public static bool TryCreateReader<T>(MemberInfo member, out Func<object, T> reader, out string reason)
@@ -147,7 +156,7 @@ namespace XInspector.Editor
                 return false;
             }
 
-            if (valueType != typeof(T))
+            if (!typeof(T).IsAssignableFrom(valueType))
             {
                 reason = $"它是 {DescribeType(valueType)}，不是 {DescribeType(typeof(T))}";
                 return false;
@@ -155,7 +164,7 @@ namespace XInspector.Editor
 
             try
             {
-                reader = Expression.Lambda<Func<object, T>>(body, instance).Compile();
+                reader = Expression.Lambda<Func<object, T>>(Widen(body, typeof(T)), instance).Compile();
                 reason = null;
                 return true;
             }
@@ -184,10 +193,20 @@ namespace XInspector.Editor
         /// 成员值类型的惯用说法，供各处告警文案共用。
         /// </summary>
         /// <param name="type">类型；可以为 <c>null</c>。</param>
-        /// <returns><c>bool</c> 与 <c>float</c> 用 C# 关键字那套小写，其余用类型名（<c>Int32</c>、<c>Vector2</c>）。</returns>
+        /// <returns>
+        /// <c>bool</c> 与 <c>float</c> 用 C# 关键字那套小写，其余用类型名
+        /// （<c>Int32</c>、<c>Vector2</c>、泛型的 <c>List&lt;Int32&gt;</c>）。
+        /// </returns>
         /// <remarks>
+        /// <para>
         /// 单独一个入口是为了让「同一个类型在两处被告警成同一个词」——
         /// 各写一遍的话，一边说 <c>Boolean</c>、一边说 <c>bool</c> 只是时间问题。
+        /// </para>
+        /// <para>
+        /// 泛型交给 <see cref="ReflectedValueFormatter.TypeName"/>：直接取 <c>Type.Name</c> 会得到
+        /// <c>List`1</c> 这种带反引号元数的名字，出现在告警里像是坏了。
+        /// 两处**共用同一份拼法**，不各写一遍。
+        /// </para>
         /// </remarks>
         public static string DescribeType(Type type)
         {
@@ -201,7 +220,7 @@ namespace XInspector.Editor
                 return "bool";
             }
 
-            return type == typeof(float) ? "float" : type.Name;
+            return type == typeof(float) ? "float" : ReflectedValueFormatter.TypeName(type);
         }
 
         /// <summary>
@@ -468,7 +487,7 @@ namespace XInspector.Editor
                     ? Expression.Call(method)
                     : Expression.Call(Convert(instance, method.DeclaringType), method);
 
-                invoker = Expression.Lambda<Func<object, T>>(call, instance).Compile();
+                invoker = Expression.Lambda<Func<object, T>>(Widen(call, typeof(T)), instance).Compile();
                 reason = null;
                 return true;
             }
@@ -655,6 +674,23 @@ namespace XInspector.Editor
             return collectionType.IsArray
                 ? Expression.ArrayIndex(collection, constant)
                 : Expression.Property(collection, "Item", constant);
+        }
+
+        /// <summary>
+        /// 表达式本体的类型不是 <paramref name="target"/> 时补一次引用转换。
+        /// </summary>
+        /// <param name="body">表达式本体（类型是成员的声明类型或方法的返回类型）。</param>
+        /// <param name="target">lambda 要返回的类型。</param>
+        /// <returns>可直接当 lambda 本体的表达式。</returns>
+        /// <remarks>
+        /// <b>类型相同时原样返回</b>——那两个强类型工厂的「值类型不装箱」约定全靠这一条
+        /// （<c>bool</c> / <c>float</c> / <c>Vector2</c> 三格永远走到这里就返回）。
+        /// 需要转换的只有引用那一侧（<c>List&lt;string&gt;</c> → <c>IList</c>），
+        /// 编译成一条 <c>castclass</c>，且在**编译期**只插一次。
+        /// </remarks>
+        private static Expression Widen(Expression body, Type target)
+        {
+            return body.Type == target ? body : Expression.Convert(body, target);
         }
 
         /// <summary>把编译异常转成一句可拼进告警的中文原因。</summary>

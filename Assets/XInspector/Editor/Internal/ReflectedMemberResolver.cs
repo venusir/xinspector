@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 
 namespace XInspector.Editor
@@ -41,21 +42,26 @@ namespace XInspector.Editor
         /// <summary>
         /// 在**根目标对象**上解析一个成员引用。
         /// </summary>
-        /// <typeparam name="T">要求的成员类型。</typeparam>
+        /// <typeparam name="T">读取器的类型（通常是成员的值类型；列表那一格是 <see cref="IList"/>）。</typeparam>
         /// <param name="targets">目标对象列表。</param>
         /// <param name="memberName">成员名。</param>
+        /// <param name="requirement">对成员**声明类型**的要求。</param>
         /// <param name="whenMissing">取不到目标对象、或嵌套实例为空时，读取器给什么值。</param>
         /// <param name="read">解析出的每帧求值器；失败时为 <c>null</c>。</param>
+        /// <param name="declaredType">命中成员的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>解析成功返回 <c>true</c>。</returns>
         public static bool TryResolve<T>(
             object[] targets,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
             reason = null;
 
             var target = FirstAlive(targets);
@@ -66,19 +72,22 @@ namespace XInspector.Editor
             }
 
             return TryResolveOn(
-                target.GetType(), () => target, memberName, "目标对象", whenMissing, out read, out reason);
+                target.GetType(), () => target, memberName, "目标对象", requirement, whenMissing,
+                out read, out declaredType, out reason);
         }
 
         /// <summary>
         /// 在**嵌套实例（或集合元素）**上解析一个成员引用。
         /// </summary>
-        /// <typeparam name="T">要求的成员类型。</typeparam>
+        /// <typeparam name="T">读取器的类型（通常是成员的值类型；列表那一格是 <see cref="IList"/>）。</typeparam>
         /// <param name="nestedType">嵌套实例的声明类型。</param>
         /// <param name="containerPath">嵌套实例相对根目标的序列化路径（如 <c>stats</c>）。</param>
         /// <param name="targets">根目标对象列表。</param>
         /// <param name="memberName">成员名。</param>
+        /// <param name="requirement">对成员**声明类型**的要求。</param>
         /// <param name="whenMissing">取不到目标对象、或嵌套实例为空时，读取器给什么值。</param>
         /// <param name="read">解析出的每帧求值器；失败时为 <c>null</c>。</param>
+        /// <param name="declaredType">命中成员的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>解析成功返回 <c>true</c>。</returns>
         /// <remarks>
@@ -98,11 +107,14 @@ namespace XInspector.Editor
             string containerPath,
             object[] targets,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
             reason = null;
 
             var target = FirstAlive(targets);
@@ -129,8 +141,10 @@ namespace XInspector.Editor
                 () => scope.Read(target),
                 memberName,
                 $"嵌套实例（{nestedType.Name}）",
+                requirement,
                 whenMissing,
                 out read,
+                out declaredType,
                 out reason);
         }
 
@@ -141,13 +155,15 @@ namespace XInspector.Editor
         /// <summary>
         /// 在指定类型上按名找成员并绑定——根层与容器层共用这一段。
         /// </summary>
-        /// <typeparam name="T">要求的成员类型。</typeparam>
+        /// <typeparam name="T">读取器的类型。</typeparam>
         /// <param name="type">在哪一个类型上找。</param>
         /// <param name="instance">取当前实例（每帧现读）；根层是恒等，容器层是沿路径下钻。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="scopeName">失败信息里的范围名。</param>
+        /// <param name="requirement">对成员声明类型的要求。</param>
         /// <param name="whenMissing">实例为空时读取器给什么值。</param>
         /// <param name="read">绑定出的求值器。</param>
+        /// <param name="declaredType">命中成员的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         private static bool TryResolveOn<T>(
@@ -155,18 +171,23 @@ namespace XInspector.Editor
             Func<object> instance,
             string memberName,
             string scopeName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
 
             for (var current = type; current != null; current = current.BaseType)
             {
                 var candidates = current.GetMember(memberName, Flags);
                 if (candidates.Length > 0)
                 {
-                    return TryBind(candidates, instance, memberName, whenMissing, out read, out reason);
+                    return TryBind(
+                        candidates, instance, memberName, requirement, whenMissing,
+                        out read, out declaredType, out reason);
                 }
             }
 
@@ -196,12 +217,14 @@ namespace XInspector.Editor
         }
 
         /// <summary>在一层里挑出可用的那一个成员并绑定。</summary>
-        /// <typeparam name="T">要求的成员类型。</typeparam>
+        /// <typeparam name="T">读取器的类型。</typeparam>
         /// <param name="candidates">同名成员。</param>
         /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名，用于告警文本。</param>
+        /// <param name="requirement">对成员声明类型的要求。</param>
         /// <param name="whenMissing">实例为空时读取器给什么值。</param>
         /// <param name="read">绑定出的求值器。</param>
+        /// <param name="declaredType">命中成员的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>绑定成功返回 <c>true</c>。</returns>
         /// <remarks>
@@ -213,23 +236,30 @@ namespace XInspector.Editor
             MemberInfo[] candidates,
             Func<object> instance,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
             reason = null;
 
             for (var i = 0; i < candidates.Length; i++)
             {
                 if (candidates[i] is FieldInfo field)
                 {
-                    return TryBindField(field, instance, memberName, whenMissing, out read, out reason);
+                    return TryBindField(
+                        field, instance, memberName, requirement, whenMissing,
+                        out read, out declaredType, out reason);
                 }
 
                 if (candidates[i] is PropertyInfo property)
                 {
-                    return TryBindProperty(property, instance, memberName, whenMissing, out read, out reason);
+                    return TryBindProperty(
+                        property, instance, memberName, requirement, whenMissing,
+                        out read, out declaredType, out reason);
                 }
             }
 
@@ -237,7 +267,9 @@ namespace XInspector.Editor
             {
                 if (candidates[i] is MethodInfo method)
                 {
-                    return TryBindMethod(method, instance, memberName, whenMissing, out read, out reason);
+                    return TryBindMethod(
+                        method, instance, memberName, requirement, whenMissing,
+                        out read, out declaredType, out reason);
                 }
             }
 
@@ -252,23 +284,28 @@ namespace XInspector.Editor
         /// <param name="memberName">成员名。</param>
         /// <param name="whenMissing">实例为空时读取器给什么值。</param>
         /// <param name="read">绑定出的求值器。</param>
+        /// <param name="requirement">对字段声明类型的要求。</param>
+        /// <param name="declaredType">命中字段的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         private static bool TryBindField<T>(
             FieldInfo field,
             Func<object> instance,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
 
-            if (field.FieldType != typeof(T))
+            if (!requirement.Accepts(field.FieldType))
             {
                 reason =
                     $"找到的「{memberName}」是 {ReflectedAccessor.DescribeType(field.FieldType)} 字段，" +
-                    $"必须是 {ReflectedAccessor.DescribeType(typeof(T))}";
+                    $"必须是 {requirement.Description}";
                 return false;
             }
 
@@ -277,6 +314,7 @@ namespace XInspector.Editor
                 return false;
             }
 
+            declaredType = field.FieldType;
             read = () =>
             {
                 var target = instance();
@@ -287,23 +325,28 @@ namespace XInspector.Editor
         }
 
         /// <summary>绑定一个属性。</summary>
-        /// <typeparam name="T">要求的成员类型。</typeparam>
+        /// <typeparam name="T">读取器的类型。</typeparam>
         /// <param name="property">属性。</param>
         /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名。</param>
+        /// <param name="requirement">对属性声明类型的要求。</param>
         /// <param name="whenMissing">实例为空时读取器给什么值。</param>
         /// <param name="read">绑定出的求值器。</param>
+        /// <param name="declaredType">命中属性的声明类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         private static bool TryBindProperty<T>(
             PropertyInfo property,
             Func<object> instance,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
 
             if (property.GetIndexParameters().Length > 0)
             {
@@ -317,11 +360,11 @@ namespace XInspector.Editor
                 return false;
             }
 
-            if (property.PropertyType != typeof(T))
+            if (!requirement.Accepts(property.PropertyType))
             {
                 reason =
                     $"找到的「{memberName}」属性是 {ReflectedAccessor.DescribeType(property.PropertyType)}，" +
-                    $"必须是 {ReflectedAccessor.DescribeType(typeof(T))}";
+                    $"必须是 {requirement.Description}";
                 return false;
             }
 
@@ -330,6 +373,7 @@ namespace XInspector.Editor
                 return false;
             }
 
+            declaredType = property.PropertyType;
             read = () =>
             {
                 var target = instance();
@@ -340,14 +384,16 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 绑定一个无参、非泛型、返回 <typeparamref name="T"/> 的方法。
+        /// 绑定一个无参、非泛型、返回值满足要求的方法。
         /// </summary>
-        /// <typeparam name="T">要求的返回类型。</typeparam>
+        /// <typeparam name="T">读取器的类型。</typeparam>
         /// <param name="method">方法。</param>
         /// <param name="instance">取当前实例。</param>
         /// <param name="memberName">成员名。</param>
+        /// <param name="requirement">对方法返回类型的要求。</param>
         /// <param name="whenMissing">实例为空时读取器给什么值。</param>
         /// <param name="read">绑定出的求值器。</param>
+        /// <param name="declaredType">命中方法的返回类型；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         /// <remarks>
@@ -360,11 +406,14 @@ namespace XInspector.Editor
             MethodInfo method,
             Func<object> instance,
             string memberName,
+            MemberTypeRequirement requirement,
             T whenMissing,
             out Func<T> read,
+            out Type declaredType,
             out string reason)
         {
             read = null;
+            declaredType = null;
 
             if (method.GetParameters().Length > 0)
             {
@@ -378,11 +427,11 @@ namespace XInspector.Editor
                 return false;
             }
 
-            if (method.ReturnType != typeof(T))
+            if (!requirement.Accepts(method.ReturnType))
             {
                 reason =
                     $"找到的「{memberName}」方法返回 {ReflectedAccessor.DescribeType(method.ReturnType)}，" +
-                    $"必须返回 {ReflectedAccessor.DescribeType(typeof(T))}";
+                    $"必须返回 {requirement.Description}";
                 return false;
             }
 
@@ -390,6 +439,8 @@ namespace XInspector.Editor
             {
                 return false;
             }
+
+            declaredType = method.ReturnType;
 
             if (method.IsStatic)
             {

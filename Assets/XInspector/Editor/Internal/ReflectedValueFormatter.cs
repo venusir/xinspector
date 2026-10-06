@@ -214,8 +214,10 @@ namespace XInspector.Editor
         /// <remarks>
         /// 不直接用 <c>Type.Name</c>：泛型类型的名字带反引号元数（<c>List`1</c>），
         /// 直接显示出来像是坏了。
+        /// <b>告警文案也走这里</b>（<see cref="ReflectedAccessor.DescribeType"/> 转调），
+        /// 免得同一件事有两种拼法。
         /// </remarks>
-        private static string TypeName(Type type)
+        internal static string TypeName(Type type)
         {
             if (!type.IsGenericType)
             {

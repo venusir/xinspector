@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEditor;
 using UnityEngine;
 
@@ -86,13 +87,113 @@ namespace XInspector.Editor
             return kind == MemberKind.Array ? "数组或 List" : ReflectedAccessor.DescribeType(TypeOf(kind));
         }
 
+        /// <summary>
+        /// 把类型约束翻译成**反射腿**要的要求。
+        /// </summary>
+        /// <param name="kind">类型约束。</param>
+        /// <returns>反射腿的类型要求。</returns>
+        /// <remarks>
+        /// 前三种与 <see cref="TypeOf"/> 一一对应，故这里不从调用方再收一个类型——
+        /// 一处只写一份真相：约束对应哪个 CLR 类型，全包只有 <see cref="TypeOf"/> 一个答案。
+        /// <see cref="MemberKind.Array"/> 是唯一的例外，理由见
+        /// <see cref="MemberTypeRequirement.List"/>。
+        /// </remarks>
+        public static MemberTypeRequirement ReflectionRequirement(MemberKind kind)
+        {
+            return kind == MemberKind.Array
+                ? MemberTypeRequirement.List
+                : MemberTypeRequirement.Exact(TypeOf(kind));
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// 反射腿对成员**声明类型**的要求。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 它与「读取器要返回的 <c>T</c>」不是同一件事：<see cref="MemberKind.Array"/> 那一格的
+    /// <c>T</c> 是 <see cref="IList"/>（读取器的形状），而要求是「声明类型**实现** IList」——
+    /// 数组、<c>List&lt;T&gt;</c> 与自定义实现都该放行，写成 <c>== typeof(IList)</c> 会把它们全拒掉。
+    /// </para>
+    /// <para>
+    /// <b>判定必须发生在绑定层</b>，别指望编译期兜底：只把 <c>TryCreateReader</c> 的
+    /// <c>!=</c> 改成 <c>IsAssignableFrom</c> 的话，<c>HashSet&lt;int&gt;</c> 之类会一路走到
+    /// 表达式编译才抛，失败原因变成「无法为它编译访问委托：…」——一句答非所问的话。
+    /// 这一层的作用就是让「必须是 数组或 List」从**人能读的那一处**说出来。
+    /// </para>
+    /// </remarks>
+    internal readonly struct MemberTypeRequirement
+    {
+        #region Private Fields
+
+        /// <summary>精确相等时是要求的类型；可赋值时是被实现的接口。</summary>
+        private readonly Type _accepted;
+
+        /// <summary>是否按「可赋值给」判定，而不是按「恰好是」。</summary>
+        private readonly bool _assignable;
+
+        #endregion
+
+        #region Construction
+
+        /// <summary>构造。</summary>
+        /// <param name="accepted">要求的类型。</param>
+        /// <param name="description">告警文案里的说法。</param>
+        /// <param name="assignable">是否按可赋值判定。</param>
+        private MemberTypeRequirement(Type accepted, string description, bool assignable)
+        {
+            _accepted = accepted;
+            Description = description;
+            _assignable = assignable;
+        }
+
+        #endregion
+
+        #region Public API
+
+        /// <summary>告警文案里的说法（「bool」「数组或 List」）。</summary>
+        public string Description { get; }
+
+        /// <summary>精确相等（<c>bool</c> / <c>float</c> / <c>Vector2</c> 三格）。</summary>
+        /// <param name="type">要求的类型。</param>
+        /// <returns>要求。</returns>
+        /// <remarks>文案取自 <see cref="ReflectedAccessor.DescribeType"/>，故既有三格的告警逐字不变。</remarks>
+        public static MemberTypeRequirement Exact(Type type)
+        {
+            return new MemberTypeRequirement(type, ReflectedAccessor.DescribeType(type), false);
+        }
+
+        /// <summary>声明类型须实现 <see cref="IList"/>（<c>[ValueDropdown]</c> 的数据源那一格）。</summary>
+        /// <remarks>
+        /// <b>为什么是 <see cref="IList"/> 而不是 <see cref="IEnumerable"/>：</b>
+        /// <c>string</c> 只实现 <c>IEnumerable&lt;char&gt;</c>——放宽会把一个字符串字段静默变成
+        /// 「字符选项表」。要的是「能按下标取」的集合。
+        /// </remarks>
+        public static MemberTypeRequirement List =>
+            new MemberTypeRequirement(typeof(IList), "数组或 List（声明类型须实现 IList）", true);
+
+        /// <summary>成员声明类型是否满足要求。</summary>
+        /// <param name="memberType">成员的声明类型。</param>
+        /// <returns>满足返回 <c>true</c>；类型为空时返回 <c>false</c>。</returns>
+        public bool Accepts(Type memberType)
+        {
+            if (memberType == null)
+            {
+                return false;
+            }
+
+            return _assignable ? _accepted.IsAssignableFrom(memberType) : memberType == _accepted;
+        }
+
         #endregion
     }
 
     /// <summary>
     /// 「按名找一个成员」——**本包唯一的一处**。条件族（含 <c>[InfoBox]</c> 的 <c>visibleIf</c>
-    /// 与分组条件）、<c>[Toggle]</c>、<c>[ToggleGroup]</c>、<c>[MinMaxSlider]</c> 的动态边界
-    /// 全走这里。
+    /// 与分组条件）、<c>[Toggle]</c>、<c>[ToggleGroup]</c>、<c>[MinMaxSlider]</c> 的动态边界、
+    /// <c>[ValueDropdown]</c> 的数据源全走这里。
     /// <para>
     /// <b>阶梯四级，次序即契约：</b>
     /// </para>
@@ -165,7 +266,7 @@ namespace XInspector.Editor
             return TryResolveCore(
                 property, memberName, scope, MemberKind.Boolean, false,
                 member => () => member.boolValue,
-                out read, out serialized, out reason);
+                out read, out serialized, out _, out reason);
         }
 
         /// <summary>
@@ -189,7 +290,7 @@ namespace XInspector.Editor
             return TryResolveCore(
                 property, memberName, MemberScope.Object, MemberKind.Float, float.NaN,
                 member => () => member.floatValue,
-                out read, out _, out reason);
+                out read, out _, out _, out reason);
         }
 
         /// <summary>
@@ -210,7 +311,70 @@ namespace XInspector.Editor
             return TryResolveCore(
                 property, memberName, MemberScope.Object, MemberKind.Vector2, new Vector2(float.NaN, float.NaN),
                 member => () => member.vector2Value,
-                out read, out _, out reason);
+                out read, out _, out _, out reason);
+        }
+
+        /// <summary>
+        /// 解析一个「选项列表」成员引用（<c>[ValueDropdown]</c> 的数据源）。
+        /// </summary>
+        /// <param name="property">目标属性。</param>
+        /// <param name="memberName">成员名。</param>
+        /// <param name="scope">查找范围。</param>
+        /// <param name="read">
+        /// **反射**来源的读取器（每帧现读；实例缺失时给 <c>null</c>）；序列化来源为 <c>null</c>。
+        /// </param>
+        /// <param name="serialized">
+        /// **序列化**来源的活句柄（数组 / List）；反射来源为 <c>null</c>。
+        /// </param>
+        /// <param name="elementType">
+        /// 反射来源的**元素声明类型**（从成员声明类型推，推不出来为 <c>null</c>）；
+        /// 序列化来源恒为 <c>null</c>——那个形态的元素类型由 <see cref="SerializedProperty"/> 自己给。
+        /// </param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>解析成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>两个 out 参数就是判别式：</b>成功时 <paramref name="serialized"/> 与
+        /// <paramref name="read"/> 恰有一个非 <c>null</c>。不另设枚举或布尔开关——
+        /// 「谁有谁没有」是硬事实，再加一个字段就得维护它与事实同步。
+        /// </para>
+        /// <para>
+        /// 这一格的另一处特殊：序列化腿**不编译读取器**（<c>bindSerialized</c> 传 <c>null</c>）。
+        /// 消费侧（选项表与值复制）本来就吃句柄，而托管侧也读不出 <see cref="SerializedProperty"/>
+        /// 那个数组——这正是两形态不能统一成一个 <c>Source</c> 的原因。
+        /// </para>
+        /// <para>
+        /// 反射那一格的次序与其余三格逐字相同：先嵌套同层与根绝对名，再容器实例与根目标；
+        /// **反射腿停在第一级**（容器里没有就停，不回落根上找），理由见类注释。
+        /// </para>
+        /// </remarks>
+        public static bool TryResolveList(
+            InspectorProperty property,
+            string memberName,
+            MemberScope scope,
+            out Func<IList> read,
+            out SerializedProperty serialized,
+            out Type elementType,
+            out string reason)
+        {
+            elementType = null;
+
+            if (!TryResolveCore(
+                    property, memberName, scope, MemberKind.Array, (IList)null, null,
+                    out read, out serialized, out var declaredType, out reason))
+            {
+                return false;
+            }
+
+            if (serialized != null)
+            {
+                // 序列化形态：句柄就是全部，读取器恒为 null。
+                read = null;
+                return true;
+            }
+
+            elementType = ListElementType.TypeOf(declaredType);
+            return true;
         }
 
         #endregion
@@ -218,17 +382,25 @@ namespace XInspector.Editor
         #region Private Helpers
 
         /// <summary>
-        /// 阶梯本体：三种种类共用这一段，差别只在类型判定与「怎么把序列化句柄变成读取器」。
+        /// 阶梯本体：四种种类共用这一段，差别只在类型判定与「怎么把序列化句柄变成读取器」。
         /// </summary>
-        /// <typeparam name="T">成员的值类型。</typeparam>
+        /// <typeparam name="T">读取器的值类型（列表那一格是 <see cref="IList"/>）。</typeparam>
         /// <param name="property">目标属性。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="scope">查找范围。</param>
         /// <param name="kind">类型约束。</param>
         /// <param name="whenMissing">实例缺失（嵌套实例为空、元素为空）时读取器给什么值。</param>
-        /// <param name="bindSerialized">把序列化句柄包成读取器（每条腿各一个活句柄字段）。</param>
-        /// <param name="read">每帧现读的读取器。</param>
+        /// <param name="bindSerialized">
+        /// 把序列化句柄包成读取器（每条腿各一个活句柄字段）。
+        /// <b>可以为 <c>null</c></b>——那表示「序列化腿只要句柄，不编译读取器」（列表那一格：
+        /// 消费侧吃句柄，而托管侧也读不出 <see cref="SerializedProperty"/> 那个数组）。
+        /// </param>
+        /// <param name="read">每帧现读的读取器；只取句柄的那一格为 <c>null</c>。</param>
         /// <param name="serialized">解析到序列化成员时的活句柄；反射成员恒为 <c>null</c>。</param>
+        /// <param name="declaredType">
+        /// 反射腿命中时成员的**声明类型**；序列化腿恒为 <c>null</c>（那个形态的类型信息在句柄里）。
+        /// 列表那一格要靠它推元素类型。
+        /// </param>
         /// <param name="reason">失败原因。</param>
         /// <returns>解析成功返回 <c>true</c>。</returns>
         private static bool TryResolveCore<T>(
@@ -240,10 +412,12 @@ namespace XInspector.Editor
             Func<SerializedProperty, Func<T>> bindSerialized,
             out Func<T> read,
             out SerializedProperty serialized,
+            out Type declaredType,
             out string reason)
         {
             read = null;
             serialized = null;
+            declaredType = null;
             reason = null;
 
             // 第 0、1 级：序列化那两条。
@@ -259,7 +433,7 @@ namespace XInspector.Editor
                 }
 
                 serialized = member;
-                read = bindSerialized(member);
+                read = bindSerialized?.Invoke(member);
                 return true;
             }
 
@@ -272,18 +446,20 @@ namespace XInspector.Editor
 
             var targets = property?.Owner?.Targets;
             var container = SerializedMemberResolver.FindNestedScopeNode(property);
+            var requirement = MemberKindNames.ReflectionRequirement(kind);
 
             // 第 2 级：嵌套 / 元素容器上的反射成员与方法。找不到就**停在这里**——
             // 回落到根上找会「看错对象」（同层没有、根上恰好同名时尤其难查）。
             if (container != null)
             {
                 return ReflectedMemberResolver.TryResolveNested(
-                    container.Type, container.Path, targets, memberName, whenMissing, out read, out reason);
+                    container.Type, container.Path, targets, memberName, requirement, whenMissing,
+                    out read, out declaredType, out reason);
             }
 
             // 第 3 级：根目标上的反射成员与方法。
             return ReflectedMemberResolver.TryResolve(
-                targets, memberName, whenMissing, out read, out reason);
+                targets, memberName, requirement, whenMissing, out read, out declaredType, out reason);
         }
 
         #endregion
