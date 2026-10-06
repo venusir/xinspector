@@ -80,7 +80,12 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
   沿父链**跳过分组节点**——直接看 `Parent` 会踩错，分组装配之后父节点可能是个分组节点、
   `Type` 为 `null`）。**产出的是每帧现读的访问器，不是实例**：绑死的实例在父字段被重新赋值
   （`nested = new …`、Undo、预制体 revert）之后会**静默陈旧**；延迟回调（右键菜单还挂在屏幕上时
-  用户可以改字段）尤其要注意这一点。**值类型实例上的方法调用一律拒绝**（装箱后改的是副本）。
+  用户可以改字段）尤其要注意这一点。**值类型实例上的方法调用一律拒绝**（装箱后改的是副本），
+  判据与文案收在 `NestedInstanceScope.ValueTypeContainerReason` 一处。
+  **集合元素节点也是容器**（`Kind.Member`、路径 `items.Array.data[i]`）：容器路径里可以含
+  `Array.data[i]` 索引段（自 2026-10-06 起由 `ReflectedAccessor.TryCreatePath` 认——
+  判据落在**前置类型**上，取元素带 null 与越界守卫，**末段索引**取不到时给 `null`：
+  读值「—」、方法跳过该目标、条件算假）。
   新增任何「要拿实例」的节点种类时，都要走这条出口并配一条钉住作用域的用例。
 - **自己渲染子节点的绘制器，要认「子节点策略」。** 页签与水平分组通过 `PropertyState` 上的
   `GroupChildrenLayout` 决定「画哪几个子节点」，`[Searchable]` 用 `SearchScope` 决定

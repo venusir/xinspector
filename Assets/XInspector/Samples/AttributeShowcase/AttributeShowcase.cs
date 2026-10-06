@@ -784,8 +784,9 @@ namespace XInspector.Samples
         }
 
         /// <summary>
-        /// **元素里的特性第一次生效**：元素类型 <see cref="ElementShowcaseItem"/> 的成员上标着
-        /// 条件、分组与顺序——展开任意一行看看，它们和顶层字段一样工作。
+        /// **元素里的特性生效**：元素类型 <see cref="ElementShowcaseItem"/> 的成员上标着
+        /// 条件、分组、顺序、`[ShowInInspector]` 与 `[Button]`——展开任意一行看看，
+        /// 它们和顶层字段一样工作，而取值/调用的是**那一行的元素实例**。
         /// 元素类型没用到本包的集合照旧整份交给 Unity（见上面的原生对照）。
         /// </summary>
         [ListDrawerSettings(ShowIndexLabels = true)]
@@ -918,8 +919,8 @@ namespace XInspector.Samples
     }
 
     /// <summary>
-    /// 展示**元素里的特性**用的元素类型：条件、分组、顺序各来一样——
-    /// 它们全都跟着元素节点化第一次生效。
+    /// 展示**元素里的特性**用的元素类型：条件、分组、顺序、反射成员与按钮各来一样——
+    /// 它们全都跟着元素节点化与元素层的读路径生效。
     /// </summary>
     [Serializable]
     public class ElementShowcaseItem
@@ -938,6 +939,24 @@ namespace XInspector.Samples
         /// <summary>排到元素那一层的最前。</summary>
         [PropertyOrder(-1f)]
         public string name = "新队员";
+
+        /// <summary>
+        /// **元素里的反射成员**：Unity 不会序列化它，只有 <c>[ShowInInspector]</c> 看得到它。
+        /// 每帧现读——把上面的 `hp` 或 `level` 改一改，它立刻跟着变。
+        /// </summary>
+        [ShowInInspector]
+        public int Power => hp + level * 10;
+
+        /// <summary>
+        /// **元素里的按钮**：点的是**这一行**的元素实例上的方法——`hp` 变成 100。
+        /// 注意它改的是那一行，不是别的行（每行各是自己的实例）。
+        /// </summary>
+        [Button("元素按钮：满血")]
+        private void Heal()
+        {
+            hp = 100;
+            alive = true;
+        }
     }
 
     /// <summary>展示 <c>[TableList]</c> 用的行类型：一列定宽、一列弹性、一列不进表格。</summary>
