@@ -137,6 +137,15 @@ resolved string**（`MinMaxSlider` 的三个 getter、`ValueDropdown.valuesGette
 `FilePath.ParentFolder` 的 `$` 引用）。收窄的口径与条件族完全同款——只认序列化成员名，
 `$`/`@`/方法一律不做。不这么做就会得到「签名对了、主要用法用不了」的假象。
 
+> **2026-10-06 追记：这条边界松了一半，收窄到该收窄的地方。**
+> 「按名找成员」收成一层之后（Pipeline §二十三），认的是**成员**而不是「序列化成员」：
+> `[MinMaxSlider]` 的三个 getter 其中之一可以指向普通字段/属性或无参方法，
+> `[ToggleGroup]` 的开关同理。**仍不做 `$`/`@` 那套表达式语言**——那与「找到哪一个成员」
+> 是两件事，混在一起做出来的会是半个解析器。
+> 两处仍在的边界：`[ValueDropdown]` 的 `valuesGetter` 只认序列化数组（它要的是一个数组
+> 而不是一个值，消费侧还没有第二种形态）、`[FilePath]` 的 `ParentFolder` 插值不做
+> （那是路径拼接，不是成员引用）。
+
 ---
 
 ## 四、`[Button]` 与 `[OnValueChanged]` —— L5　✅ 已落地（2026-10-04，两批）
