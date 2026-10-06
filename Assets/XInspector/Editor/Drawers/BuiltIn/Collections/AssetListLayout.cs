@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -122,43 +123,143 @@ namespace XInspector.Editor
             var showRemove = attribute.HideRemoveButton == false;
             var count = array.arraySize;
 
+            // 拖放区 = 画出来的这些行（空列表时是那行提示）的并集；事件在行循环**之后**处理
+            // ——「记意图、趟末施加」。
+            var body = new Rect(0f, 0f, 0f, 0f);
+
             if (count == 0)
             {
                 // 留一行提示而不是留白——空白的归因成本比一句话高得多。
-                EditorGUILayout.LabelField(EmptyLabel, EditorStyles.miniLabel);
-                return removeIndex;
+                var hint = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+                EditorGUI.LabelField(hint, EmptyLabel, EditorStyles.miniLabel);
+                body = hint;
             }
-
-            for (var i = 0; i < count; i++)
+            else
             {
-                if (rows != null && !rows[i])
+                for (var i = 0; i < count; i++)
                 {
-                    continue;
-                }
-
-                var element = array.GetArrayElementAtIndex(i);
-                var row = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
-                var rects = Allocate(row, showRemove);
-
-                using (new EditorGUI.DisabledScope(disableContent))
-                {
-                    DrawThumbnail(rects.Thumbnail, element.objectReferenceValue, state.PreviewOf(i));
-                    EditorGUI.ObjectField(rects.Field, element, GUIContent.none);
-                }
-
-                if (showRemove)
-                {
-                    using (new EditorGUI.DisabledScope(!canResize))
+                    if (rows != null && !rows[i])
                     {
-                        if (GUI.Button(rects.Remove, "−", EditorStyles.miniButton))
+                        continue;
+                    }
+
+                    var element = array.GetArrayElementAtIndex(i);
+                    var row = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+                    var rects = Allocate(row, showRemove);
+
+                    using (new EditorGUI.DisabledScope(disableContent))
+                    {
+                        DrawThumbnail(rects.Thumbnail, element.objectReferenceValue, state.PreviewOf(i));
+                        EditorGUI.ObjectField(rects.Field, element, GUIContent.none);
+                    }
+
+                    if (showRemove)
+                    {
+                        using (new EditorGUI.DisabledScope(!canResize))
                         {
-                            removeIndex = i;
+                            if (GUI.Button(rects.Remove, "−", EditorStyles.miniButton))
+                            {
+                                removeIndex = i;
+                            }
                         }
                     }
+
+                    body = body.width <= 0f ? row : Union(body, row);
                 }
             }
 
+            HandleDrag(property, array, model, canResize, body);
+
             return removeIndex;
+        }
+
+        /// <summary>两块矩形的并集（逐行累积拖放区）。</summary>
+        /// <param name="left">已有区域。</param>
+        /// <param name="right">新行。</param>
+        /// <returns>并集。</returns>
+        private static Rect Union(Rect left, Rect right)
+        {
+            var xMin = Mathf.Min(left.xMin, right.xMin);
+            var yMin = Mathf.Min(left.yMin, right.yMin);
+            var xMax = Mathf.Max(left.xMax, right.xMax);
+            var yMax = Mathf.Max(left.yMax, right.yMax);
+
+            return new Rect(xMin, yMin, xMax - xMin, yMax - yMin);
+        }
+
+        /// <summary>
+        /// 处理落在列表身上的拖放：判定（<see cref="AssetListDrop"/>）→ 高亮 → 接受后施加。
+        /// </summary>
+        /// <param name="property">集合节点。</param>
+        /// <param name="array">集合的序列化属性。</param>
+        /// <param name="model">构建期模型。</param>
+        /// <param name="canResize">此刻允许增删吗。</param>
+        /// <param name="body">拖放区。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>只在这一处碰事件</b>（决策在 <see cref="AssetListDrop"/> 里，可无头测）。
+        /// </para>
+        /// <para>
+        /// <b>行内的对象字段优先。</b> 指针落在某一行的字段上时，Unity 的 <c>ObjectField</c>
+        /// 自己会处理拖放（原生替换那一行的值）——本包不跟它抢：事件被它用掉之后类型会变成
+        /// <see cref="EventType.Used"/>，上面那道「只认 DragUpdated / DragPerform」的判据
+        /// 天然让开，不会出现「替换 + 追加」的双重动作。
+        /// </para>
+        /// </remarks>
+        private static void HandleDrag(
+            InspectorProperty property,
+            SerializedProperty array,
+            AssetListModel model,
+            bool canResize,
+            Rect body)
+        {
+            var current = Event.current;
+
+            // 已被别人（行的对象字段等）用掉的事件类型会变成 EventType.Used，故这里天然让开。
+            if (current == null || body.width <= 0f ||
+                (current.type != EventType.DragUpdated && current.type != EventType.DragPerform) ||
+                !body.Contains(current.mousePosition))
+            {
+                return;
+            }
+
+            if (!canResize)
+            {
+                DragAndDrop.visualMode = DragAndDropVisualMode.Rejected;
+                current.Use();
+                return;
+            }
+
+            var state = property.State.GetOrCreate<AssetListState>();
+            var plan = AssetListDrop.Build(
+                DragAndDrop.objectReferences, model.ElementType, array, state.Accepted);
+
+            if (current.type == EventType.DragUpdated)
+            {
+                DragAndDrop.visualMode = plan.HasAny
+                    ? DragAndDropVisualMode.Copy
+                    : DragAndDropVisualMode.Rejected;
+                current.Use();
+                return;
+            }
+
+            // DragPerform：接受，并在**行循环之外**施加（列表因此长出新行——下一趟才画得出来）。
+            if (plan.HasAny)
+            {
+                DragAndDrop.AcceptDrag();
+                AssetListWrite.TryAppend(property, array, model.ElementType, state.Accepted);
+            }
+
+            if (plan.TotalRejected > 0)
+            {
+                // 拖放是**用户动作**（不是每帧），故直接报一条带计数的告警，不走 Once——
+                // 每次被拒都要说得出来路。
+                Debug.LogWarning(
+                    $"[XInspector] 拖到「{property.Path}」的资产里有 {plan.TotalRejected} 个被忽略：" +
+                    $"{AssetListDrop.DescribeRejections(plan)}。");
+            }
+
+            current.Use();
         }
 
         /// <summary>
@@ -326,6 +427,12 @@ namespace XInspector.Editor
         #endregion
 
         #region Public API
+
+        /// <summary>
+        /// 拖放的收受缓冲：每次判定前被 <see cref="AssetListDrop.Build"/> 清空、随后复用
+        /// ——事件路径上不产生垃圾。
+        /// </summary>
+        public readonly List<Object> Accepted = new List<Object>();
 
         /// <summary>
         /// 取第 <paramref name="index"/> 行的缩略图缓存。
