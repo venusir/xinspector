@@ -557,6 +557,100 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 元素层：行掩码管辖的那一段
+
+        /// <summary>
+        /// 元素里的**分组节点**在搜索生效时照常画。
+        /// </summary>
+        /// <remarks>
+        /// 元素的行是容器挑的，元素子树因此不进节点命中集；而元素里的分组节点会自己去问
+        /// <see cref="SearchScope.ShouldDraw"/>。不特判的话它恒是 <c>Hidden</c>——
+        /// 症状是**分组框画出来、里面一个字段都没有**（静默，且没有任何既有用例覆盖）。
+        /// </remarks>
+        [Test]
+        public void 元素里的分组在搜索生效时照常画()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "rows");
+                    var element = Find(host, "rows.Array.data[0]");
+                    var group = Find(element, "rows.Array.data[0]/元素里的分组");
+
+                    var state = StateOf(host, "哥布");
+                    state.EnsureNodes(host);
+
+                    // 控制项：元素子树确实不在命中集里——这是既有的、刻意保留的契约。
+                    Assert.That(state.VisibilityOf(element), Is.EqualTo(SearchVisibility.Hidden));
+
+                    var scope = SearchScope.Find(group);
+                    Assert.That(scope.IsActive, Is.True, "上游的 [Searchable] 该被找到。");
+                    Assert.That(scope.ShouldDraw(group), Is.True, "归行掩码管的那一段不参与节点级过滤。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>元素里的**复合成员**在搜索生效时照常画（同一条根因，第二个受害者）。</summary>
+        /// <remarks>它比分组多一个症状：除了内容全空，还会多画一句「没有匹配的项。」。</remarks>
+        [Test]
+        public void 元素里的复合成员在搜索生效时照常画()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "rows");
+                    var element = Find(host, "rows.Array.data[0]");
+                    var nested = Find(element, "rows.Array.data[0].stats");
+
+                    StateOf(host, "哥布").EnsureNodes(host);
+
+                    var scope = SearchScope.Find(nested);
+                    Assert.That(scope.ShouldDraw(nested), Is.True);
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 对照组：**不在元素里**的节点照旧按命中集筛——特判只放行行掩码管辖的那一段，
+        /// 不是把整个搜索放水。
+        /// </summary>
+        [Test]
+        public void 不在元素里的节点照旧按命中集筛()
+        {
+            var target = ScriptableObject.CreateInstance<SearchableElementFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var host = Find(tree.Root, "plain");
+                    var title = Find(host, "plain.title");
+
+                    StateOf(host, "哥布").EnsureNodes(host);
+
+                    var scope = SearchScope.Find(title);
+                    Assert.That(scope.ShouldDraw(title), Is.False, "没命中就该被筛掉。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>构建被测的树。</summary>
@@ -725,6 +819,44 @@ namespace XInspector.Tests.Editor
         /// <summary>复合成员：子节点里带分组。</summary>
         [Searchable]
         public SearchStats stats = new SearchStats();
+    }
+
+    /// <summary>
+    /// 元素类型：带分组与复合成员——搜索生效时元素里的容器末端必须照常画。
+    /// </summary>
+    [Serializable]
+    internal sealed class SearchElementRow
+    {
+        /// <summary>分组里的成员（元素里的分组节点靠它出现）。</summary>
+        [BoxGroup("元素里的分组")]
+        public int level = 1;
+
+        /// <summary>分组里的第二个成员——分组有两个孩子才像个分组。</summary>
+        [BoxGroup("元素里的分组")]
+        public string title = "史莱姆";
+
+        /// <summary>复合成员（元素里的折叠头）。</summary>
+        public SearchStats stats = new SearchStats();
+
+        /// <summary>没分组也没复合的普通成员——行值匹配的老路。</summary>
+        public string tag = "普通";
+    }
+
+    /// <summary>元素层 + 搜索的对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class SearchableElementFixture : ScriptableObject
+    {
+        /// <summary>元素里带分组与复合成员——宿主搜索生效时它们必须照常画。</summary>
+        [Searchable]
+        public List<SearchElementRow> rows = new List<SearchElementRow>
+        {
+            new SearchElementRow(),
+            new SearchElementRow { tag = "哥布林" },
+        };
+
+        /// <summary>对照组：**不在元素里**的复合成员，子节点照旧按命中集筛。</summary>
+        [Searchable]
+        public SearchStats plain = new SearchStats();
     }
 
     /// <summary>同一搜索宿主下两个**同尺寸**的列表——掩码缓存必须按宿主分家。</summary>

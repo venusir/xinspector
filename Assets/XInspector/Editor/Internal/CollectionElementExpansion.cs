@@ -220,6 +220,43 @@ namespace XInspector.Editor
             return node?.Parent != null && node.Parent.State.Get<CollectionElementLayerState>() != null;
         }
 
+        /// <summary>
+        /// 从 <paramref name="node"/> 沿父链上溯、在**遇到 <paramref name="stopBefore"/> 之前**，
+        /// 有没有遇到元素节点——也就是这一段是不是由容器的**行掩码**负责的。
+        /// </summary>
+        /// <param name="node">起点节点。</param>
+        /// <param name="stopBefore">上溯到此节点为止（不含）；传 <c>null</c> 表示走到根。</param>
+        /// <returns>由行掩码负责返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>它是「元素子树不进节点级命中集」那条规则的配套。</b> 元素的行由容器的行掩码挑，
+        /// 节点级再筛一次只会把「整行命中」的元素拆碎——症状是元素里的分组框、复合成员的折叠头
+        /// **框在、内容一个不剩**。所以问「这个节点该不该画」时，属于行掩码管辖的那一段一律放行。
+        /// </para>
+        /// <para>
+        /// <b>判据为什么不是「在不在元素子树里」。</b> 元素里可以再放一个 <c>[Searchable]</c> 宿主，
+        /// 那是它**直接管辖**的一层——它的子节点在命中集里，无脑放行会让内层搜索整个失效。
+        /// 上溯时一旦先撞到 <paramref name="stopBefore"/>（＝最近的那个生效中的搜索宿主），
+        /// 就说明这一段归**节点级**管，返回 <c>false</c>。
+        /// </para>
+        /// <para>
+        /// <b>起点节点自己也判</b>：传进来的若正是元素节点，它这一行本来就归行掩码管，
+        /// 答 <c>true</c> 是对的。（元素节点不走自己的链，正常情况下问不到它头上。）
+        /// </para>
+        /// </remarks>
+        public static bool IsRowMaskCovered(InspectorProperty node, InspectorProperty stopBefore)
+        {
+            for (var current = node; current != null && current != stopBefore; current = current.Parent)
+            {
+                if (IsElementNode(current))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>取元素类型；不是数组 / <c>List&lt;T&gt;</c> 时返回 <c>null</c>。</summary>
         /// <param name="collection">集合节点。</param>
         /// <returns>元素类型。</returns>

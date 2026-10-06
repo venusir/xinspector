@@ -498,9 +498,23 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="node">子节点。</param>
         /// <returns>该画返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>由行掩码负责的那一段一律放行。</b> 元素的行是容器挑的（见
+        /// <see cref="SearchFilterState.Collect"/> 对元素子树的跳过），节点级在这里再筛一次
+        /// 只会把「整行命中」的元素拆碎——症状是元素里的分组框与复合成员的折叠头**框在、
+        /// 内容一个不剩**（还会多一句「没有匹配的项」）。
+        /// 判据不是「在不在元素子树里」而是「上溯到宿主之前有没有元素节点」，理由见
+        /// <see cref="CollectionElementExpansion.IsRowMaskCovered"/>——元素里另挂一个
+        /// <c>[Searchable]</c> 时，它直接管辖的那一层仍要走命中集。
+        /// </remarks>
         public bool ShouldDraw(InspectorProperty node)
         {
             if (_state == null)
+            {
+                return true;
+            }
+
+            if (CollectionElementExpansion.IsRowMaskCovered(node, _host))
             {
                 return true;
             }
