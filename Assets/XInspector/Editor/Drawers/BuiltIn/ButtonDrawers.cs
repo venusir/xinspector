@@ -300,6 +300,7 @@ namespace XInspector.Editor
             MethodInvoker.Invoke(
                 state.Methods,
                 tree?.Targets,
+                state.Scopes,
                 state.Arguments,
                 tree?.UndoEnabled ?? false,
                 property.Label.text);

@@ -22,6 +22,10 @@ namespace XInspector.Editor
         /// <param name="property">挂着该特性的属性。</param>
         /// <param name="methodName">方法名。</param>
         /// <param name="usage">用于告警文案的用法名，如 <c>[InlineButton]</c>。</param>
+        /// <param name="scopes">
+        /// 逐目标的嵌套实例来源；顶层为 <c>null</c>。嵌套层的方法在**实例的类型**上找，
+        /// 调用时也在那个实例上（见 <see cref="NestedInstanceScope"/>）。
+        /// </param>
         /// <param name="reason">失败原因；全部目标都解析成功时为 <c>null</c>。</param>
         /// <returns>逐目标的方法表；一个都解析不到时返回 <c>null</c>。</returns>
         /// <remarks>

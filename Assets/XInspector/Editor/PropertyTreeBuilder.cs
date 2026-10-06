@@ -336,8 +336,11 @@ namespace XInspector.Editor
             }
 
             // 嵌套层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀。
-            // 排在序列化子节点之后——与顶层的三段顺序（序列化 → 反射 → 方法）一致。
+            // 嵌套层里的方法节点同理。两段都排在序列化子节点之后——与顶层的三段顺序
+            // （序列化 → 反射 → 方法）一致；也都排在下面的排序之前，嵌套层的
+            // [PropertyOrder] 因此同样能排到按钮。
             AppendNestedReflectedMembers(serializedObject, parent);
+            AppendNestedMethodMembers(parent);
 
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只是对一层成员调同一个稳定排序）。
@@ -656,7 +659,8 @@ namespace XInspector.Editor
         /// <summary>
         /// 收集带 <c>[Button]</c> 一类的**方法**，为它们建方法节点。
         /// </summary>
-        /// <param name="targetType">目标对象的运行时类型。</param>
+        /// <param name="targetType">在哪个类型上收（顶层是目标类型，嵌套层是复合字段的声明类型）。</param>
+        /// <param name="pathPrefix">路径前缀（以 <c>.</c> 结尾）；顶层为空。</param>
         /// <returns>方法节点列表，尚未挂到任何父节点上。</returns>
         /// <remarks>
         /// <para>
@@ -672,7 +676,7 @@ namespace XInspector.Editor
         /// 按钮名就是方法名，两个同名按钮谁也分不清谁，故保留第一个并告警。
         /// </para>
         /// </remarks>
-        private static List<InspectorProperty> CollectMethodMembers(Type targetType)
+        private static List<InspectorProperty> CollectMethodMembers(Type targetType, string pathPrefix = null)
         {
             const BindingFlags Flags =
                 BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
@@ -708,7 +712,7 @@ namespace XInspector.Editor
                         continue;
                     }
 
-                    level.Add(CreateMethodMember(method));
+                    level.Add(CreateMethodMember(method, pathPrefix));
                 }
 
                 perLevel.Add(level);
@@ -741,17 +745,24 @@ namespace XInspector.Editor
         /// 为一个方法建立节点。
         /// </summary>
         /// <param name="method">方法。</param>
+        /// <param name="pathPrefix">路径前缀（以 <c>.</c> 结尾）；顶层为空。</param>
         /// <returns>建好的方法节点，尚未挂到父节点上。</returns>
         /// <remarks>
         /// <b>路径是「方法名 + <c>()</c>」。</b> 路径树内唯一是节点的身份契约，而方法名与字段名
         /// 可以跨继承重名（基类字段 <c>Foo</c> + 派生类方法 <c>Foo()</c>），加了后缀就不可能相撞
         /// ——C# 标识符里不允许出现圆括号。
         /// </remarks>
-        private static InspectorProperty CreateMethodMember(MethodInfo method)
+        private static InspectorProperty CreateMethodMember(MethodInfo method, string pathPrefix = null)
         {
+            // 嵌套层的路径带父前缀（`stats.Heal()`）——与嵌套反射成员同款，是**合成路径**。
+            // 前缀以 `.` 结尾，故顶层传 null 时与从前逐字相同。
+            var path = string.IsNullOrEmpty(pathPrefix)
+                ? method.Name + MethodPathSuffix
+                : pathPrefix + method.Name + MethodPathSuffix;
+
             return new InspectorProperty(
                 method.Name,
-                method.Name + MethodPathSuffix,
+                path,
                 method.ReturnType,
                 InspectorPropertyKind.Method,
                 new PropertyAttributes(CollectMemberAttributes(method)))
@@ -1085,6 +1096,30 @@ namespace XInspector.Editor
 
             var members = CollectReflectedMembers(
                 targets, parent.Type, parent.RawChildren, scopes, parent.Path + ".");
+
+            for (var i = 0; i < members.Count; i++)
+            {
+                parent.AddChild(members[i]);
+            }
+        }
+
+        /// <summary>
+        /// 把嵌套类型里会生成方法节点的那些方法收进**复合父节点**之下。
+        /// </summary>
+        /// <param name="parent">复合成员节点。</param>
+        /// <remarks>
+        /// 与顶层同一条判据（<see cref="MemberNodeCriteria.CreatesMethodNode"/>）、同一套去重规则，
+        /// 只是作用在字段的声明类型上、路径带父前缀。调用目标由处理器在构建期解析、
+        /// 绘制期现读嵌套实例——那一段在 <see cref="NestedInstanceScope"/>。
+        /// </remarks>
+        private static void AppendNestedMethodMembers(InspectorProperty parent)
+        {
+            if (parent.Type == null)
+            {
+                return;
+            }
+
+            var members = CollectMethodMembers(parent.Type, parent.Path + ".");
 
             for (var i = 0; i < members.Count; i++)
             {

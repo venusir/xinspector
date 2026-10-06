@@ -97,6 +97,7 @@ namespace XInspector.Editor
         /// <summary>点击：对每个目标调用各自解析出来的那份方法。</summary>
         /// <param name="property">目标属性。</param>
         /// <param name="methods">逐目标解析出的方法。</param>
+        /// <param name="scopes">逐目标的嵌套实例来源；顶层为 <c>null</c>。</param>
         /// <param name="undoLabel">撤销栈里显示的这一步的名字。</param>
         private static void Click(
             InspectorProperty property, MethodInfo[] methods, ReflectedAccessor[] scopes, string undoLabel)

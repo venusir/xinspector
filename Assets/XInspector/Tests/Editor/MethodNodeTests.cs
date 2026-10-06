@@ -322,6 +322,82 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 嵌套层
+
+        /// <summary>嵌套层里的方法节点挂在复合成员之下，路径带父前缀。</summary>
+        [Test]
+        public void 嵌套层的方法节点挂在复合成员之下()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMethodFixture>();
+            try
+            {
+                using (var tree = Build(target))
+                {
+                    var node = Find(tree, "nested.Run()");
+
+                    Assert.That(node, Is.Not.Null, "嵌套层的方法节点应当存在。");
+                    Assert.That(node.Kind, Is.EqualTo(InspectorPropertyKind.Method));
+                    Assert.That(node.Parent.Path, Is.EqualTo("nested"));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 嵌套按钮解析的是**同一个嵌套实例**的方法，不是根对象上签名相同的那个。
+        /// </summary>
+        /// <remarks>夹具在根上放了一个同名方法——两个方法名一样，只有声明类型能分开它们。</remarks>
+        [Test]
+        public void 嵌套按钮解析到嵌套实例()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMethodFixture>();
+            try
+            {
+                using (var tree = Build(target))
+                {
+                    var state = Find(tree, "nested.Run()").State.Get<ButtonState>();
+
+                    Assert.That(state.Reason, Is.Null, state.Reason);
+                    Assert.That(
+                        state.Methods[0].DeclaringType,
+                        Is.EqualTo(typeof(NestedMethodSource)),
+                        "根上有一个同名方法，解析到它就会静默调错对象。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **只放一个按钮方法**的嵌套类型也会展开——它一个可序列化字段都没有。
+        /// </summary>
+        /// <remarks>
+        /// 方法那一条腿若不加进展开判据，这类类型连门都进不了，按钮永远不出现——且**没有告警**。
+        /// </remarks>
+        [Test]
+        public void 只放按钮方法的嵌套类型也会展开()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMethodFixture>();
+            try
+            {
+                using (var tree = Build(target))
+                {
+                    Assert.That(Find(tree, "onlyActions.Ping()"), Is.Not.Null);
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>建一棵树。</summary>
@@ -352,11 +428,26 @@ namespace XInspector.Tests.Editor
         /// <returns>找到的节点；不存在时返回 <c>null</c>。</returns>
         private static InspectorProperty Find(PropertyTree tree, string path)
         {
-            foreach (var child in tree.Root.Children)
+            return Search(tree.Root, path);
+        }
+
+        /// <summary>递归搜索——嵌套层的方法节点路径形如 <c>nested.Run()</c>。</summary>
+        /// <param name="node">当前节点。</param>
+        /// <param name="path">目标路径。</param>
+        /// <returns>节点；不存在返回 <c>null</c>。</returns>
+        private static InspectorProperty Search(InspectorProperty node, string path)
+        {
+            foreach (var child in node.Children)
             {
                 if (child.Path == path)
                 {
                     return child;
+                }
+
+                var found = Search(child, path);
+                if (found != null)
+                {
+                    return found;
                 }
             }
 
@@ -510,4 +601,45 @@ namespace XInspector.Tests.Editor
         }
     }
 
+    /// <summary>嵌套层方法节点的对照资产：根与嵌套层各有一个**同名**方法。</summary>
+    [HideMonoScript]
+    internal sealed class NestedMethodFixture : ScriptableObject
+    {
+        /// <summary>陷阱：根上的同名方法。</summary>
+        [Button]
+        public void Run()
+        {
+        }
+
+        /// <summary>嵌套层。</summary>
+        public NestedMethodSource nested = new NestedMethodSource();
+
+        /// <summary>只放按钮方法的嵌套层——一个可序列化字段都没有。</summary>
+        public NestedActionOnly onlyActions = new NestedActionOnly();
+    }
+
+    /// <summary>嵌套层里带按钮的类型。</summary>
+    [Serializable]
+    internal class NestedMethodSource
+    {
+        /// <summary>普通字段。</summary>
+        public int value;
+
+        /// <summary>真正该被调用的那个。</summary>
+        [Button]
+        public void Run()
+        {
+        }
+    }
+
+    /// <summary>只有按钮方法、没有任何序列化字段的嵌套类型。</summary>
+    [Serializable]
+    internal class NestedActionOnly
+    {
+        /// <summary>唯一的成员。</summary>
+        [Button]
+        public void Ping()
+        {
+        }
+    }
 }

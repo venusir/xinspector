@@ -35,6 +35,12 @@ namespace XInspector.Editor
         /// <summary>参数区是否展开。默认收起，与 Odin 带参按钮的默认形态一致。</summary>
         public bool Expanded;
 
+        /// <summary>
+        /// 逐目标的嵌套实例来源；顶层为 <c>null</c>。
+        /// </summary>
+        /// <remarks>调用时**现读**实例——绑死的实例在父字段被重新赋值之后会静默陈旧。</remarks>
+        public ReflectedAccessor[] Scopes;
+
         #endregion
     }
 
@@ -112,14 +118,31 @@ namespace XInspector.Editor
                 return;
             }
 
+            // 嵌套层：方法要在**同一个嵌套实例**的类型上按签名找，调用时也要在那个实例上——
+            // 在根对象上找会拿到根上签名相同的那一个（比「找不到」难查得多）。
+            var container = NestedInstanceScope.ContainerOf(property);
+
+            if (container?.Type != null && container.Type.IsValueType)
+            {
+                // 值类型在链上会装箱，调用改的是副本——改动**静默丢弃**。
+                state.Reason = $"「{container.Type.Name}」是值类型（struct）：方法调用改的是装箱副本，"
+                               + "改动会丢，因此不在它上面调用方法。";
+                return;
+            }
+
+            state.Scopes = container == null ? null : NestedInstanceScope.Compile(targets, container.Path);
+
             state.Methods = new MethodInfo[targets.Length];
             var missing = 0;
 
             for (var i = 0; i < targets.Length; i++)
             {
-                state.Methods[i] = TargetObjects.IsAlive(targets[i])
-                    ? MethodResolver.BySignature(targets[i].GetType(), discovery)
-                    : null;
+                // 嵌套层按**实例的类型**找；某个目标算不出实例类型就算它找不到。
+                var type = state.Scopes == null
+                    ? (TargetObjects.IsAlive(targets[i]) ? targets[i].GetType() : null)
+                    : (i < state.Scopes.Length ? state.Scopes[i]?.ValueType : null);
+
+                state.Methods[i] = type == null ? null : MethodResolver.BySignature(type, discovery);
 
                 if (state.Methods[i] == null)
                 {

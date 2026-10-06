@@ -182,9 +182,11 @@ namespace XInspector.Editor
         /// <remarks>
         /// <para>
         /// 展开判据的两条腿：序列化那一半由调用方沿 <c>SerializedProperty</c> 迭代器扫，
-        /// 这里管的是迭代器**看不见**的那一半——<c>[ShowInInspector]</c> 的字段与属性。
-        /// 只看序列化那一半的话，「只放了一个 <c>[ShowInInspector]</c> 属性」的嵌套类型
-        /// 永远不会展开，那个特性永远没机会生效——而这是**没有告警**的。
+        /// 这里管的是迭代器**看不见**的那一半——<c>[ShowInInspector]</c> 的字段与属性、
+        /// 以及会生成**方法节点**的方法。
+        /// 只看序列化那一半的话，「只放了一个 <c>[ShowInInspector]</c> 属性」或
+        /// 「只放了一个 <c>[Button]</c> 方法」的嵌套类型永远不会展开，
+        /// 那些特性永远没机会生效——而这是**没有告警**的。
         /// </para>
         /// <para>
         /// 序列化字段跳过：它们由迭代器那条腿扫，两边都算会让判据的语义含混。
@@ -192,8 +194,12 @@ namespace XInspector.Editor
         /// </remarks>
         public static bool HasNonSerializedNodeMember(Type type)
         {
+            // 含 Static：收集通道（CollectMethodMembers）与自动接管判据都收静态成员，
+            // 这里漏掉就会造出「只放静态按钮的嵌套类型」判据与收集不一致——判据看不见的展开，
+            // 症状同样是零告警。
             const BindingFlags Flags =
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.DeclaredOnly;
 
             for (var current = type; current != null && current != typeof(object); current = current.BaseType)
             {
@@ -210,6 +216,14 @@ namespace XInspector.Editor
                     // 索引器没有「一个目标对应一个值」的语义，收集通道也不收它。
                     if (property.GetIndexParameters().Length == 0 &&
                         MemberNodeCriteria.CarriesShowInInspector(property))
+                    {
+                        return true;
+                    }
+                }
+
+                foreach (var method in current.GetMethods(Flags))
+                {
+                    if (MemberNodeCriteria.CreatesMethodNode(method))
                     {
                         return true;
                     }
