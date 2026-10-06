@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -229,84 +228,6 @@ namespace XInspector.Editor
             DrawerWarnings.Once(collection, nameof(CollectionElementExpansion) + "." + decision,
                 $"[XInspector] 属性「{collection.Path}」的元素类型「{name}」用到了本包，" +
                 $"但元素里的特性不会生效：{tail}。");
-        }
-
-        /// <summary>
-        /// 元素类型（含深层）里有没有**用不了**的用法；有则返回一句人话，没有返回 <c>null</c>。
-        /// </summary>
-        /// <param name="elementType">元素类型。</param>
-        /// <returns>边界的人话描述；没有返回 <c>null</c>。</returns>
-        /// <remarks>
-        /// <para>
-        /// 只在**会建元素层的集合**上跑一遍（构建期、深度受
-        /// <see cref="NestedMemberExpansion.MaxDepth"/> 约束），报在**集合**节点上——
-        /// 按元素报会把十个元素的同一件事刷十遍。
-        /// </para>
-        /// <para>
-        /// 另一类边界（元素里的集合）由构建期的树遍历顺带报：那些集合自己在树上，
-        /// 走到它们时判据给出 <see cref="ElementLayerDecision.Nested"/>。
-        /// </para>
-        /// </remarks>
-        public static string FindUnsupportedInElement(Type elementType)
-        {
-            return Scan(elementType, new HashSet<Type>(), 0);
-        }
-
-        #endregion
-
-        #region Private Helpers
-
-        /// <summary>递归扫描：类型上的**类级**分组特性（只有它仍不生效）。</summary>
-        /// <param name="type">类型。</param>
-        /// <param name="visited">已访问的类型（挡环形引用）。</param>
-        /// <param name="depth">当前深度。</param>
-        /// <returns>边界的人话描述；没有返回 <c>null</c>。</returns>
-        private static string Scan(Type type, HashSet<Type> visited, int depth)
-        {
-            if (type == null || depth > NestedMemberExpansion.MaxDepth || !visited.Add(type))
-            {
-                return null;
-            }
-
-            foreach (var attribute in type.GetCustomAttributes(true))
-            {
-                if (attribute is PropertyGroupAttribute group)
-                {
-                    return $"类级分组特性（[{group.GetType().Name}(\"{group.GroupID}\")]）" +
-                           "只在被检视的最外层类型上收集";
-                }
-            }
-
-            const BindingFlags Flags =
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-
-            for (var current = type; current != null && current != typeof(object); current = current.BaseType)
-            {
-                foreach (var field in current.GetFields(Flags))
-                {
-                    if (!NestedMemberExpansion.IsSerializableField(field) || IsOpaque(field.FieldType))
-                    {
-                        continue;
-                    }
-
-                    var found = Scan(field.FieldType, visited, depth + 1);
-                    if (found != null)
-                    {
-                        return found;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>这个类型不用再往里扫：标量与引用类型（对象引用不是内联序列化的）。</summary>
-        /// <param name="type">类型。</param>
-        /// <returns>不用扫返回 <c>true</c>。</returns>
-        private static bool IsOpaque(Type type)
-        {
-            return type == null || type.IsPrimitive || type.IsEnum || type == typeof(string) ||
-                   typeof(UnityEngine.Object).IsAssignableFrom(type);
         }
 
         #endregion

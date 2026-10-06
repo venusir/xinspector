@@ -361,15 +361,6 @@ namespace XInspector.Editor
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只对一层成员调同一个稳定排序）。
             SortMembersByPropertyOrder(parent.RawChildren);
-
-            // 成员级的分组特性此刻就生效（装配在建树末尾统一做，见 ApplyGrouping）——
-            // 这里只管**类级**那条仍然失效的路径，别让它静默。**元素子树除外**：元素类型上的
-            // 类级分组由集合级扫描报一次（CollectionElementExpansion.FindUnsupportedInElement），
-            // 在这里报会按元素刷屏。
-            if (!CollectionElementExpansion.HasElementLayerAncestor(parent))
-            {
-                NestedMemberExpansion.WarnAboutInertTypeGroups(parent);
-            }
         }
 
         #endregion
@@ -444,18 +435,6 @@ namespace XInspector.Editor
             // 与构建顺序契约同款：在挂链之前（注入的特性会改变链的构成）、在分组装配之前
             // （注入的分组特性要被装配看见）。父 / 根钩子不重跑——它们对集合节点自己已经跑过。
             RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, collection);
-
-            // 用到了本包、却**用不了**的那些用法（现在只剩「类型上的类级分组」一类），报一次——
-            // 报在集合上：按元素报会把同一件事刷十遍。另一类（元素里的集合）由构建期的
-            // 树遍历顺带报，它们自己在树上。
-            var unsupported = CollectionElementExpansion.FindUnsupportedInElement(
-                CollectionElementExpansion.ElementTypeOf(collection));
-            if (unsupported != null)
-            {
-                DrawerWarnings.Once(collection, nameof(CreateElementLayer) + ".元素里的边界",
-                    $"[XInspector] 属性「{collection.Path}」的元素类型里有一处用不了的用法：" +
-                    $"{unsupported}。它不会生效——这是本包划的边界（见包 README 的已知限制）。");
-            }
 
             // 登记进对账名单：此后每趟绘制之前 CollectionElementSync 都会看它一眼。
             tree.ElementCollections.Add(collection);

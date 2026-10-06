@@ -199,12 +199,39 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 控制项：嵌套类型上只挂**类级**特性、内部一个成员特性都没有时不算——它不触发展开。
+        /// 控制项：嵌套类型上只挂**类级非分组**特性、内部一个成员特性都没有时不算——它不触发展开。
         /// </summary>
         [Test]
-        public void IsUsedBy_嵌套类型只有类级特性不算()
+        public void IsUsedBy_嵌套类型只有类级非分组特性不算()
         {
             Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NestedTypeLevelOnlyUsageFixture)), Is.False);
+        }
+
+        /// <summary>
+        /// **嵌套类型上只挂类级分组**的类型必须被判为「用到了本插件」。
+        /// <para>
+        /// 类级分组自 2026-10-06 起会真的分发（<c>ClassLevelGroupProcessor</c>）——判据看不见它，
+        /// 类型就不被接管、分组**静默失效**。判据经 <c>HasSupportedField</c> 的自检腿到达，
+        /// 与注入同源。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void IsUsedBy_嵌套类型上的类级分组为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(ClassLevelGroupNestedUsageFixture)),
+                Is.True,
+                "判据要看得见嵌套类型自己的类级分组。");
+        }
+
+        /// <summary>深层嵌套里的类级分组同样为真——钉住两条递归判据的类级腿。</summary>
+        [Test]
+        public void IsUsedBy_深层嵌套里的类级分组为真()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(DeepClassLevelGroupUsageFixture)),
+                Is.True,
+                "外层类型的字段里嵌着一个带类级分组的类型，也要判为用到了本包。");
         }
 
         /// <summary>
@@ -255,6 +282,18 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 控制项：**元素类型只带类级分组、但集合自己没被接管**时为假——安全阀镜像的另一半，
+        /// 与上面那条逐字同款（接管凭的是字段自己的特性，判据因此不该沿字段类型解包集合）。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_没被接管的集合其元素类型只有类级分组不算()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(UnmanagedClassLevelGroupElementFixture)),
+                Is.False);
+        }
+
+        /// <summary>
         /// 只挂 <c>[Searchable]</c> 的类型为真——它**没有自己的绘制器**（搜索框由宿主绘制器顺带画），
         /// 全靠处理器那一半被认出来。处理器写错了基类，这条就红。
         /// </summary>
@@ -288,9 +327,9 @@ namespace XInspector.Tests.Editor
             Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(NativeNestedUsageFixture)), Is.False);
         }
 
-        /// <summary>控制项：嵌套类型上的**类级**特性不算（那本轮不生效，也不触发展开）。</summary>
+        /// <summary>控制项：嵌套类型上的**类级非分组**特性不算（那仍只在被检视类型上生效，也不触发展开）。</summary>
         [Test]
-        public void IsUsedBy_嵌套类型上的类级特性不算()
+        public void IsUsedBy_嵌套类型上的类级非分组特性不算()
         {
             Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(ClassLevelNestedUsageFixture)), Is.False);
         }
@@ -480,11 +519,25 @@ namespace XInspector.Tests.Editor
         public InspectedOnlyNested value = new InspectedOnlyNested();
     }
 
-    /// <summary>嵌套类型上挂着**类级** <c>[Title]</c>——类级特性只在被检视类型上生效。</summary>
+    /// <summary>嵌套类型上挂着**类级非分组** <c>[Title]</c>——它只在被检视类型上生效。</summary>
     internal sealed class NestedTypeLevelOnlyUsageFixture : ScriptableObject
     {
         /// <summary>嵌套类型上有类级特性，且它内部一个成员特性都没有。</summary>
         public TitledNestedType value;
+    }
+
+    /// <summary>嵌套类型上挂着**类级分组**——它自 2026-10-06 起真的会分发到成员。</summary>
+    internal sealed class ClassLevelGroupNestedUsageFixture : ScriptableObject
+    {
+        /// <summary>字段类型带类级分组，且它内部一个成员特性都没有。</summary>
+        public BoxedNestedType value;
+    }
+
+    /// <summary>外层类型里嵌着一个带类级分组的类型——判据要递归看见它。</summary>
+    internal sealed class DeepClassLevelGroupUsageFixture : ScriptableObject
+    {
+        /// <summary>中间层：自己没有特性，但它的字段类型带着类级分组。</summary>
+        public MiddleWithoutAttrs middle;
     }
 
     /// <summary>只放一个非序列化反射成员的嵌套类型。</summary>
@@ -549,11 +602,35 @@ namespace XInspector.Tests.Editor
         public NativeOnlyNested nested;
     }
 
-    /// <summary>嵌套类型上有类级特性的资产（控制项）。</summary>
+    /// <summary>嵌套类型上有类级**非分组**特性的资产（控制项）。</summary>
     internal sealed class ClassLevelNestedUsageFixture : ScriptableObject
     {
-        /// <summary>类级 <c>[Title]</c>——嵌套层的类级特性本轮不生效。</summary>
+        /// <summary>类级 <c>[Title]</c>——嵌套层的类级非分组特性仍不生效。</summary>
         public ClassLevelNested nested;
+    }
+
+    /// <summary>挂着类级 <c>[BoxGroup]</c> 的嵌套类型（分发到它的每个成员）。</summary>
+    [Serializable]
+    [BoxGroup("嵌套类级组")]
+    internal sealed class BoxedNestedType
+    {
+        /// <summary>普通字段——分组靠类型上那份分发下来。</summary>
+        public int a = 1;
+    }
+
+    /// <summary>中间层类型——自己没有特性，只有字段的声明类型带类级分组。</summary>
+    [Serializable]
+    internal sealed class MiddleWithoutAttrs
+    {
+        /// <summary>字段的声明类型带类级分组。</summary>
+        public BoxedNestedType inner;
+    }
+
+    /// <summary>集合未被本包接管、元素类型只带类级分组（判据不该沿字段类型解包集合）。</summary>
+    internal sealed class UnmanagedClassLevelGroupElementFixture : ScriptableObject
+    {
+        /// <summary>没有 <c>[ListDrawerSettings]</c> 一类 → 不建元素层。</summary>
+        public List<BoxedNestedType> items = new List<BoxedNestedType> { new BoxedNestedType() };
     }
 
     /// <summary>挂着 <c>[Title]</c> 的嵌套类型（标题只对被检视类型生效）。</summary>

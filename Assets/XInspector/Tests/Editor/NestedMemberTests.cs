@@ -76,9 +76,12 @@ namespace XInspector.Tests.Editor
             }
         }
 
-        /// <summary>判据只看**成员级**特性：嵌套类型上的类级特性不触发展开（它本轮不生效）。</summary>
+        /// <summary>
+        /// 判据只看**成员级**特性与两条类级通道（<c>[InlineProperty]</c>、分组族）：
+        /// 嵌套类型上的类级**非分组**特性不触发展开（它仍只在被检视类型上生效）。
+        /// </summary>
         [Test]
-        public void 类级特性不触发嵌套展开()
+        public void 非分组族的类级特性不触发嵌套展开()
         {
             var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
             try
@@ -416,7 +419,7 @@ namespace XInspector.Tests.Editor
         public float ratio;
     }
 
-    /// <summary>类级特性标在类型上的嵌套类型——同样不该触发（判据只看成员级特性）。</summary>
+    /// <summary>类级**非分组**特性标在类型上的嵌套类型——同样不该触发（判据只看成员级与两条类级通道）。</summary>
     [Serializable]
     [Title("嵌套层的类级特性不生效")]
     internal class ClassLevelNested
@@ -438,7 +441,7 @@ namespace XInspector.Tests.Editor
         /// <summary>只带原生装饰器 → 不展开。</summary>
         public NativeOnlyNested native;
 
-        /// <summary>类级特性不算 → 不展开。</summary>
+        /// <summary>类级**非分组**特性不算 → 不展开。</summary>
         public ClassLevelNested classLevel;
 
         /// <summary>数组不展开。</summary>

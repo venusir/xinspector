@@ -22,9 +22,11 @@ namespace XInspector.Editor
     /// 也不展开——那是 L7 那条产品线。
     /// </para>
     /// <para>
-    /// <b>成员级的分组特性自 2026-10-06 起生效</b>（构建期装配出分组节点，见
-    /// <c>PropertyTreeBuilder.AssembleNestedLevel</c>）；**类级**特性仍不生效，见
-    /// <see cref="WarnAboutInertTypeGroups"/>。
+    /// <b>成员级与类级的分组特性自 2026-10-06 起都生效</b>：成员级由构建期装配出分组节点
+    /// （见 <c>PropertyTreeBuilder.AssembleNestedLevel</c>），类级由分发处理器注入到各成员
+    /// （见 <c>ClassLevelGroupProcessor</c>）。**其它**类级特性（<c>[Title]</c>、<c>[InfoBox]</c>
+    /// 之类）仍只在被检视的最外层类型上收集——嵌套层里不生效、也不告警（一个类型同时用于
+    /// 根与嵌套字段是常规写法，一律告警会成噪音），口径见包 README。
     /// </para>
     /// </remarks>
     internal static class NestedMemberExpansion
@@ -42,44 +44,6 @@ namespace XInspector.Editor
         #endregion
 
         #region Public API
-
-        /// <summary>
-        /// 展开过的嵌套类型若在**类型上**带分组特性，报一次告警。
-        /// </summary>
-        /// <param name="parent">刚展开过的复合成员节点。</param>
-        /// <remarks>
-        /// <para>
-        /// 嵌套层里的**成员级**分组特性自 2026-10-06 起正常生效（构建期会装配出分组节点）。
-        /// 仍然不生效的是**类级**特性：本包只在被检视类型上收集类级特性
-        /// （<c>CollectTypeAttributes</c> 只对根调用），嵌套类型的类级特性没有任何收集通道，
-        /// 判据也照此收窄（类级特性不触发展开）。
-        /// </para>
-        /// <para>
-        /// 这条告警只在**已经展开**的类型上说话：没展开就整份交给 Unity，那是文档写明的边界；
-        /// 一旦展开，这份静默就是本包的。收件人明确、不会误报。
-        /// </para>
-        /// </remarks>
-        public static void WarnAboutInertTypeGroups(InspectorProperty parent)
-        {
-            var type = parent.Type;
-            if (type == null)
-            {
-                return;
-            }
-
-            foreach (var attribute in type.GetCustomAttributes(true))
-            {
-                if (attribute is PropertyGroupAttribute group)
-                {
-                    Debug.LogWarning(
-                        $"[XInspector] 嵌套类型「{type.Name}」的**类级**分组特性" +
-                        $"（[{group.GetType().Name}(\"{group.GroupID}\")]）不生效：" +
-                        "类级特性只在被检视的最外层类型上收集，嵌套类型上的没有收集通道。" +
-                        "把分组标到**成员**上即可生效。");
-                    return;
-                }
-            }
-        }
 
         /// <summary>
         /// 这个类型（作为字段的**声明类型**）会不会被按需展开——**自动接管的判据**用它。
@@ -156,6 +120,14 @@ namespace XInspector.Editor
                 return true;
             }
 
+            // 声明类型上标了**类级分组**（含 [ShowIfGroup] 一族）：分发处理器
+            // （ClassLevelGroupProcessor）会把它注入给每个成员——判据看不见它，
+            // 分组就静默失效（2026-10-06 起生效）。
+            if (HasEffectiveClassLevelGroup(member.Type))
+            {
+                return true;
+            }
+
             // 字段自己标了搜索：**它的子成员就是被过滤的对象**，不展开就无从过滤。
             // 这是继 [InlineProperty] 之后第二条「字段自己的特性也参与展开判据」的口子，
             // 代价同样是外观改变（从「整份交给 Unity」变成本包的折叠头 + 缩进）——
@@ -170,8 +142,9 @@ namespace XInspector.Editor
             }
 
             // 嵌套成员里有本包支持的特性——递归判一遍（孙辈也带特性时，得连展开两层）。
-            // **判据只看成员级特性，不看嵌套类型的类级特性**（[InlineProperty] 除外，它是
-            // 官方的类级形态）：其它类级特性本轮不生效，算进来等于「为了一个不画东西的特性而展开」。
+            // **判据只看成员级特性，以及声明类型上的两条类级通道**（[InlineProperty] 与
+            // **分组族**，两者都会真的被注入）：其它类级特性仍不生效，算进来等于
+            // 「为了一个不画东西的特性而展开」。
             return HasSupportedMember(property, member.Type, 0);
         }
 
@@ -203,6 +176,11 @@ namespace XInspector.Editor
             // 没有可见的序列化子字段时，只有**声明类型里还有非序列化的本包成员**才值得展开
             // （典型的是「只放了一个 [ShowInInspector] 属性」的嵌套类型）。
             // 不加这条：那种类型整份交回 Unity，里面的特性永远没机会生效。
+            //
+            // **类级分组不需要在这条闸上加腿**（2026-10-06 核过）：它在**收集期**跑、早于
+            // 第一趟处理器，读的是 Unity 的序列化形状，与注入无关；而「标了分组却没有成员
+            // 可分」的类型本来就没有孩子，不展开是对的（判据由 HasEffectiveClassLevelGroup
+            // 那半「有成员可分」兜住，过度接管与漏接管方向相反、同属静默）。
             if (!property.hasVisibleChildren && !HasNonSerializedNodeMember(member.Type))
             {
                 return false;
@@ -235,6 +213,57 @@ namespace XInspector.Editor
         public static bool IsClassLevelInlineMarked(Type declaredType)
         {
             return declaredType != null && declaredType.IsDefined(typeof(InlinePropertyAttribute), false);
+        }
+
+        /// <summary>
+        /// 取类型上**第一个**类级分组特性（含继承，与根上 <c>CollectTypeAttributes</c> 同口径）。
+        /// </summary>
+        /// <param name="declaredType">类型。</param>
+        /// <returns>找到的特性；没有返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 消费者是 <c>ClassLevelGroupProcessor</c>——嵌套类型与元素类型自己带的分组特性
+        /// 没有「收集到根节点上」那条通道，处理器要直接来类型上读。判据因此与注入**同源**：
+        /// 展开判据、两条递归判据、自动接管判据四处问的都是这一句。
+        /// </para>
+        /// <para>
+        /// <c>inherit: true</c> 与根一致（根就是 <c>GetCustomAttributes(true)</c>，
+        /// 分组族的 <c>AttributeUsage</c> 也都是 <c>Inherited = true</c>）。
+        /// 顺序不作承诺——「只取第一个」的语义只承诺「恰好一份」。
+        /// </para>
+        /// </remarks>
+        public static PropertyGroupAttribute FindClassLevelGroup(Type declaredType)
+        {
+            if (declaredType == null)
+            {
+                return null;
+            }
+
+            foreach (var attribute in declaredType.GetCustomAttributes(typeof(PropertyGroupAttribute), true))
+            {
+                return (PropertyGroupAttribute)attribute;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 类型上的类级分组**会不会真的生效**：标了，且有成员可分。
+        /// </summary>
+        /// <param name="type">类型。</param>
+        /// <returns>会生效返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 「有成员可分」那半挡的是「标了分组却没有成员的类型」——为它打开元素阀或触发接管，
+        /// 等于建出一层什么都画不出来的东西（过度接管与漏接管方向相反，但同属静默）。
+        /// </remarks>
+        public static bool HasEffectiveClassLevelGroup(Type type)
+        {
+            if (FindClassLevelGroup(type) == null)
+            {
+                return false;
+            }
+
+            return HasSerializableField(type) || HasNonSerializedNodeMember(type);
         }
 
         /// <summary>
@@ -416,6 +445,14 @@ namespace XInspector.Editor
                         return true;
                     }
 
+                    // 声明类型上的**类级分组**同款（ClassLevelGroupProcessor 也是注入）。
+                    // 这条腿不能省给递归：属性版递归**是有条件的**（下面那句要求
+                    // child.hasVisibleChildren），字段类型只有非序列化节点成员时跳不进下一层。
+                    if (HasEffectiveClassLevelGroup(field.FieldType))
+                    {
+                        return true;
+                    }
+
                     // 再往下一层看：孙辈带特性时，这一层也得展开，否则它进不了树。
                     if (child.hasVisibleChildren && HasSupportedMember(child, field.FieldType, depth + 1))
                     {
@@ -445,6 +482,15 @@ namespace XInspector.Editor
 
             // 与 HasSupportedMember 同一条腿：迭代器看不见的那些成员。
             if (HasNonSerializedNodeMember(type))
+            {
+                return true;
+            }
+
+            // 类型**自己**的类级分组（分发处理器会把它注入给每个成员）。纯反射这条递归
+            // **无条件**，自检腿一条就够、不必逐字段再问一遍（对照 HasSupportedMember 那条
+            // 有条件的递归）。它同时罩住两处消费者：WouldExpand（→ 自动接管）与
+            // ContainsSupportedFields（→ 元素阀）。
+            if (HasEffectiveClassLevelGroup(type))
             {
                 return true;
             }
@@ -497,6 +543,29 @@ namespace XInspector.Editor
             }
 
             return field.IsPublic || field.IsDefined(typeof(SerializeField), true);
+        }
+
+        /// <summary>该类型（含继承链）上有没有会被 Unity 序列化的实例字段。</summary>
+        /// <param name="type">类型。</param>
+        /// <returns>有返回 <c>true</c>。</returns>
+        /// <remarks><see cref="HasEffectiveClassLevelGroup"/> 的「有成员可分」那半用它。</remarks>
+        private static bool HasSerializableField(Type type)
+        {
+            const BindingFlags Flags =
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+            {
+                foreach (var field in current.GetFields(Flags))
+                {
+                    if (IsSerializableField(field))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>在该类型及其基类上找同名**实例**字段（<c>DeclaredOnly</c> 逐级上溯）。</summary>
