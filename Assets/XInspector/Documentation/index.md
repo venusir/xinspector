@@ -27,7 +27,7 @@ Unity 默认的 `PropertyDrawer` 模型是「首个匹配者胜出」：一个�
 
 ## 已知限制
 
-本轮刻意不包含：样式系统、**元素层深度 > 1**（元素与嵌套层的**读路径**均已生效）、
-`[SerializeReference]` 类型切换、折叠状态的跨会话持久化、UI Toolkit。
+本轮刻意不包含：样式系统、`[SerializeReference]` 类型切换、
+折叠状态的跨会话持久化、UI Toolkit。
 
 完整清单与说明见 [README 的「已知限制」](../README.md#已知限制)。

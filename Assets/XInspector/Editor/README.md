@@ -88,7 +88,11 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
   **集合元素节点也是容器**（`Kind.Member`、路径 `items.Array.data[i]`）：容器路径里可以含
   `Array.data[i]` 索引段（自 2026-10-06 起由 `ReflectedAccessor.TryCreatePath` 认——
   判据落在**前置类型**上，取元素带 null 与越界守卫，**末段索引**取不到时给 `null`：
-  读值「—」、方法跳过该目标、条件算假）。
+  读值「—」、方法跳过该目标、条件算假）。**元素层可递归（深度 &gt; 1）起，路径里有多个
+  索引对**（每层一对，`items.Array.data[0].inner.Array.data[1]`）——访问器天然支持
+  （判据每轮按当前前置类型重算）；**按名解析取「最近的 `Kind.Member` 祖先」**，
+  内层元素节点比外层近，故不会看错层；而与成员引用同款，按名解析是**两级**语义
+  （最近容器 → 根绝对名，**不查中间祖先**）——本轮明确保持并补了用例钉住。
   新增任何「要拿实例」的节点种类时，都要走这条出口并配一条钉住作用域的用例。
 - **自己渲染子节点的绘制器，要认「子节点策略」。** 页签与水平分组通过 `PropertyState` 上的
   `GroupChildrenLayout` 决定「画哪几个子节点」，`[Searchable]` 用 `SearchScope` 决定

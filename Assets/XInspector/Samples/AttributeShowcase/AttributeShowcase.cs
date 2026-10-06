@@ -810,6 +810,17 @@ namespace XInspector.Samples
         };
 
         /// <summary>
+        /// **元素层深度 &gt; 1**：外层元素类型里又嵌着集合——**内层的元素也照常节点化**，
+        /// 内层元素类型里写的条件与 `[Button]` 同样生效（取/调的是那一行**内层**元素实例）。
+        /// 最多 4 层；自引用类型（元素类型里又装自己）会在「类型链」那一步被挡并告警。
+        /// </summary>
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public List<ElementShowcaseTeam> teams = new List<ElementShowcaseTeam>
+        {
+            new ElementShowcaseTeam(),
+        };
+
+        /// <summary>
         /// `[ReadOnly]` 标在列表上：**整块（含每个元素）都变灰**——与上面那个 `IsReadOnly`
         /// 旋钮的差别正在这里（旋钮只关增删按钮，元素照常可编辑）。
         /// </summary>
@@ -986,6 +997,48 @@ namespace XInspector.Samples
             hp = 100;
             alive = true;
         }
+    }
+
+    /// <summary>深度 2 演示的**内层**元素：条件与按钮在元素层的第二层同样生效。</summary>
+    [Serializable]
+    public class ElementShowcaseMember
+    {
+        /// <summary>血量（内层按钮改它）。</summary>
+        public int hp = 12;
+
+        /// <summary>存活开关——内层元素**自己**的条件来源。</summary>
+        public bool alive = true;
+
+        /// <summary>条件指向**内层元素实例**的 alive：取消勾选这一行消失。</summary>
+        [ShowIf(nameof(alive))]
+        public string title = "在编";
+
+        /// <summary>内层按钮：治的是**这一行内层元素**（外层与组件的同名方法不会被调到）。</summary>
+        [Button("内层治疗")]
+        private void Heal()
+        {
+            hp = 99;
+            alive = true;
+        }
+    }
+
+    /// <summary>深度 2 演示的**外层**元素：里面嵌着一个内层集合（它自己也会被节点化）。</summary>
+    [Serializable]
+    public class ElementShowcaseTeam
+    {
+        /// <summary>队伍名。</summary>
+        public string name = "近战组";
+
+        /// <summary>
+        /// 内层集合——**元素层深度 &gt; 1** 起照常节点化：展开任意一行外层元素，
+        /// 里面的成员行各自带条件与 `[Button]`（路径是两组 `Array.data[i]`）。
+        /// </summary>
+        [ListDrawerSettings(ShowIndexLabels = true)]
+        public List<ElementShowcaseMember> members = new List<ElementShowcaseMember>
+        {
+            new ElementShowcaseMember(),
+            new ElementShowcaseMember { hp = 0, alive = false },
+        };
     }
 
     /// <summary>展示 <c>[TableList]</c> 用的行类型：一列定宽、一列弹性、一列不进表格。</summary>
