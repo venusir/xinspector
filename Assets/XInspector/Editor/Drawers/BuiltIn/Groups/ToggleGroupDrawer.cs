@@ -117,7 +117,7 @@ namespace XInspector.Editor
             // 解析本身（含「分组节点没有值入口、沿后代找」）在 SerializedMemberResolver；
             // 这里只是它在绘制期的一个调用方。
             SerializedMemberResolver.TryResolve(
-                property, memberName, SerializedMemberScope.Object, SerializedMemberKind.Boolean,
+                property, memberName, MemberScope.Object, MemberKind.Boolean,
                 out var flag, out reason);
             return flag;
         }

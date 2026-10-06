@@ -1,5 +1,4 @@
 using System;
-using UnityEditor;
 using UnityEngine;
 
 namespace XInspector.Editor
@@ -64,7 +63,7 @@ namespace XInspector.Editor
         /// <summary>
         /// 解析条件成员，返回一个每帧求值的委托。
         /// </summary>
-        /// <param name="property">目标属性，用来拿到它所属的序列化对象。</param>
+        /// <param name="property">目标属性，用来拿到它所属的序列化对象与容器。</param>
         /// <param name="conditionName">条件成员名。</param>
         /// <param name="condition">解析出的求值器；失败时为 <c>null</c>。</param>
         /// <returns>解析成功返回 <c>true</c>。</returns>
@@ -74,110 +73,23 @@ namespace XInspector.Editor
         /// 「找成员、校类型、失败告警」这段逻辑只该有一份。
         /// </para>
         /// <para>
+        /// <b>找成员那件事在 <see cref="MemberReferenceResolver"/> 里</b>（四级阶梯、次序、
+        /// 类型判定都记在那里），本类只剩两件自己的事：装进 <see cref="PropertyState"/>，
+        /// 以及**告警**——告警的时机与去重方式是各消费者自己的（条件族是构建期直接
+        /// <c>LogWarning</c>，<c>[ToggleGroup]</c> 是绘制期 <see cref="DrawerWarnings.Once"/>），
+        /// 故不跟着解析一起收上去。
+        /// </para>
+        /// <para>
         /// <b>解析失败不抛异常，只告警并放弃。</b> 一个拼错的条件名不该让整个 Inspector 白屏——
         /// 那是使用方看到本插件的第一眼。放弃的后果是「条件不生效、字段照常显示」，
         /// 配合告警足以定位；而抛异常会让后果升级成「什么都看不见」。
         /// </para>
-        /// <para>
-        /// <b>解析顺序固定：同一嵌套对象里的兄弟成员（只对嵌套成员）→ 本对象上的序列化成员
-        /// → 反射字段/属性 → 无参返回 bool 的方法。</b>
-        /// 第一级是「嵌套层里写 <c>[ShowIf("flag")]</c> 指的是同层的 flag」这条直觉的落点；
-        /// 顶层成员没有它（父节点是根而非成员），顺序对既有行为零变化。
-        /// 序列化成员是本包的主路（它免费带着 Undo、预制体覆盖那一整套），反射那两级是兜底。
-        /// 顺序固定下来，失败信息才可解释——「找不到」与「找到了但形状不对」是两句不同的话，
-        /// 而「找到的是哪一级」也一样。
-        /// </para>
-        /// <para>
-        /// <b>嵌套成员的四级找的是「同一个嵌套实例」。</b> 前两级是它的序列化兄弟成员与根上的
-        /// 绝对名；后两级是**该实例**上的反射字段/属性与方法（实例由一条构建期编译的字段链
-        /// 每帧现读，父字段被重新赋值后条件跟着走）。在根上找就会拿到根上的同名成员——
-        /// 「条件看错了对象」，静默且极难归因。
-        /// </para>
         /// </remarks>
         internal static bool TryResolve(InspectorProperty property, string conditionName, out Func<bool> condition)
         {
-            condition = null;
-
-            // 第 0 级（**只在嵌套成员上生效**）：同一嵌套对象里的兄弟成员。
-            // 顶层成员没有这一级——它的父节点是根而不是成员——因此对既有行为**零变化**。
-            // 顺序是刻意的：嵌套层里写 [ShowIf("flag")] 指的是同层的 flag；
-            // 只有当同层没有它时，才回落到根上的绝对名。
-            //
-            // 容器由 SerializedMemberResolver 提供（它会**跳过分组节点**上溯）——
-            // 与 [ToggleGroup] / 值绘制器的成员引用共用同一条规则，只留一份实现。
-            var containerNode = SerializedMemberResolver.FindNestedScopeNode(property);
-            var container = containerNode?.ValueEntry?.SerializedProperty;
-            if (container != null)
+            if (MemberReferenceResolver.TryResolveBoolean(
+                    property, conditionName, MemberScope.Object, out condition, out _, out var reason))
             {
-                var sibling = container.FindPropertyRelative(conditionName);
-                if (sibling != null)
-                {
-                    if (sibling.propertyType != SerializedPropertyType.Boolean)
-                    {
-                        // 找到了却类型不符：**不再往下找**（与绝对名那一级同款的理由——
-                        // 继续找会报第二次警，而两条消息互相矛盾）。
-                        Warn(property, conditionName,
-                            $"找到的「{conditionName}」是 {sibling.propertyType}，条件必须是 bool");
-                        return false;
-                    }
-
-                    condition = () => sibling.boolValue;
-                    return true;
-                }
-            }
-
-            // 第一级：序列化成员。这一段与 [Toggle]/[ToggleGroup] 共用类型判定——见 SerializedMemberResolver。
-            var serializedObject = SerializedMemberResolver.FindSerializedObject(property);
-
-            if (serializedObject != null)
-            {
-                var member = serializedObject.FindProperty(conditionName);
-                if (member != null)
-                {
-                    if (member.propertyType != SerializedPropertyType.Boolean)
-                    {
-                        // 找到了却类型不符：**不再往下找**。继续找反射成员的话，
-                        // 同一个名字会报第二次警，而两条消息互相矛盾。
-                        Warn(property, conditionName,
-                            $"找到的「{conditionName}」是 {member.propertyType}，条件必须是 bool");
-                        return false;
-                    }
-
-                    // 每帧只读一个 bool，不分配、不查找——SerializedProperty 是活句柄，
-                    // 跨 Update() 依然有效，所以解析一次就够。
-                    condition = () => member.boolValue;
-                    return true;
-                }
-            }
-
-            // 第二、三级：反射成员与方法。同样在构建期解析一次，绘制期只有委托调用。
-            //
-            // **嵌套成员在这两级上找的是「同一个嵌套实例」**，不是被检视对象——
-            // 在根上按名找会拿到根上的同名成员，「条件看错了对象」，静默且极难归因。
-            // 实例由一条构建期编译的字段链每帧现读（见 ReflectedAccessor.TryCreatePath），
-            // 因此父字段被重新赋值之后条件跟着走。
-            if (containerNode != null)
-            {
-                if (ReflectedMemberResolver.TryResolveNestedBooleanCondition(
-                        containerNode.Type,
-                        containerNode.Path,
-                        property?.Owner?.Targets,
-                        conditionName,
-                        out var nested,
-                        out var nestedReason))
-                {
-                    condition = nested;
-                    return true;
-                }
-
-                Warn(property, conditionName, nestedReason);
-                return false;
-            }
-
-            if (ReflectedMemberResolver.TryResolveBooleanCondition(
-                    property?.Owner?.Targets, conditionName, out var root, out var reason))
-            {
-                condition = root;
                 return true;
             }
 

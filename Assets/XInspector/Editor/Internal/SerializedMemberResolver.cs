@@ -3,55 +3,18 @@ using UnityEditor;
 namespace XInspector.Editor
 {
     /// <summary>
-    /// 成员查找的范围。
-    /// </summary>
-    internal enum SerializedMemberScope
-    {
-        /// <summary>
-        /// 就近查找：**先**在「最近的复合成员容器」里找（即同层的兄弟成员），
-        /// **找不到再回落**到属性所属序列化对象上的绝对路径（支持 <c>a.b</c> 点分路径）。
-        /// </summary>
-        /// <remarks>
-        /// 两级顺序与条件族同款（见 <c>ConditionResolver</c>）：嵌套层里写 <c>[ToggleGroup("flag")]</c>
-        /// 指的是**同层的** <c>flag</c>，指错了「看的是一个对象、取的是另一个对象」——
-        /// 静默且极难归因。顶层成员与顶层分组没有嵌套容器，两级恒等，故对既有行为零变化。
-        /// </remarks>
-        Object = 0,
-
-        /// <summary>在属性自己的值对象内部查找（如 <c>[Toggle]</c> 的开关字段）。</summary>
-        Relative = 1,
-    }
-
-    /// <summary>
-    /// 成员必须满足的类型约束。
-    /// </summary>
-    /// <remarks>
-    /// 只列**有调用方**的几种。加一种就意味着一条新的校验分支与一句新的告警文本，
-    /// 等真有特性需要时再加。
-    /// </remarks>
-    internal enum SerializedMemberKind
-    {
-        /// <summary>bool。</summary>
-        Boolean = 0,
-
-        /// <summary>float。</summary>
-        Float = 1,
-
-        /// <summary>Vector2。</summary>
-        Vector2 = 2,
-
-        /// <summary>数组或 List（判定依据是 <see cref="SerializedProperty.isArray"/>）。</summary>
-        Array = 3,
-    }
-
-    /// <summary>
-    /// 「按名找一个序列化成员」的公共实现。
+    /// 成员引用阶梯的**序列化那条腿**：在同层兄弟成员、根绝对名这些位置上找序列化成员。
     /// <para>
-    /// 本包有多处需要这件事：条件族、<c>[Toggle]</c>、<c>[ToggleGroup]</c>，以及靠
-    /// <b>成员引用</b>取参数的值绘制器（<c>[MinMaxSlider]</c> 的动态边界、
-    /// <c>[ValueDropdown]</c> 的数据源）。它们找的位置（同一个对象上 / 值对象内部）、
-    /// 要的类型、失败的后果都不同，但「找不到 / 类型不符 → 给一句人能读的中文原因」
-    /// 是同一件事，收敛在这里。
+    /// <b>它是腿，不是入口。</b> 入口是 <see cref="MemberReferenceResolver"/>——那层负责
+    /// 「序列化找不到时再走反射」的次序与种类判定；本类只管「按范围把一个
+    /// <see cref="SerializedProperty"/> 取出来」。<c>[ValueDropdown]</c> 的数据源是唯一
+    /// 仍直接调用本类的消费者：它要的是**一个数组**而不是一个值，而消费侧（选项表与值复制）
+    /// 目前只吃 <see cref="SerializedProperty"/>——给它接反射源要另建一套形态与写回通道，
+    /// 与「解析」不是同一件事。
+    /// </para>
+    /// <para>
+    /// 台词（<see cref="MemberScope"/> / <see cref="MemberKind"/>）定义在
+    /// <see cref="MemberReferenceResolver"/> 那一份文件里——那是这一层共用的词汇。
     /// </para>
     /// <para>
     /// <b>只管解析，不管告警。</b> 调用方的告警机制本就不同且各自正确：
@@ -179,7 +142,7 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="property">目标属性，用来定位序列化对象。</param>
         /// <param name="memberName">
-        /// 成员名。<see cref="SerializedMemberScope.Relative"/> 时是值对象内部的相对路径。
+        /// 成员名。<see cref="MemberScope.Relative"/> 时是值对象内部的相对路径。
         /// </param>
         /// <param name="scope">查找范围。</param>
         /// <param name="kind">类型约束。</param>
@@ -189,15 +152,14 @@ namespace XInspector.Editor
         public static bool TryResolve(
             InspectorProperty property,
             string memberName,
-            SerializedMemberScope scope,
-            SerializedMemberKind kind,
+            MemberScope scope,
+            MemberKind kind,
             out SerializedProperty member,
             out string reason)
         {
             member = null;
-            reason = null;
 
-            var found = Find(property, memberName, scope, out reason);
+            var found = TryFind(property, memberName, scope, out reason);
             if (found == null)
             {
                 return false;
@@ -205,7 +167,7 @@ namespace XInspector.Editor
 
             if (!IsKind(found, kind))
             {
-                reason = $"该成员不是 {DescribeKind(kind)}（实为 {found.propertyType}）";
+                reason = $"该成员不是 {MemberKindNames.Describe(kind)}（实为 {found.propertyType}）";
                 return false;
             }
 
@@ -219,7 +181,7 @@ namespace XInspector.Editor
         /// <param name="property">待判定的属性。</param>
         /// <param name="kind">类型约束。</param>
         /// <returns>满足返回 <c>true</c>；<paramref name="property"/> 为 <c>null</c> 时返回 <c>false</c>。</returns>
-        public static bool IsKind(SerializedProperty property, SerializedMemberKind kind)
+        public static bool IsKind(SerializedProperty property, MemberKind kind)
         {
             if (property == null)
             {
@@ -228,13 +190,13 @@ namespace XInspector.Editor
 
             switch (kind)
             {
-                case SerializedMemberKind.Boolean:
+                case MemberKind.Boolean:
                     return property.propertyType == SerializedPropertyType.Boolean;
-                case SerializedMemberKind.Float:
+                case MemberKind.Float:
                     return property.propertyType == SerializedPropertyType.Float;
-                case SerializedMemberKind.Vector2:
+                case MemberKind.Vector2:
                     return property.propertyType == SerializedPropertyType.Vector2;
-                case SerializedMemberKind.Array:
+                case MemberKind.Array:
                     return property.isArray;
                 default:
                     return false;
@@ -242,48 +204,28 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 类型约束的中文说法，用于告警文本。
-        /// </summary>
-        /// <param name="kind">类型约束。</param>
-        /// <returns>可读文本。</returns>
-        public static string DescribeKind(SerializedMemberKind kind)
-        {
-            switch (kind)
-            {
-                case SerializedMemberKind.Boolean:
-                    return "bool";
-                case SerializedMemberKind.Float:
-                    return "float";
-                case SerializedMemberKind.Vector2:
-                    return "Vector2";
-                case SerializedMemberKind.Array:
-                    return "数组或 List";
-                default:
-                    return kind.ToString();
-            }
-        }
-
-        #endregion
-
-        #region Private Helpers
-
-        /// <summary>
-        /// 按范围取成员；失败时填 <paramref name="reason"/>。
+        /// 按范围取成员——**不做类型判定**，找到就返回。失败时填 <paramref name="reason"/>。
         /// </summary>
         /// <param name="property">目标属性。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="scope">查找范围。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>序列化属性；失败返回 <c>null</c>。</returns>
-        private static SerializedProperty Find(
+        /// <remarks>
+        /// 与 <see cref="TryResolve"/> 分成两个入口，是因为「找到了但类型不符」与「根本没找到」
+        /// 的**后果不同**：前者要停住（不再往下走反射那两级），后者才轮到反射。
+        /// 只给一个布尔返回的话，调用方分不出这两种，只能靠解析原因字符串——
+        /// 那正是「判据靠文案」这类坏味道的开端。
+        /// </remarks>
+        public static SerializedProperty TryFind(
             InspectorProperty property,
             string memberName,
-            SerializedMemberScope scope,
+            MemberScope scope,
             out string reason)
         {
             reason = null;
 
-            if (scope == SerializedMemberScope.Relative)
+            if (scope == MemberScope.Relative)
             {
                 var owner = property?.ValueEntry?.SerializedProperty;
                 if (owner == null)
@@ -301,9 +243,9 @@ namespace XInspector.Editor
                 return relative;
             }
 
-            // 第 0 级（**只在嵌套层生效**）：最近的复合成员容器里的同层成员。
-            // 找到了就用——哪怕类型不符也不继续往下找，与条件族同款：继续找会报第二次警，
-            // 而两条消息互相矛盾（一句说「找到了但类型不对」、一句说「找不到」）。
+            // 第 0 级（**只在嵌套层生效**）：最近的复合成员容器里的同层成员。找到了就返回
+            // ——哪怕类型不符也是。**不在这里往下找**：那两步（继续找根绝对名 / 走反射）
+            // 是入口那一层的事，判定「找到了该不该停」也需要它手上的类型约束。
             var container = FindNestedScope(property);
             if (container != null)
             {

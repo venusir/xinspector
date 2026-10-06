@@ -65,7 +65,7 @@ namespace XInspector.Editor
         {
             // 相对范围：官方示例确认被指的 bool 在**值对象内部**（如 t.Enabled）。
             SerializedMemberResolver.TryResolve(
-                property, memberName, SerializedMemberScope.Relative, SerializedMemberKind.Boolean,
+                property, memberName, MemberScope.Relative, MemberKind.Boolean,
                 out var toggle, out reason);
             return toggle;
         }

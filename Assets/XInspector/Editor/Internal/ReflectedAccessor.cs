@@ -116,20 +116,29 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 编译一个**强类型**的 bool 读取器。
+        /// 编译一个**强类型**的读取器——「实例 → 当前值」。
         /// </summary>
-        /// <param name="member">字段或属性，必须是 <c>bool</c>。</param>
+        /// <typeparam name="T">要求的成员类型（本包用到的是 <c>bool</c>、<c>float</c>、<c>Vector2</c>）。</typeparam>
+        /// <param name="member">字段或属性。</param>
         /// <param name="reader">编译出的读取器；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因。</param>
         /// <returns>成功返回 <c>true</c>。</returns>
         /// <remarks>
-        /// <b>条件的求值发生在绘制路径上、每帧一次</b>，而 <see cref="Read"/> 的返回值要装箱。
+        /// <para>
+        /// <b>求值发生在绘制路径上、每帧一次</b>，而 <see cref="Read"/> 的返回值要装箱。
         /// 那条路能省一次分配就省一次——这与 <c>ValueSnapshot</c> 为 <c>[OnValueChanged]</c>
         /// 按类型取值而不走 <c>boxedValue</c> 是同一条理由。
         /// 别的调用方（只读展示）仍走 <see cref="Read"/>：那里每帧本来就要拼一个字符串，
         /// 再多一个箱子没有意义。
+        /// </para>
+        /// <para>
+        /// <b><c>T</c> 是值类型时这里不插 <c>Convert</c></b>：<see cref="TryBuild"/> 给出的
+        /// 表达式本体已经是 <c>T</c>，照 <see cref="TryCreate"/> 那样再转一次 <c>object</c>
+        /// 等于每帧白送一次装箱。读取器进的是每帧路径（条件求值、<c>[MinMaxSlider]</c> 的边界），
+        /// 这条不是微优化。
+        /// </para>
         /// </remarks>
-        public static bool TryCreateBooleanReader(MemberInfo member, out Func<object, bool> reader, out string reason)
+        public static bool TryCreateReader<T>(MemberInfo member, out Func<object, T> reader, out string reason)
         {
             reader = null;
 
@@ -138,15 +147,15 @@ namespace XInspector.Editor
                 return false;
             }
 
-            if (valueType != typeof(bool))
+            if (valueType != typeof(T))
             {
-                reason = $"它是 {valueType.Name}，不是 bool";
+                reason = $"它是 {DescribeType(valueType)}，不是 {DescribeType(typeof(T))}";
                 return false;
             }
 
             try
             {
-                reader = Expression.Lambda<Func<object, bool>>(body, instance).Compile();
+                reader = Expression.Lambda<Func<object, T>>(body, instance).Compile();
                 reason = null;
                 return true;
             }
@@ -155,6 +164,44 @@ namespace XInspector.Editor
                 reason = Describe(exception);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 编译一个**强类型**的 bool 读取器。
+        /// </summary>
+        /// <param name="member">字段或属性，必须是 <c>bool</c>。</param>
+        /// <param name="reader">编译出的读取器；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>就是 <see cref="TryCreateReader{T}"/> 的 <c>bool</c> 那一格。留一个专门的入口，
+        /// 是因为条件族与 <c>[Toggle]</c> 一族全都只要 bool，读作 bool 比读作 <c>T</c> 直白。</remarks>
+        public static bool TryCreateBooleanReader(MemberInfo member, out Func<object, bool> reader, out string reason)
+        {
+            return TryCreateReader(member, out reader, out reason);
+        }
+
+        /// <summary>
+        /// 成员值类型的惯用说法，供各处告警文案共用。
+        /// </summary>
+        /// <param name="type">类型；可以为 <c>null</c>。</param>
+        /// <returns><c>bool</c> 与 <c>float</c> 用 C# 关键字那套小写，其余用类型名（<c>Int32</c>、<c>Vector2</c>）。</returns>
+        /// <remarks>
+        /// 单独一个入口是为了让「同一个类型在两处被告警成同一个词」——
+        /// 各写一遍的话，一边说 <c>Boolean</c>、一边说 <c>bool</c> 只是时间问题。
+        /// </remarks>
+        public static string DescribeType(Type type)
+        {
+            if (type == null)
+            {
+                return "null";
+            }
+
+            if (type == typeof(bool))
+            {
+                return "bool";
+            }
+
+            return type == typeof(float) ? "float" : type.Name;
         }
 
         /// <summary>
@@ -380,8 +427,10 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 把「无参、返回 bool 的**方法**」编译成 <c>实例 → bool</c> 的委托。
+        /// 把「无参、返回 <typeparamref name="T"/> 的**方法**」编译成 <c>实例 → 返回值</c> 的委托。
         /// </summary>
+        /// <typeparam name="T">方法必须返回的类型。**返回值类型由调用方校验**——
+        /// 这里只管编译，不判断「这个方法该不该被选中」（那是找成员那一层的判据）。</typeparam>
         /// <param name="method">方法。</param>
         /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
         /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
@@ -397,9 +446,12 @@ namespace XInspector.Editor
         /// <para>
         /// 静态方法忽略入参，所以同一个委托签名两种情况都能用。
         /// </para>
+        /// <para>
+        /// 调用表达式产出的已经是 <typeparamref name="T"/>，不插 <c>Convert</c>——
+        /// 与 <see cref="TryCreateReader{T}"/> 同一条理由（每帧路径上的装箱要省）。
+        /// </para>
         /// </remarks>
-        public static bool TryCreateBooleanInvoker(
-            MethodInfo method, out Func<object, bool> invoker, out string reason)
+        public static bool TryCreateInvoker<T>(MethodInfo method, out Func<object, T> invoker, out string reason)
         {
             invoker = null;
 
@@ -416,7 +468,7 @@ namespace XInspector.Editor
                     ? Expression.Call(method)
                     : Expression.Call(Convert(instance, method.DeclaringType), method);
 
-                invoker = Expression.Lambda<Func<object, bool>>(call, instance).Compile();
+                invoker = Expression.Lambda<Func<object, T>>(call, instance).Compile();
                 reason = null;
                 return true;
             }
@@ -425,6 +477,21 @@ namespace XInspector.Editor
                 reason = Describe(exception);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 把「无参、返回 bool 的**方法**」编译成 <c>实例 → bool</c> 的委托。
+        /// </summary>
+        /// <param name="method">方法。</param>
+        /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>就是 <see cref="TryCreateInvoker{T}"/> 的 <c>bool</c> 那一格——理由同
+        /// <see cref="TryCreateBooleanReader"/>。</remarks>
+        public static bool TryCreateBooleanInvoker(
+            MethodInfo method, out Func<object, bool> invoker, out string reason)
+        {
+            return TryCreateInvoker(method, out invoker, out reason);
         }
 
         /// <summary>

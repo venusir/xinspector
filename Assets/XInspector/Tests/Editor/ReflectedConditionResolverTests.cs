@@ -177,7 +177,9 @@ namespace XInspector.Tests.Editor
         public void 同名成员不是bool时保持可见()
         {
             // 告警文本里的成员名是**挂着条件的那一个**（value），不是条件指向的那一个。
-            LogAssert.Expect(LogType.Warning, new Regex("「value」上的条件「NotABool」.*条件必须是 bool"));
+            // 后半截的措辞由「找成员」那一层给（`找到的「NotABool」属性是 Int32，必须是 bool`）
+            // ——它不再写「条件必须是」，因为同一层现在也服务 [Toggle] 一族与 [MinMaxSlider]。
+            LogAssert.Expect(LogType.Warning, new Regex("「value」上的条件「NotABool」.*必须是 bool"));
 
             AssertDoesNotThrowAndStaysVisible<WrongConditionTypeFixture>();
 

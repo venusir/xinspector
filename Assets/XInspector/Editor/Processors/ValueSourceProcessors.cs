@@ -41,7 +41,7 @@ namespace XInspector.Editor
             {
                 // 官方语义：这一个非 null 时覆盖其余四个。
                 state.MinMaxGetter = Resolve(
-                    property, attribute.MinMaxValueGetter, SerializedMemberKind.Vector2, out var reason);
+                    property, attribute.MinMaxValueGetter, MemberKind.Vector2, out var reason);
 
                 if (state.MinMaxGetter == null)
                 {
@@ -56,7 +56,7 @@ namespace XInspector.Editor
             if (attribute.MinValueGetter != null)
             {
                 state.MinGetter = Resolve(
-                    property, attribute.MinValueGetter, SerializedMemberKind.Float, out var minReason);
+                    property, attribute.MinValueGetter, MemberKind.Float, out var minReason);
 
                 if (state.MinGetter == null)
                 {
@@ -68,7 +68,7 @@ namespace XInspector.Editor
             if (attribute.MaxValueGetter != null)
             {
                 state.MaxGetter = Resolve(
-                    property, attribute.MaxValueGetter, SerializedMemberKind.Float, out var maxReason);
+                    property, attribute.MaxValueGetter, MemberKind.Float, out var maxReason);
 
                 if (state.MaxGetter == null)
                 {
@@ -93,10 +93,10 @@ namespace XInspector.Editor
         /// <param name="reason">失败原因。</param>
         /// <returns>序列化属性；失败返回 <c>null</c>。</returns>
         private static SerializedProperty Resolve(
-            InspectorProperty property, string memberName, SerializedMemberKind kind, out string reason)
+            InspectorProperty property, string memberName, MemberKind kind, out string reason)
         {
             SerializedMemberResolver.TryResolve(
-                property, memberName, SerializedMemberScope.Object, kind, out var member, out reason);
+                property, memberName, MemberScope.Object, kind, out var member, out reason);
             return member;
         }
 
@@ -141,7 +141,7 @@ namespace XInspector.Editor
             var state = property.State.GetOrCreate<ValueDropdownState>();
 
             SerializedMemberResolver.TryResolve(
-                property, attribute.ValuesGetter, SerializedMemberScope.Object, SerializedMemberKind.Array,
+                property, attribute.ValuesGetter, MemberScope.Object, MemberKind.Array,
                 out var source, out var reason);
 
             if (source == null)
