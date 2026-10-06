@@ -97,18 +97,29 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 节点所属的容器是不是**值类型**——是的话方法调用要拒绝。
+        /// 容器是**值类型**时，方法调用一律被拒的原因；不是值类型时返回 <c>null</c>。
         /// </summary>
-        /// <param name="node">节点。</param>
-        /// <returns>是值类型返回 <c>true</c>。</returns>
+        /// <param name="node">发出调用的节点。</param>
+        /// <returns>拒绝原因（中文，可直接画在脸上或拼进告警）；可以调用时返回 <c>null</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 值类型在链上会**装箱**，读到的是副本，方法调用改的也是副本——改动**静默丢弃**。
         /// 与其做一个「点了没反应」的按钮，不如明说。
+        /// </para>
+        /// <para>
+        /// <b>判据与文案只此一份</b>：按钮（<c>ButtonProcessors</c>）与按名回调
+        /// （<c>NamedMethodResolver</c>）两处此前各写了一遍，逐字相同——元素层让
+        /// <c>List&lt;结构体&gt;</c> 变得常见之后，这种「各写一遍」迟早会漂。
+        /// 调用方只负责把原因放到该放的地方（HelpBox / Tooltip / 告警前缀）。
+        /// </para>
         /// </remarks>
-        public static bool IsValueTypeContainer(InspectorProperty node)
+        public static string ValueTypeContainerReason(InspectorProperty node)
         {
             var type = ContainerOf(node)?.Type;
-            return type != null && type.IsValueType;
+
+            return type != null && type.IsValueType
+                ? $"「{type.Name}」是值类型（struct）：方法调用改的是装箱副本，改动会丢，因此不在它上面调用方法。"
+                : null;
         }
 
         #endregion

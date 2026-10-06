@@ -99,21 +99,21 @@ namespace XInspector.Editor
                 return null;
             }
 
-            // 嵌套层：方法要在**同一个嵌套实例**的类型上找，调用时也要在那个实例上——
+            // 嵌套层（或元素层）：方法要在**同一个实例**的类型上找，调用时也要在那个实例上——
             // 在根对象上按名找，根上恰好有同名方法就会被静默调走。
+            // 值类型容器上的调用一律拒绝：判据与文案收在 NestedInstanceScope 一处
+            // （与其让用户「点了没反应」，不如明说并让调用方把条目画成不可用）。
+            reason = NestedInstanceScope.ValueTypeContainerReason(property);
+
+            if (reason != null)
+            {
+                Debug.LogWarning($"[XInspector] 属性「{property.Path}」上的 {usage} 未生效：{reason}");
+                return null;
+            }
+
             var container = NestedInstanceScope.ContainerOf(property);
             if (container != null)
             {
-                if (container.Type != null && container.Type.IsValueType)
-                {
-                    // 值类型在链上会装箱，调用改的是副本——改动静默丢弃。
-                    // 与其让用户「点了没反应」，不如明说并让调用方把条目画成不可用。
-                    reason = $"「{container.Type.Name}」是值类型（struct）：方法调用改的是装箱副本，"
-                             + "改动会丢，因此不在它上面调用方法。";
-                    Debug.LogWarning($"[XInspector] 属性「{property.Path}」上的 {usage} 未生效：{reason}");
-                    return null;
-                }
-
                 scopes = NestedInstanceScope.Compile(targets, container.Path);
             }
 

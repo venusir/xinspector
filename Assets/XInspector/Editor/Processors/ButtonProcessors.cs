@@ -118,18 +118,18 @@ namespace XInspector.Editor
                 return;
             }
 
-            // 嵌套层：方法要在**同一个嵌套实例**的类型上按签名找，调用时也要在那个实例上——
+            // 嵌套层（或元素层）：方法要在**同一个实例**的类型上按签名找，调用时也要在那个实例上——
             // 在根对象上找会拿到根上签名相同的那一个（比「找不到」难查得多）。
-            var container = NestedInstanceScope.ContainerOf(property);
+            // 值类型容器上的调用一律拒绝：判据与文案收在 NestedInstanceScope 一处。
+            var blocked = NestedInstanceScope.ValueTypeContainerReason(property);
 
-            if (container?.Type != null && container.Type.IsValueType)
+            if (blocked != null)
             {
-                // 值类型在链上会装箱，调用改的是副本——改动**静默丢弃**。
-                state.Reason = $"「{container.Type.Name}」是值类型（struct）：方法调用改的是装箱副本，"
-                               + "改动会丢，因此不在它上面调用方法。";
+                state.Reason = blocked;
                 return;
             }
 
+            var container = NestedInstanceScope.ContainerOf(property);
             state.Scopes = container == null ? null : NestedInstanceScope.Compile(targets, container.Path);
 
             state.Methods = new MethodInfo[targets.Length];
