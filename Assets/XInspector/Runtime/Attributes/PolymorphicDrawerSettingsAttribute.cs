@@ -18,11 +18,17 @@ namespace XInspector
     /// 与 <c>[TypeDrawerSettings]</c> 同款理由。
     /// </para>
     /// <para>
-    /// <b>本批只声明三个旋钮</b>（官方的第四个 <c>CreateInstanceFunction</c> 是单参
-    /// <c>Type type</c> 的 resolved string，要另一条名字解析通道——下一批与
-    /// <c>[TypeSelectorSettings]</c> 的过滤器一起做；<b>不声明</b>，写了编译不过）。
-    /// 官方的只读 <c>…IsSet</c> 属性同样不声明：它们只在「默认值来自全局配置」时有意义，
-    /// 而本包的默认值就写在字段/属性初始化器里。
+    /// <b><see cref="CreateInstanceFunction"/> 是「换类型时怎么造新实例」的自定义出口</b>：
+    /// 单参 <c>Type</c>、返回实例的方法名（官方示例 <c>public object Method(Type type)</c>；
+    /// 形参名官方约定 <c>"type"</c>，本包按位置调用）。四种处置：
+    /// 解析成功 → 写回**只走它**（<see cref="NonDefaultConstructorPreference"/> 与构造和候选收窄都无关）；
+    /// **解析失败（构建期告警）→ 回落内置的造实例**、候选收窄照旧（配置错不该让换类型整个不可用）；
+    /// **返回 <c>null</c> 或抛异常 → 告警且不写**（不回落——函数说「不给」时拿内置档造一个，
+    /// 那是静默换值的近亲）；**返回的实例不是选中的类型 → 拒绝**（否则「显示的是 X、装进去的是 Y」）。
+    /// </para>
+    /// <para>
+    /// <b>本批只声明这些。</b> 官方的只读 <c>…IsSet</c> 属性不声明：它们只在「默认值来自全局配置」
+    /// 时有意义，而本包的默认值就写在字段/属性初始化器里。
     /// </para>
     /// <para>
     /// <b>回退边界：</b>本包只接管「用得到本包」的具体类型（外观不变那条安全阀）。
@@ -43,11 +49,24 @@ namespace XInspector
     ///     ReadOnlyIfNotNullReference = true,
     ///     NonDefaultConstructorPreference = NonDefaultConstructorPreference.LogWarning)]
     /// public IShape locked;
+    ///
+    /// // 自定义造实例：换类型/选类型时走自己的方法（返回 null 表示「这个类型不给」）。
+    /// [SerializeReference, PolymorphicDrawerSettings(CreateInstanceFunction = nameof(Make))]
+    /// public IShape made;
+    ///
+    /// private object Make(Type type) =&gt; type == typeof(Circle) ? new Circle() : null;
     /// </code>
     /// </example>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
     public sealed class PolymorphicDrawerSettingsAttribute : Attribute
     {
+        /// <summary>
+        /// 自定义造实例函数的方法名：**单参 <c>Type</c>、返回实例**的实例或静态方法。
+        /// 不写（或空白、解析失败）就走内置的造实例。官方形状是**字段**。
+        /// </summary>
+        /// <remarks>四种处置见类注释（解析期回落、点击期不回落）。</remarks>
+        public string CreateInstanceFunction;
+
         /// <summary>
         /// <c>true</c> 时，槽位**有值之后**「改类型」那一行变灰——<b>只锁那一行，不锁子字段</b>
         /// （锁整棵子树是 <c>[ReadOnly]</c> 的事；这个旋钮的语义是「赋过一次值之后不许再换类型」）。

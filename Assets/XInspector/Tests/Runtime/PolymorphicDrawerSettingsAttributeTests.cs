@@ -106,19 +106,22 @@ namespace XInspector.Tests
         }
 
         /// <summary>
-        /// <c>CreateInstanceFunction</c> **本批不声明**（它是单参 <c>Type type</c> 的 resolved string，
-        /// 要另一条名字解析通道——与 <c>[TypeSelectorSettings]</c> 的过滤器一批做）。
-        /// 这条用例是**提醒**：下一批加它的时候，记得同步改这里与 README。
+        /// <c>CreateInstanceFunction</c> 按**官方形状**声明：<c>public string</c> **字段**、默认 <c>null</c>
+        /// （第三十批与单参解名通道一起落地）。官方的只读 <c>IsSet</c> 一族同样不声明。
         /// </summary>
         [Test]
-        public void CreateInstanceFunction本批不声明()
+        public void CreateInstanceFunction按官方形状声明()
         {
             var type = typeof(PolymorphicDrawerSettingsAttribute);
+            var field = type.GetField("CreateInstanceFunction");
 
-            Assert.That(type.GetField("CreateInstanceFunction"), Is.Null);
+            Assert.That(field, Is.Not.Null, "官方是 public 字段。");
             Assert.That(type.GetProperty("CreateInstanceFunction"), Is.Null);
+            Assert.That(
+                field.GetValue(new PolymorphicDrawerSettingsAttribute()),
+                Is.Null,
+                "不写函数就是 null（走内置的造实例）。");
 
-            // 官方的只读 IsSet 一族同样不声明：它们只在「默认值来自全局配置」时有意义。
             Assert.That(type.GetProperty("ShowBaseTypeIsSet"), Is.Null);
             Assert.That(type.GetProperty("NonDefaultConstructorPreferenceIsSet"), Is.Null);
         }
