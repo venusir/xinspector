@@ -3,7 +3,8 @@
 **对照口径：** Odin 官网 [attributes 页](https://odininspector.com/attributes)
 （12 个分类、**108 个不重复特性**）与
 [editor-windows 页](https://odininspector.com/editor-windows)，
-抓取日期 **2026-10-03**。Odin 会变，这份对照至少每半年该重核一次。
+抓取日期 **2026-10-03**（**2026-10-07 复核过一次**：属性页仍列出 108 个链接，去重后数目不变；
+那 8 个缺口的类签名与语义原文于当日逐个重抓过）。Odin 会变，这份对照至少每半年该重核一次。
 
 > 页面上的分类条目数是 110+，但**多处重复计数**（`[Required]` 同时在 Essentials 与
 > Validation 下，`[TableList]` 同时在 Type Specifics 与 Collections 下）。
@@ -15,7 +16,7 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-07，第二十一批之后）：**
+**本项目的家底（2026-10-07，第二十五批之后）：**
 
 - 公开特性 **88 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
@@ -56,7 +57,8 @@
   **索引段**（判据落前置类型、越界守卫、末段给 null、不占深度预算）；元素阀随之放宽到
   「非序列化那一半」——只带 `[ShowInInspector]`/`[Button]` 的元素类型也会被接管（**外观变化**）。
   边界：值类型元素上的方法一律拒绝、元素为空时读值「—」/条件算假/按钮跳过、
-  **搜索按元素内的反射值匹配**不做。
+  ~~搜索按元素内的反射值匹配不做~~——**2026-10-07（第二十二批）已做**，见 Pipeline §二十六。
+  这本是这一段里最后一条边界，故第五条能力轮的边界至此清零。
 - **类级分组进嵌套层与元素层**（2026-10-06，第六条能力轮、特性计数 +0）：类型自己带的
   `[BoxGroup]` 一族（含 `[ShowIfGroup]`/`[HideIfGroup]`）分发到它的成员，路径带容器的序列化
   路径前缀（`stats/类级组/成员自有组`——类级恒在最外层），同一类型两处各是各的；判据与注入
@@ -84,7 +86,8 @@
   `string` 也只实现 `IEnumerable<char>`，放宽会静默变出「字符选项表」。配套写了一条
   **object → `SerializedProperty` 的写回通道**（`ReflectedValueCopier`），枚举判据与既有的
   「句柄 → 句柄」那条**物理共用一份**（`EnumIdentity.SameNames`）。
-  **L0–L6 至此连最后的遗留也收口**：剩下的缺口不是 L7 本体就是它的前置，或卡在设计。
+  **L0–L6 至此连最后的遗留也收口**：剩下的缺口不是 L7 本体就是它的前置
+  （「卡在设计」那一列已归零，见下文 L7 段）。
 
 ---
 
@@ -114,8 +117,8 @@
 | **L3** | `[ShowInInspector]`、窗口的 `GetTarget()` | 反射值后端（第二套 `PropertyValueEntry`）✅ **已做**（2026-10-04）；~~`[TypeDrawerSettings]` 经核实独立，仍缺~~ **2026-10-06 追记：改判 L7 前置**——它要的是「可写的 `System.Type` 通道」，本包只有只读反射后端（见 L7 行与逐条表） |
 | **L4** | `[PropertyOrder]` `[InlineProperty]` | ✅ **整层已清完**（2026-10-05；`[InlineProperty]` 于 2026-10-06 升到**完全体**——复合类型的子字段成为真节点，当初那条推迟项就此复活了「固定形状」那一半） |
 | **L5** | `[Button]` 家族、回调族、`[CustomContextMenu]` | 拿到目标对象并调用方法 |
-| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]` `[AssetList]` | 🟡 **容器、元素与资产列表都做了**：容器（自绘列表 + 表格 + 长度校验，2026-10-05）、集合回调与搜索（2026-10-06）、**元素节点化 + 元素层的读路径 + 元素层深度 > 1**（三条能力轮）、**`[AssetList]`**（第十七批）已落地；**仍缺**：字典与矩阵（前置是 L7——Unity 根本不序列化它们，字段进不了树）、搜索按元素内的反射值匹配 |
-| **L7** | 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]` `[SerializeReference]` 类型切换；**前置也在这**：`[TypeDrawerSettings]`（2026-10-06 改判——它的两个字段只约束「类型选择器的候选集」，而 `System.Type` 在本包只能经**只读**反射后端出场、写回无落点；可写的 `System.Type` 通道只有自研序列化能给） | **Odin 的另一半产品（Serializer）** |
+| **L6** | `[ListDrawerSettings]` `[DictionaryDrawerSettings]` `[TableList]` `[TableMatrix]` `[OnCollectionChanged]` `[Searchable]` `[AssetList]` | 🟡 **容器、元素与资产列表都做了**：容器（自绘列表 + 表格 + 长度校验，2026-10-05）、集合回调与搜索（2026-10-06）、**元素节点化 + 元素层的读路径 + 元素层深度 > 1**（三条能力轮）、**`[AssetList]`**（第十七批）已落地；**仍缺**：字典与矩阵（前置是 L7——Unity 根本不序列化它们，字段进不了树） |
+| **L7** | **2026-10-07 核验后拆成两半**（见 L7 一节与 [Pipeline §二十九](Modules/Pipeline.md)）：**Inspector 半边**（多态引用进管线 + 自绘选择器一族，含 `[TypeDrawerSettings]`——那条「可写的 `System.Type` 通道」**已经有了**，代价是字段要加 `[SerializeReference]`）是**一条能走的能力轮**；**Serializer 半边**（字典、矩阵要随资产存档）**判不作为**——Unity 根本不序列化它们，要做得先有自研序列化器 | **Inspector 半边：本包的活；Serializer 半边：Odin 的另一半产品** |
 
 ---
 
@@ -128,7 +131,8 @@
 **表的组织：** 按 Odin 自己的分类，但**每个特性只登记一次**（记在它首次出现的分类下），
 否则 Odin 的重复计数会让总账对不上。Odin 也把它归入其它类时在「另见」列注明。
 
-状态四种：**✅ 已实现**、**❌ 缺**、**⛔ 不做**（已评估并记下理由，见「本轮不实现」一节）、
+状态四种：**✅ 已实现**、**❌ 缺**、**⛔ 不做**（已评估并记下理由，见
+[Modules/Pipeline.md](Modules/Pipeline.md) 第五、六节与 §二十九）、
 **➖ 不需要**（Unity 自己的，由 `PropertyField` 绘制）。
 标 ➖ 的那 4 项曾建立在一条未验证的推断上，已于 **2026-10-03 做过结构侧实测**
 （见文末「L0 的验证记录」）。
@@ -180,19 +184,21 @@
 | `[HideInTables]` | ✅ 已实现 | 空标记；让成员不进 `[TableList]` 的表格（单独用时惰性） |
 | `[HideMonoScript]` | ✅ 已实现 | — |
 | `[HideNetworkBehaviourFields]` | ⛔ 不做 | 目标类型（UNet `NetworkBehaviour`）在 Unity 6 已不存在，只能做成静默 no-op |
-| `[HideReferenceObjectPicker]` | ❌ 缺 | L7 |
+| `[HideReferenceObjectPicker]` | ❌ 缺 | **L7-Inspector，可做**（2026-10-07 核验）：官方原话是「hides the polymorphic object-picker shown above the properties of non-Unity serialized reference types」——**它是挂在 Odin 自己的绘制器上的开关**，本包要它得先有那个绘制器。**不需要自研序列化器** |
 | `[InlineEditor]` | ✅ 已实现 | 六模式 + 四对象字段模式 + 预览；递归上限等自定值见 Pipeline §七 |
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
-| `[PolymorphicDrawerSettings]` | ❌ 缺 | L7 |
-| `[TypeDrawerSettings]` | ❌ 缺 | **2026-10-06 改判 L7 前置**（原因是新一轮核出来的，见下）。原判「独立的一批、依赖一整套类型选择器绘制、不依赖反射后端」只对了一半：绘制确实能独立做，但它的两个可设字段（`BaseType`、`Filter`）的**全部语义**是**约束一个类型选择器的候选集**——而 `System.Type` 在本包只能经**只读**反射后端出场（`ReflectedValueEntry.SetValue` 恒抛），选中后**写回没有落点**。今天实现出来必然是静默 no-op（本包最忌讳的形态），照 `[TypeFilter]` 的先例本可判 ⛔；判「L7 前置」是因为它并非永远不做——自研序列化一旦能持久化 `System.Type`，它就是可做的（与字典/矩阵同类）。**真实前置不是「画 `System.Type`」，而是「可写的 `System.Type` 通道」** |
+| `[PolymorphicDrawerSettings]` | ❌ 缺 | **L7-Inspector，可做**：官方原话「Provides options for **Polymorphic Fields rendered using Odin**」——旋钮挂在原生多态绘制器上（`CreateInstanceFunction` / `ReadOnlyIfNotNullReference` / `NonDefaultConstructorPreference` / `ShowBaseType`）。**不需要自研序列化器**，需要**自绘选择器** |
+| `[TypeDrawerSettings]` | ❌ 缺 | **L7-Inspector，可做——2026-10-07 第三次改判**。这一项挪过三次层（L3 → L7 前置 → 这里），前两次问的都是「**有没有**一条可写的 `System.Type` 通道」，**本轮实测给出了第三种答案：通道在，只是要求使用方在字段上加一个 `[SerializeReference]`**——裸 `System.Type` 字段进不了序列化数据（`FindProperty` 为 null），加了之后就是 `ManagedReference`，**写得住、清得掉、进撤销栈**。原来的判断不是错，是**问题问窄了**：把「要改个声明才能写」与「写不进去」归成了同一格。真实前提仍是「约束候选集」，而候选集没有公开入口（`TypeSelectionList` 是 internal）⇒ 要**自绘选择器** |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ✅ 已实现 | 表格呈现；**不配绘制器、配处理器**（构建期建列模型并补一份 `[ListDrawerSettings]`） |
-| `[TableMatrix]` | ❌ 缺 | L6（另见 Collections） |
+| `[TableMatrix]` | ⛔ **不作为** | **Serializer 半边**（2026-10-07 核验）：Unity 根本不序列化多维数组（**实测**：`FindProperty` 为 null、零告警）。Odin 自己的原话是「继承 `SerializedMonoBehaviour` 只是为了让它替你序列化」——**要做得先有一套自己的序列化器**。本包判不作为（另见 Collections） |
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 18 / 缺 5 / 不做 1**（2026-10-06：`[AssetList]` 转已实现（两形态）；
+**小计：已实现 19 / 缺 3 / 不做 2**（2026-10-07 逐行重算——此前写着 18/5/1，
+是 `[ColorPalette]` 转已实现后没跟着改；同日 `[TableMatrix]` 由「缺」改判**不作为**，
+缺 4→3、不做 1→2。2026-10-06：`[AssetList]` 转已实现（两形态）；
 2026-10-05：`[TableList]` `[HideInTables]` 转已实现；
 2026-10-04：`[AssetSelector]` `[FilePath]` `[FolderPath]`
 `[PreviewField]` 四项转已实现；同日 `[InlineEditor]` `[HideInInlineEditors]` 转已实现）
@@ -221,7 +227,8 @@
 | `[ValidateInput]` | ⛔ 不做 | 同 `[CustomValueDrawer]`：resolved string + 校验消息层，归 L5 |
 | `[ValueDropdown]` | ✅ 已实现 | 数据源两形态：**序列化的数组/List**，或声明类型**实现 `IList`** 的字段/属性/无参方法（2026-10-07 起；只实现 `IEnumerable` 的不收并告警）；只声明有真行为的选项（另见 Collections） |
 
-**小计：已实现 15 / 缺 1 / 不做 3**（2026-10-05：`[PropertyOrder]` 转已实现；
+**小计：已实现 16 / 缺 0 / 不做 3**（2026-10-07 重算——本节已无 ❌ 行；
+2026-10-05：`[PropertyOrder]` 转已实现；
 2026-10-04：`[ValueDropdown]` 转已实现、
 `[TypeFilter]` 由「缺」改判「不做」；同日 L3 把 `[ShowInInspector]` 转已实现、
 L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
@@ -280,7 +287,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[CustomContextMenu]` | ✅ 已实现 | 菜单在字段那一行；方法名收窄为本类型上的方法名 |
 | `[DisableContextMenu]` | ⛔ 不做 | 右键菜单由 `PropertyField` 掌管、没有现成开关，需先原型验证可拦截 |
 | `[DrawWithUnity]` | ✅ 已实现 | — |
-| `[HideDuplicateReferenceBox]` | ❌ 缺 | L7 |
+| `[HideDuplicateReferenceBox]` | ❌ 缺 | **L7-Inspector，可做**（2026-10-07 核验）：官方原话「hide the reference box, if this property would otherwise be drawn as a reference to another property, **due to duplicate reference values being encountered**」，递归自引用时**照画不误**。判据是「值相同」——而 Unity 的 `managedReferenceId`（**public**）正好给出那份身份。**不需要自研序列化器**，需要那个绘制器 |
 | **`[Indent]`** | **✅ 已实现** | — |
 | **`[InfoBox]`** | **✅ 已实现** | — |
 | `[InlineProperty]` | ✅ 已实现 | **完全体**（2026-10-06）：复合类型的子字段成为真节点；向量这类原生复合类型仍走观感派；类级形态标在**字段的声明类型**上（另见 Essentials/Layout） |
@@ -292,12 +299,12 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | `[OnInspectorInit]` | ✅ 已实现 | 不产生节点 |
 | `[OnStateUpdate]` | ✅ 已实现 | 时机是本包自定：每趟 GUI 布局 |
 | `[OnValueChanged]` | ✅ 已实现 | 只认本类型上的方法名；不支持的类型告警且不触发 |
-| `[TypeSelectorSettings]` | ❌ 缺 | L7 |
-| `[TypeRegistryItem]` | ❌ 缺 | L7 |
+| `[TypeSelectorSettings]` | ❌ 缺 | **L7-Inspector，可做**：官方原话「Provides options for **Type Selectors rendered using Odin**」（`FilterTypesFunction` 是 `bool f(Type)` 的 resolved string，单参名 `type`；另有 `PreferNamespaces`/`ShowCategories`/`ShowNoneItem`）。**不需要自研序列化器**，需要**自绘选择器**；且那个过滤器是**单参方法**，与既有解名器的无参四级阶梯**形态不匹配**，要另开一条 |
+| `[TypeRegistryItem]` | ❌ 缺 | **L7-Inspector，可做但撞一条独立线**：`(name, categoryPath, SdfIconType icon, light/dark 颜色, priority)`——**图标那一项撞上 Pipeline §三 的 `SdfIconType` 未决项**（~1536 个成员的 Sirenix 自有枚举）。先做注册表与分类是可行的，图标要么裁子集、要么单独立项 |
 | **`[PropertyTooltip]`** | **✅ 已实现** | — |
 | **`[SuffixLabel]`** | **✅ 已实现** | — |
 
-**小计：已实现 14 / 缺 4 / 不做 1**（2026-10-05：`[InlineProperty]` 转已实现）
+**小计：已实现 15 / 缺 3 / 不做 1**（2026-10-07 重算；2026-10-05：`[InlineProperty]` 转已实现）
 
 ### Collections（6）
 
@@ -305,11 +312,12 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 
 | 特性 | 状态 | 层 |
 |---|---|---|
-| `[DictionaryDrawerSettings]` | ❌ 缺 | L6 |
+| `[DictionaryDrawerSettings]` | ⛔ **不作为** | **Serializer 半边**（2026-10-07 核验）：Unity 根本不序列化字典（**实测**：`FindProperty` 为 null、零告警），要做得先有一套自己的序列化器。`sealed`，旋钮是 `DisplayMode`/`IsReadOnly`/`KeyColumnWidth`/`KeyLabel`/`ValueLabel` |
 | `[ListDrawerSettings]` | ✅ 已实现 | 自绘容器（行、增删、索引标签）；**元素仍由原生绘制**；旋钮只取五个有真行为的 |
 | `[TableColumnWidth]` | ✅ 已实现 | 表格列宽（不标则弹性均分）；官方的 `resizable` 参数不声明 |
 
-**小计：已实现 2 / 缺 1**（2026-10-05：`[ListDrawerSettings]` `[TableColumnWidth]` 转已实现）
+**小计：已实现 2 / 缺 0 / 不做 1**（2026-10-07：`[DictionaryDrawerSettings]` 由「缺」改判
+**不作为**——它要的是自研序列化器；2026-10-05：`[ListDrawerSettings]` `[TableColumnWidth]` 转已实现）
 
 ### Conditionals（16）
 
@@ -366,7 +374,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 | 特性 | 状态 | 层 |
 |---|---|---|
 | `[ShowDrawerChain]` | ✅ 已实现 | — |
-| `[ShowPropertyResolver]` | ⛔ 不做 | 本包只有一个值后端，没有「property resolver」这个概念，做了是编造。等反射后端出现再说 |
+| `[ShowPropertyResolver]` | ⛔ 不做 | 没有「property resolver」这个概念可展示，做了是编造。**2026-10-07 重述**：原句「等反射后端出现再说」已过期——反射后端 L3 就落地了，但它是**另一条**通道（`[ShowInInspector]`），不是 Odin 那种「值后端可插拔」的解析器栈；本包没有可插拔这件事，故结论不变、理由换掉 |
 
 **小计：已实现 1 / 缺 0 / 不做 1**
 
@@ -381,7 +389,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 88 已实现 + 8 缺 + 8 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 88 已实现 + 6 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
 已实现的 88 个：
@@ -395,7 +403,7 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
   `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
-- **值绘制**（16）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+- **值绘制**（17）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
   `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
   `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
   `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）、
@@ -422,19 +430,28 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 同样不计入的还有 `ITreeLifecycleAttribute` / `ITreeMembershipAttribute` / `ITreeOrderingAttribute`
 三个**内部**标记接口。）
 
-**标 ⛔ 的 8 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]`
+**标 ⛔ 的 10 项**（`[CustomValueDrawer]` `[ValidateInput]` `[Unit]`
 `[HideNetworkBehaviourFields]` `[ShowPropertyResolver]` `[SuppressInvalidAttributeError]`
-`[DisableContextMenu]` `[TypeFilter]`）**不是「还没做」，
-是「核对过签名、评估后不做」**——前 9 条理由见 [Modules/Pipeline.md](Modules/Pipeline.md) 第五节，
-`[TypeFilter]` 见第六节。它们与「缺」分开计，因为「缺」意味着「做得了、只是还没做」。
+`[DisableContextMenu]` `[TypeFilter]`，以及 **2026-10-07 新判的** `[DictionaryDrawerSettings]`
+`[TableMatrix]`）**不是「还没做」，是「核对过签名、评估后不做」**——理由见
+[Modules/Pipeline.md](Modules/Pipeline.md) 第五、六、§二十九。它们与「缺」分开计，
+因为「缺」意味着「做得了、只是还没做」。
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 8 个」也不等于「8 份工作量」**：2026-10-07 盘点之后，剩下的 8 个缺口里
-**5 个是 L7 本体**（多态引用与类型注册表一族）、**2 个是 L7 前置**（字典 / 矩阵——Unity
-根本不序列化，字段进不了树）、**1 个也是 L7 前置**（`[TypeDrawerSettings]`——缺一条可写的
-`System.Type` 通道）。**「卡在设计」那一列归零**（`[ColorPalette]` 的调色板来源已定：
-工程内资产，2026-10-07），故现在的缺口**全部是 L7 那条产品线及其前置**。
+**「缺 6 个」也不等于「6 份工作量」**：2026-10-07 核验之后（[Pipeline §二十九](Modules/Pipeline.md)），
+剩下的 6 个缺口**全部是可做的**，且全部是**同一件事的不同侧面**——它们都要**先有一个
+本包自己的类型选择器 / 多态绘制器**：
+
+| 缺口 | 真实前提 |
+|---|---|
+| `[PolymorphicDrawerSettings]` `[TypeSelectorSettings]` | 自绘选择器（旋钮挂在「Odin 的选择器」上） |
+| `[TypeRegistryItem]` | 选择器 + 注册表（**图标那项撞 `SdfIconType` 独立线**） |
+| `[TypeDrawerSettings]` | 自绘选择器；`System.Type` 的通道**已有**，代价是字段加 `[SerializeReference]` |
+| `[HideReferenceObjectPicker]` `[HideDuplicateReferenceBox]` | 「有一个引用框可抑制」⇒ 同样先得有那个绘制器 |
+
+**「卡在设计」那一列早已归零**（`[ColorPalette]`，2026-10-07）；
+**字典与矩阵已判不作为**（要自研序列化器，见 L7 一节）。
 换句话说：**L0–L6 里「做得了、只是还没做」的已归零**（L1a、L1b 两族、`[InlineEditor]` 一族、
 L5 的按钮与回调两批、L3 的反射后端与窗口、L2 的预制体上下文族、L4 的顺序与内联、
 L6 的容器 / 元素 / 回调 / 搜索 / 资产列表，以及两条「嵌套 / 元素层」能力轮，全部清完）。
@@ -646,20 +663,45 @@ L2 表当时还剩 `[ShowIn]` 一族、`[ShowIfGroup]` 与跨对象条件——�
 > **两形态都做**（列表 + 单元素——官方明说两半「行为不同」，只做一半是半成品），
 > 只声明 `Path` / `AssetNamePrefix` 两个旋钮（官方另外四个各有不做的理由，见 Pipeline §二十）。
 > **L6 至此只剩**：`[DictionaryDrawerSettings]` `[TableMatrix]`（前置是 L7——Unity 根本不
-> 序列化字典与矩阵，字段进不了树）、搜索按元素内的反射值匹配。
+> 序列化字典与矩阵，字段进不了树）。
 > （**2026-10-06 追记**：**元素层深度 > 1** 已于第十九批落地——见家底与 §二十二。）
+> （**2026-10-07 追记**：搜索按元素内的反射值匹配已于第二十二批落地——见 Pipeline §二十六；
+> 另两批是 `[ColorPalette]`（§二十七）与窗口两个切口（§二十八）。**L6 至此真的只剩
+> 字典与矩阵这两条 L7 前置**。）
 
-## L7 · 性质不同：那是 Odin 的另一个产品
+## L7 · 性质不同：那是 Odin 的另一个产品　🟡 **已核验（2026-10-07，第二十五批）**
 
 多态引用、`[TypeRegistryItem]`、`[PolymorphicDrawerSettings]`、`[HideReferenceObjectPicker]`、
 `[SerializeReference]` 类型切换。
 
 **Odin 是 Inspector + Serializer 两个产品。** 上面 L0–L6 全是「Inspector」那半边；
-L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注册表、引用的弱值字典、
-跨程序集的类型解析、与 Unity 序列化的互操作）。
+L7 原先记的是「要求自己实现一套**序列化器**与**多态引用解析**（类型注册表、引用的弱值字典、
+跨程序集的类型解析、与 Unity 序列化的互操作）」，并判「这不是『再补几个特性』的量级，
+而是另一条产品线」。
 
-**这不是「再补几个特性」的量级**，而是另一条产品线。本项目**完全没有**这一块，
-也不该把它与 L0–L6 并列看待。
+> **2026-10-07 逐条核过签名与实测之后，上面那个判断要改一半。**
+> 证据全在 [Pipeline §二十九](Modules/Pipeline.md)，这里只放结论：
+>
+> 1. **「画」这半边 Unity 已经给了。** `[SerializeReference]` 字段今天就在序列化数据里
+>    （`ManagedReference`），由本包末端交给 `PropertyField`——**Unity 原生的多态 UI
+>    今天就能显示**。缺的不是「画」，是「本包的特性作用进去」。
+> 2. **里面的子字段有独立句柄**（路径就是 `shape.hp`，与嵌套类型**同一条点分约定**）
+>    ⇒ 让它们进树**不必新建值后端**；`managedReferenceValue` 给的是**活实例、可写**，
+>    写回落盘、而且**进撤销栈**（那五件事里拿到了两件）。
+> 3. **8 个特性里没有一个「必须自研序列化器才能做」。** 拦路的是另外两件事：
+>    **自绘类型选择器**（Unity 没有公开的候选集入口，`TypeSelectionList` 是 internal）
+>    与**新的可写成员来源**（字典/矩阵——Unity 根本不序列化它们，实测零告警）。
+> 4. `[TypeDrawerSettings]` 的「可写 `System.Type` 通道」**已经有了**——代价是使用方要在
+>    字段上加一个 `[SerializeReference]`（裸 `System.Type` 字段进不了树，**实测**）。
+>
+> **于是 L7 该拆成两半：**
+>
+> | 半边 | 内容 | 判断 |
+> |---|---|---|
+> | **Inspector** | 多态引用进管线（展开 + 读路径）＋ 自绘选择器一族（`[PolymorphicDrawerSettings]` `[TypeSelectorSettings]` `[TypeRegistryItem]` `[TypeDrawerSettings]`）＋ 两个「hide」 | 🟡 **一条能走的能力轮**，不再是「另一条产品线」 |
+> | **Serializer** | 字典与矩阵随资产存档（`[DictionaryDrawerSettings]` `[TableMatrix]`） | ⛔ **本包不作为**——Unity 不序列化它们，要做得先有一套自己的序列化器；Odin 自己的原话是「继承 `SerializedMonoBehaviour`」 |
+>
+> **该不该做、若做分几批、边界画在哪**，见 [Roadmap](Roadmap.md) 的 L7 一节。
 
 ---
 
@@ -757,15 +799,22 @@ L7 要求自己实现一套**序列化器**与**多态引用解析**（类型注
     一层」）兑现了：阶梯搬进一层，`[ToggleGroup]` 与 `[MinMaxSlider]` 接上反射那一级。
     顺带修掉一处**文档与代码互相矛盾**——两份包内 README 对「嵌套层走不走反射」各说各话，
     是分层写作的必然产物（写这句时那条腿还没有）。**「仍欠」至此清零**。
-15. **L7**——要么不做，要么当成独立产品立项；`[TypeDrawerSettings]` 自 2026-10-06 起记在它的
-    前置里（与字典 / 矩阵同类）。
+15. ~~**L7**——要么不做，要么当成独立产品立项~~——🟡 **2026-10-07 已核验（第二十五批）**，
+    结论**改了一半**：**Serializer 那半判不作为**（字典/矩阵要自研序列化器，本包不做）；
+    **Inspector 那半是一条能走的能力轮**（多态引用进管线 + 自绘选择器一族），
+    8 个特性里没有一个「必须自研序列化器」。
+    这一条是**「推荐顺序」里最后一条**——L0–L6 与本条至此全部有了结论。
+    该不该做、若做分几批，见 [Roadmap](Roadmap.md) 的 L7 一节；
+    核验过程与证据见 [Pipeline §二十九](Modules/Pipeline.md)。
 
 **判据是「一次投入换来多少个特性」**：L1a、L1b、L5 都是高杠杆（架构已就位或只需一块基建），
 已兑现；L3 是**低杠杆但清掉了一类能力**——它只添了一个特性，却让「画 Unity 不序列化的东西」
 这件事从「做不到」变成「做得到（只读）」，顺带解锁了条件族与窗口；
 预制体那一族是**中杠杆高复用**——一块探测换来六个特性，而且把 Unity 原生的一类上下文
 （预制体资产 / 实例 / 嵌套 / 隔离编辑）第一次接进了条件体系。
-L7 是另一条产品线。
+**L7 核验之后不再是「另一条产品线」**：Serializer 那半（字典/矩阵）本包判不作为，
+Inspector 那半与 L3 同型——**低杠杆但清掉一类能力**（让「多态引用里的成员」从
+「进不了树」变成「进得了」，顺带解锁选择器一族）。
 
 **经验留给下一轮（逐轮累积）**：其一，**核对签名之后再动手**——四轮共核过 47 个特性，
 才敢把 8 个判成「不做」；其二，**分组族落地时先修了两处既有缺陷**
@@ -816,14 +865,9 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 判据要写成对前缀免疫的形式（`[TabGroup]` 改成「按段收尾」的比对），或者干脆别存派生常量。
 **加前缀这一轮把这条一直潜伏的缺陷照了出来**（它今天就已经中招，只是没人试过
 「类级分组 + `[TabGroup]`」）。推论：**给一处引入「改写路径」这种全局操作时，先搜一遍
-「谁把路径的某个派生量记住了」**——那是改动面里最难靠编译器发现的一类。**第十条（2026-10-06 新增）：路径会被改写，而「从路径推导出来的常量」不会跟着走。**
-`PropertyGroupAttribute.CloneForPath` 只改写 `GroupID`。凡是**在构造期从 `GroupID` 算出来
-再存成只读字段**的东西（`TabGroupAttribute.TabsGroupID` 就是），在路径被加前缀时都会失配——
-而路径被加前缀是**常事**：类级分组的分发会改，嵌套层的分组装配还会再改一次。
-判据要写成对前缀免疫的形式（`[TabGroup]` 改成「按段收尾」的比对），或者干脆别存派生常量。
-**加前缀这一轮把这条一直潜伏的缺陷照了出来**（它今天就已经中招，只是没人试过
-「类级分组 + `[TabGroup]`」）。推论：**给一处引入「改写路径」这种全局操作时，先搜一遍
 「谁把路径的某个派生量记住了」**——那是改动面里最难靠编译器发现的一类。
+（**2026-10-07**：这一段原先**逐字重复了两遍**且第二份从行中间直接续上，
+本批删掉重复的那一份——它是个排版事故，不是两条经验。）
 
 **第十一条（2026-10-06 新增）：「让判据看见」与「让消费者到位」必须同批，而闸门往往不止一道。**
 嵌套层的读路径这一轮要让展开判据看见新的成员种类（`[ShowInInspector]` 的字段/属性、
@@ -843,6 +887,14 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 **遇到「两个方案都贵」的先决问题时，先问一句：这个问题一定要存在吗？**
 （同一轮里还有一条小号的同款：界面上「谁先读到元素节点」这个顺序问题，靠把对账提到
 树级绘制入口——**先于所有消费者**——消掉，而不是在集合绘制器里再维护一套。）
+
+**第十三条（2026-10-07 新增）：「缺一条通道」与「通道要求改一个约定」是两种结论，报价差一个量级。**
+`[TypeDrawerSettings]` 这一项挪过三次层：前两次问的都是「**有没有**一条可写的 `System.Type`
+通道」，答案一直是「没有」——直到本轮把问题换成「**把它写进去需要谁改什么**」，才量出第三种
+答案：**通道在，只是要求使用方在字段上加一个 `[SerializeReference]`**（裸字段进不了树，
+加了就进得了、写得住、清得掉，**实测**）。一次实测把「不可能」变成「多写一个特性」。
+**判据写成「能不能写进去」时，记得把「要谁改什么」一并量出来**；否则「写不进去」与
+「要改个声明才能写」会被归成同一格，而这两格背后的工作量差着一个数量级。
 
 ---
 
