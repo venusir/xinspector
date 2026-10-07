@@ -179,6 +179,28 @@ namespace XInspector.Editor
         public bool Dirty;
     }
 
+    /// <summary>
+    /// 一个**尚未展开**的多态槽位的状态：只记「上次看到的具体类型」。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>与 <see cref="PolymorphicLayerState"/> 分开两个类，是刻意的。</b> 仓内有明文不变量
+    /// 「**有层状态**就等于『这个节点是个已展开的多态容器』」——末端选型、注销、重建与用例
+    /// 都吃它；给层状态加一个「已展开」标志位要动那四处，另立一个类则既有规则一条都不用改，
+    /// 两个类各表达一个事实。
+    /// </para>
+    /// <para>
+    /// 它把「类型变了没」这条每帧判据做成**一次引用比较**（<c>Type</c> 对象比较，零分配）：
+    /// 槽位被赋值（本包的选择器、Unity 原生 UI、代码、撤销都算）之后，对账按**构建期同一道闸**
+    /// 决定要不要立刻展开——「选了类型就出现子字段」与 Unity 原生一致。
+    /// </para>
+    /// </remarks>
+    internal sealed class PolymorphicWatchState
+    {
+        /// <summary>上次看到的具体类型（登记时先填一次；对账时与当前值比）。</summary>
+        public Type ObservedType;
+    }
+
     /// <summary>多态展开被守卫挡下的两种理由。</summary>
     internal enum PolymorphicBlock
     {

@@ -282,16 +282,18 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 展开过的多态引用容器，供每趟绘制之前的对账使用（见 <see cref="PolymorphicReferenceSync"/>）。
+        /// 多态引用容器，供每趟绘制之前的对账使用（见 <see cref="PolymorphicReferenceSync"/>）。
         /// </summary>
         /// <remarks>
         /// 与 <see cref="ElementCollections"/> 同款的三条纪律：**幂等登记**、
         /// **注销必须先于 <c>DisposeNode</c>**、**DFS 先序**（祖先的下标恒小于其后代）。
+        /// <b>表里收两种：已展开的（层状态）与只看着的（观察状态）</b>——后者是「槽位随时可能
+        /// 被赋值」的那一半，对账靠它做首建。
         /// </remarks>
         internal List<InspectorProperty> PolymorphicContainers { get; } = new List<InspectorProperty>();
 
         /// <summary>
-        /// 登记一个展开过的多态容器（幂等）。
+        /// 登记一个多态容器（幂等）；展开与否都收。
         /// </summary>
         /// <param name="container">多态成员节点。</param>
         internal void AddPolymorphicContainer(InspectorProperty container)
@@ -306,6 +308,10 @@ namespace XInspector.Editor
         /// 递归注销一棵子树里登记过的多态容器（那棵子树即将被释放）。
         /// </summary>
         /// <param name="node">子树根（含它自己）。</param>
+        /// <remarks>
+        /// <b>两种状态都要认</b>：只看层状态的话，「只看着的」那些条目会在子树释放之后
+        /// 变成强引用作废子树的僵尸（与两张登记表那条既有教训同款）。
+        /// </remarks>
         internal void UnregisterPolymorphicLayersIn(InspectorProperty node)
         {
             if (node == null)
@@ -313,7 +319,8 @@ namespace XInspector.Editor
                 return;
             }
 
-            if (node.State.Get<PolymorphicLayerState>() != null)
+            if (node.State.Get<PolymorphicLayerState>() != null ||
+                node.State.Get<PolymorphicWatchState>() != null)
             {
                 PolymorphicContainers.Remove(node);
             }

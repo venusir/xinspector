@@ -552,18 +552,28 @@ namespace XInspector.Editor
         /// <param name="tree">属性树。</param>
         /// <param name="node">子树根（含它自己）。</param>
         /// <remarks>
-        /// 「展开过的多态容器」的判据是**有子节点**：判据不给它展开时 <c>ExpandChildren</c>
-        /// 根本没被调过，子节点数是 0。于是这里不需要再问一遍那道闸（问两遍的迟早有一处先漂）。
+        /// <b>两支都登记</b>：已展开的走层状态（判据是**有子节点**——判据不给它展开时
+        /// <c>ExpandChildren</c> 根本没被调过），**未展开的走观察状态**——槽位随时可能被赋值
+        /// （本包的选择器、Unity 原生 UI、代码、撤销都算），那时的首建要靠对账发现它。
         /// </remarks>
         private static void RegisterPolymorphicLayersIn(PropertyTree tree, InspectorProperty node)
         {
             if (node.Kind == InspectorPropertyKind.Member &&
-                NestedMemberExpansion.IsPolymorphicReference(node.Member as FieldInfo) &&
-                node.RawChildren.Count > 0)
+                NestedMemberExpansion.IsPolymorphicReference(node.Member as FieldInfo))
             {
-                var layer = node.State.GetOrCreate<PolymorphicLayerState>();
-                layer.ConcreteType = node.Type;
-                layer.Dirty = false;
+                if (node.RawChildren.Count > 0)
+                {
+                    var layer = node.State.GetOrCreate<PolymorphicLayerState>();
+                    layer.ConcreteType = node.Type;
+                    layer.Dirty = false;
+                }
+                else
+                {
+                    // 观察状态先记下当前类型，让每帧判据退化成一次引用比较
+                    // （对账在类型变化那一刻才去问构建期那道闸）。
+                    var watch = node.State.GetOrCreate<PolymorphicWatchState>();
+                    watch.ObservedType = PolymorphicReference.ResolveConcreteType(node.ValueEntry?.SerializedProperty);
+                }
 
                 tree.AddPolymorphicContainer(node);
             }
@@ -573,6 +583,43 @@ namespace XInspector.Editor
             {
                 RegisterPolymorphicLayersIn(tree, children[i]);
             }
+        }
+
+        /// <summary>
+        /// **首建**一个此前未展开的多态容器：改写类型 → 过构建期那道闸 → 建。
+        /// </summary>
+        /// <param name="container">多态成员节点（此前只有观察状态）。</param>
+        /// <returns>建过返回 <c>true</c>；没过闸返回 <c>false</c>（什么都不建）。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>判据要按「具体类型」问，且必须在问闸之前把节点的类型改写到位</b>——与构建期
+        /// <see cref="ResolveMemberType"/> 同款（那里也是先解析类型、再让判据看到它）。
+        /// 不先改写的话 <c>ShouldExpand</c> 看到的是**声明类型**（接口/抽象类），
+        /// 「具体类型里有没有本包特性」那一问全落空，安全阀会把该展开的也挡住。
+        /// </para>
+        /// <para>
+        /// 过闸之后走的就是 <see cref="RebuildPolymorphicLayer"/> 的同一条流水线（它自己的
+        /// 首建分支负责重接容器的链）。反射豁免与它同源：只在类型变化那一刻发生。
+        /// </para>
+        /// </remarks>
+        internal static bool TryBuildPolymorphicLayer(InspectorProperty container)
+        {
+            var property = container?.ValueEntry?.SerializedProperty;
+
+            if (property == null)
+            {
+                return false;
+            }
+
+            container.Type = ResolveMemberType(container.Member as FieldInfo, property);
+
+            if (!NestedMemberExpansion.ShouldExpand(container, property))
+            {
+                return false;
+            }
+
+            RebuildPolymorphicLayer(container);
+            return true;
         }
 
         /// <summary>
@@ -591,9 +638,16 @@ namespace XInspector.Editor
         /// 新的不建——用户看到的就是原生那一行，与从没展开过一样。
         /// </para>
         /// <para>
+        /// <b>首建（<c>layer == null</c>）走同一条流水线</b>：对账发现一个**未展开**的槽位刚有了值
+        /// （本包的选择器、Unity 原生 UI、代码、撤销都算）时被调到。没有旧子树可释放；
+        /// 额外只多做一件——**重接容器自己的链**（末端要从原生兜底换成多态末端）。
+        /// </para>
+        /// <para>
         /// <b>「反射仅限构建期」这条规则在此豁免</b>——与元素层重建同款（见
         /// <see cref="PolymorphicReferenceSync"/>）：换类型是绘制期才发现的，而解析一次类型
-        /// 不贵、也不进每帧路径。
+        /// 不贵、也不进每帧路径。首建那条路还要问一次
+        /// <c>NestedMemberExpansion.ShouldExpand</c>（与构建期**同源**，安全阀照旧）——
+        /// 同样只在类型变化那一刻发生。
         /// </para>
         /// </remarks>
         internal static void RebuildPolymorphicLayer(InspectorProperty container)
@@ -602,23 +656,34 @@ namespace XInspector.Editor
             var tree = container.Owner;
             var serializedObject = container.Owner?.SerializedObject;
 
-            if (layer == null || serializedObject == null || tree == null)
+            if (serializedObject == null || tree == null)
             {
                 return;
             }
 
             var children = container.RawChildren;
 
-            // 1. 旧子树整体释放。**注销走两张表一起的那个入口**：多态层里可以嵌元素层
-            //    （成员里放列表），反过来也行——只注销自己那张表，另一张就会留下强引用
-            //    作废子树的僵尸。注销必须在释放**之前**（DisposeNode 会把状态袋 Reset 清空）。
-            for (var i = 0; i < children.Count; i++)
-            {
-                tree.UnregisterLayersIn(children[i]);
-                PropertyTree.DisposeNode(children[i]);
-            }
+            // **首建**（`layer == null`）：对账发现一个**未展开**的槽位刚刚有了值。
+            // 没有旧子树可释放，补建层状态即可；末尾还要多做两件只有首建才做的事（见第 4 步）。
+            var firstBuild = layer == null;
 
-            children.Clear();
+            if (firstBuild)
+            {
+                layer = container.State.GetOrCreate<PolymorphicLayerState>();
+            }
+            else
+            {
+                // 1. 旧子树整体释放。**注销走两张表一起的那个入口**：多态层里可以嵌元素层
+                //    （成员里放列表），反过来也行——只注销自己那张表，另一张就会留下强引用
+                //    作废子树的僵尸。注销必须在释放**之前**（DisposeNode 会把状态袋 Reset 清空）。
+                for (var i = 0; i < children.Count; i++)
+                {
+                    tree.UnregisterLayersIn(children[i]);
+                    PropertyTree.DisposeNode(children[i]);
+                }
+
+                children.Clear();
+            }
 
             // 2. 换类型，再按新类型重新展开。
             var property = container.ValueEntry?.SerializedProperty;
@@ -652,7 +717,15 @@ namespace XInspector.Editor
                 ExpandCollectionElementsIn(tree, children[i]);
             }
 
-            // 4. 挂链（递归覆盖新子树）。
+            // 4. 挂链（递归覆盖新子树）。**首建多一件**：容器自己的链要**重接**——
+            //    它的末端此前是原生兜底（UnityFallbackDrawer），现在要换成多态末端。
+            //    时机安全：对账跑在 `PropertyTree.Draw` 开头、一切绘制之前，
+            //    换的是**尚未被本帧绘制**的那个节点的链。
+            if (firstBuild)
+            {
+                AttachChain(container, TerminalFor(container));
+            }
+
             for (var i = 0; i < children.Count; i++)
             {
                 AttachChainRecursive(children[i]);

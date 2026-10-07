@@ -60,19 +60,25 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 对账一个多态容器；重建过返回 <c>true</c>。
+        /// 对账一个多态容器；重建过（含**首建**）返回 <c>true</c>。
         /// </summary>
         /// <param name="container">多态成员节点。</param>
         /// <returns>重建过返回 <c>true</c>。</returns>
         public static bool Reconcile(InspectorProperty container)
         {
-            var layer = container?.State.Get<PolymorphicLayerState>();
             var property = container?.ValueEntry?.SerializedProperty;
 
-            if (layer == null || property == null)
+            if (property == null)
             {
-                // 没展开过的多态成员（绝大多数）在这里一句话都不说。
                 return false;
+            }
+
+            var layer = container.State.Get<PolymorphicLayerState>();
+
+            if (layer == null)
+            {
+                // **首建那一格**：这个槽位还没展开过。
+                return TryFirstBuild(container, property);
             }
 
             var concrete = PolymorphicReference.ResolveConcreteType(property);
@@ -84,6 +90,39 @@ namespace XInspector.Editor
 
             PropertyTreeBuilder.RebuildPolymorphicLayer(container);
             return true;
+        }
+
+        /// <summary>
+        /// 未展开的槽位：类型变了、且过得了构建期那道闸，就**首建**（返回 <c>true</c>）。
+        /// </summary>
+        /// <param name="container">多态成员节点。</param>
+        /// <param name="property">它的序列化属性。</param>
+        /// <returns>首建过返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// 每帧的廉价判据是**观察状态里那次引用比较**（<c>Type</c> 对象比较，零分配）：
+        /// 类型没变就一句话不说——空槽位与「有值但没接管」的绝大多数都在这里退场。
+        /// </para>
+        /// <para>
+        /// 闸与建都在 <c>PropertyTreeBuilder.TryBuildPolymorphicLayer</c> 里（那边先按具体类型
+        /// 改写节点、再问 <c>NestedMemberExpansion.ShouldExpand</c>）——「没用到本包的类型不展开」
+        /// 那条安全阀在首建这条路上照旧成立。
+        /// </para>
+        /// </remarks>
+        private static bool TryFirstBuild(InspectorProperty container, SerializedProperty property)
+        {
+            var watch = container.State.GetOrCreate<PolymorphicWatchState>();
+            var concrete = PolymorphicReference.ResolveConcreteType(property);
+
+            if (watch.ObservedType == concrete)
+            {
+                return false;
+            }
+
+            // 先记账：无论展不展开，都不再为这一次变化重问。
+            watch.ObservedType = concrete;
+
+            return concrete != null && PropertyTreeBuilder.TryBuildPolymorphicLayer(container);
         }
 
         #endregion

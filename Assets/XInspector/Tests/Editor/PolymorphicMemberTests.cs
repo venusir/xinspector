@@ -347,6 +347,158 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 空槽位与外部赋值（首建）
+
+        /// <summary>
+        /// 空槽位写值之后，对账**立刻**按同一道闸展开——与 Unity 原生的「选了类型就出现子字段」一致。
+        /// </summary>
+        /// <remarks>
+        /// 首建走的是**同一条七步流水线**（`RebuildPolymorphicLayer` 的 `layer == null` 分支）：
+        /// 补建层状态、按新类型展开、挂链、分组装配。末端也从原生兜底换成多态末端——
+        /// 链是重接的（对账在一切绘制之前，此刻换链安全）。
+        /// </remarks>
+        [Test]
+        public void 空槽位写值之后对账即展开()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(shape.Children.Count, Is.EqualTo(0), "起点：空槽位没有子节点。");
+                Assert.That(ChainTail(shape), Is.InstanceOf<UnityFallbackDrawer>(), "起点：走原生兜底。");
+
+                Assert.That(
+                    PolymorphicSlotWrite.TryWrite(
+                        typeof(Circle),
+                        NonDefaultConstructorPreference.ConstructIdeal,
+                        shape.ValueEntry.SerializedProperty,
+                        typeof(IShape),
+                        undoEnabled: false,
+                        out var reason),
+                    Is.True,
+                    reason);
+
+                Assert.That(
+                    PolymorphicReferenceSync.ReconcileAll(tree),
+                    Is.EqualTo(1),
+                    "对账发现了新值并按闸展开。");
+
+                Assert.That(shape.Children.Count, Is.GreaterThan(0), "子字段出现了。");
+                Assert.That(shape.Type, Is.EqualTo(typeof(Circle)));
+                Assert.That(
+                    ChainTail(shape),
+                    Is.Not.InstanceOf<UnityFallbackDrawer>(),
+                    "末端已被换成多态末端（链重接过了）。");
+                Assert.That(Find(shape, "shape/几何"), Is.Not.Null, "分组也装上了——首建是完整流水线。");
+
+                Assert.That(PolymorphicReferenceSync.ReconcileAll(tree), Is.EqualTo(0), "类型没再变 ⇒ 廉价 no-op。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// 写进来的类型**用不到本包**时不展开——安全阀照旧（首建也要过构建期那同一道闸）。
+        /// </summary>
+        [Test]
+        public void 写进来的类型用不到本包时不展开()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(
+                    PolymorphicSlotWrite.TryWrite(
+                        typeof(PlainShape),
+                        NonDefaultConstructorPreference.ConstructIdeal,
+                        shape.ValueEntry.SerializedProperty,
+                        typeof(IShape),
+                        undoEnabled: false,
+                        out var reason),
+                    Is.True,
+                    reason);
+
+                Assert.That(PolymorphicReferenceSync.ReconcileAll(tree), Is.EqualTo(0), "没过闸，不展开。");
+                Assert.That(shape.Children.Count, Is.EqualTo(0), "外观一个字不变。");
+                Assert.That(ChainTail(shape), Is.InstanceOf<UnityFallbackDrawer>(), "仍走原生兜底。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **未展开**的托管引用成员也进登记表——槽位随时可能被赋值（本包的选择器、原生 UI、
+        /// 代码、撤销都算），对账要看得见它。
+        /// </summary>
+        [Test]
+        public void 未展开的托管引用成员进了登记表()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+
+                Assert.That(
+                    tree.PolymorphicContainers.Contains(Find(tree.Root, "shape")),
+                    Is.True,
+                    "空槽位也在表上（只看着，不展开）。");
+                Assert.That(
+                    tree.PolymorphicContainers.Contains(Find(tree.Root, "alive")),
+                    Is.False,
+                    "普通成员不在表里。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>首建之后新子树的**链**也在（不是只建了节点）。</summary>
+        [Test]
+        public void 首建之后新子树的链也在()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(
+                    PolymorphicSlotWrite.TryWrite(
+                        typeof(Circle),
+                        NonDefaultConstructorPreference.ConstructIdeal,
+                        shape.ValueEntry.SerializedProperty,
+                        typeof(IShape),
+                        undoEnabled: false,
+                        out var reason),
+                    Is.True,
+                    reason);
+
+                PolymorphicReferenceSync.ReconcileAll(tree);
+
+                var group = Find(shape, "shape/几何");
+                Assert.That(group, Is.Not.Null, "新分组装配出来了。");
+
+                var radius = Find(group, "shape.radius");
+                Assert.That(radius, Is.Not.Null, "新子节点在。");
+                Assert.That(radius.Chain.Entries.Length, Is.GreaterThan(0), "新子树的链接上了。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region 多选
 
         /// <summary>多选混合态一律不展开——不拿一个目标的结构冒充全体（读路径成员同样不出现）。</summary>
