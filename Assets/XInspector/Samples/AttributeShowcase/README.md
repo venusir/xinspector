@@ -132,6 +132,10 @@
 | `[SerializeReference, TypeDrawerSettings]`（`anyType`） | 一行「当前类型名」的**假字段按钮**：点开是本包自绘的候选菜单——**按命名空间分层**、当前值带勾、有值时最上面多一项「（无）」（点它清空）。不设约束时候选是「除接口以外的所有类型」——分层是唯一能用的导航 |
 | `TypeDrawerSettings(BaseType = typeof(IShowcaseShape))`（`shapeType`） | 候选收窄到上面多态那段那个接口的派生（`ShowcaseCircle` / `ShowcaseSquare`）——菜单小得多，一眼看完 |
 | `TypeDrawerSettings(BaseType = …, Filter = IncludeConcreteTypes \| IncludeInterfaces)`（`shapeTypeNarrowed`） | 与上一条同一个基类型，但**只要具体的类与接口**——抽象类与泛型不进菜单。（过滤位的差异在 `anyType` 那种不设约束的场景里最明显：候选是整个工程的类型，分层菜单才显出用处。） |
+| `TypeSelectorSettings(PreferNamespaces = false)`（`byAssembly`） | 分层照旧，但类别名换成**程序集简单名**——**与 Odin 的默认档相反**（Odin 不写就是程序集类别，本包不写是命名空间分层：属性在不在不该改变菜单形状）。与上面三条对照着看 |
+| `TypeSelectorSettings(ShowCategories = false)`（`flattened`） | **拍平**：没有类别子菜单，所有候选挤在一层——编辑器菜单没有搜索框，项多了就不好用（这里就是不设约束的全量候选，一眼看出为什么默认不这样） |
+| `TypeSelectorSettings(ShowNoneItem = false)`（`mustPick`） | 有值时**也不给**「（无）」清空入口（上面几条有值时都有一项）。这个旋钮**只做「抑制」**——空槽位本来就没有它；想清空只能改代码或换别的字段 |
+| `TypeSelectorSettings(FilterTypesFunction = nameof(IsShowcaseTypeAllowed))`（`filtered`） | **用户过滤器**：只有名字以 `Showcase` 开头的类型进菜单（`IsShowcaseTypeAllowed` 那个方法说了算）——菜单明显比 `anyType` 短。谓词在**那一层的实例**上每次现调（本示例的谓词是纯函数；读字段的谓词就是活的过滤） |
 
 > **字段必须是托管引用的 `System.Type`**（`[SerializeReference]`）——裸的 `System.Type` 字段
 > 不在序列化数据里、进不了 Inspector；忘了加会在 Console 里得到一条**构建期告警**，直接点名
@@ -151,12 +155,14 @@
 | `PolymorphicDrawerSettings(ShowBaseType = true)`（`outlined`） | 行上带**基类型**：显示成「ShowcaseSquare （IShowcaseShape）」（格式本包自定）。对照上面 `picked`（只显示具体类型名） |
 | `PolymorphicDrawerSettings(ReadOnlyIfNotNullReference = true)`（`lockedIn`） | **有值之后那一行变灰**（不许再换类型），而**子字段照常可编辑**——这个旋钮只锁「改类型」那一行。想再点按钮：先把槽位清空（取消勾选不行它没勾选框，直接改代码或换回别的状态） |
 | `PolymorphicDrawerSettings(NonDefaultConstructorPreference = LogWarning)`（`guardedPick`） | 菜单里选 `ShowcaseParameterized`（**只有带参构造**）：Console 里出现一条「按 LogWarning 档不构造」的说明，槽位**原样不动**。对照：`picked` 用默认档（`ConstructIdeal`）选它就会挑那个带参构造、参数填 0 |
+| `PolymorphicDrawerSettings(CreateInstanceFunction = nameof(MakeShowcaseShape))`（`made`） | **自定义造实例**：选 `ShowcaseParameterized` 拿到的是**初值 42** 的实例（内置档只会把参数填 0）；选 `ShowcaseCircle` / `ShowcaseSquare` 时函数返回 `null` ⇒ Console 一条告警、槽位**原样不动**——函数说「不给」**不回落**内置工厂 |
 | 对照：上面的 `shape`（**没标特性**） | 那一行仍是 **Unity 原生**的多态 UI——标与不标的差别一眼可见 |
 
 > **回退**：槽位有值、但那个类型**用不到本包**时这一行退回 Unity 原生（Console 里一条说明）——
 > 本包只接管「用得到本包」的类型。**点当前类型 = 无操作**（不会拿一个同类型的新实例把你的值换掉）。
-> **换类型这一下能撤销**（与上面类型选择器相反）。官方的 `CreateInstanceFunction` 还没做
-> （要单参解名通道，留下一批）。
+> **换类型这一下能撤销**（与上面类型选择器相反）。`CreateInstanceFunction` 见上面 `made` 一行
+> ——**解析失败才回落**内置工厂（配置错不该让换类型整个不可用），点击时函数返回 `null`
+> 是「明确拒绝」，不回落。
 
 ### 调色板
 

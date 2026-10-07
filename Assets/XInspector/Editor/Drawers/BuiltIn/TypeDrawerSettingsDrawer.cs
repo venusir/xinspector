@@ -497,7 +497,7 @@ namespace XInspector.Editor
             return options;
         }
 
-        /// <summary><see cref="Build"/> 的默认档（命名空间分层 + 分类别）。</summary>
+        /// <summary><see cref="Build(IList{Type}, Type)"/> 的默认档（命名空间分层 + 分类别）。</summary>
         /// <param name="candidates">候选（已排序）。</param>
         /// <param name="current">当前选中的类型；可以为 <c>null</c>。</param>
         /// <returns>选项表。</returns>
@@ -555,7 +555,7 @@ namespace XInspector.Editor
                 : category + "/" + display;
         }
 
-        /// <summary><see cref="MenuPath"/> 的默认档（命名空间分层 + 分类别）。</summary>
+        /// <summary><see cref="MenuPath(Type)"/> 的默认档（命名空间分层 + 分类别）。</summary>
         /// <param name="type">类型。</param>
         /// <returns>菜单路径。</returns>
         public static string MenuPath(Type type)

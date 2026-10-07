@@ -164,6 +164,27 @@ namespace XInspector.Samples
             NonDefaultConstructorPreference = NonDefaultConstructorPreference.LogWarning)]
         public IShowcaseShape guardedPick = new ShowcaseCircle();
 
+        /// <summary>
+        /// **自定义造实例**：换类型 / 选类型时走自己的方法（<c>MakeShowcaseShape</c>）——
+        /// 它只为 <see cref="ShowcaseParameterized"/> 造实例（初值 42），其余返回 <c>null</c>：
+        /// 后者会**告警且不写**（不回落内置工厂）。
+        /// </summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings(CreateInstanceFunction = nameof(MakeShowcaseShape))]
+        public IShowcaseShape made = new ShowcaseCircle();
+
+        /// <summary><c>filtered</c> 的过滤器：只放行本文件里的那几个演示类型。</summary>
+        /// <param name="type">候选类型。</param>
+        /// <returns>是否放行。</returns>
+        public bool IsShowcaseTypeAllowed(Type type) =>
+            type != null && type.Name.StartsWith("Showcase", StringComparison.Ordinal);
+
+        /// <summary><c>made</c> 的造实例函数：只给参数化那个实现造（初值 42），其余返回 null。</summary>
+        /// <param name="type">选中的类型。</param>
+        /// <returns>实例；不给时返回 <c>null</c>。</returns>
+        public object MakeShowcaseShape(Type type) =>
+            type == typeof(ShowcaseParameterized) ? new ShowcaseParameterized(42) : null;
+
         #endregion
 
         #region 值绘制
@@ -525,6 +546,30 @@ namespace XInspector.Samples
             BaseType = typeof(IShowcaseShape),
             Filter = TypeInclusionFilter.IncludeConcreteTypes | TypeInclusionFilter.IncludeInterfaces)]
         public Type shapeTypeNarrowed;
+
+        /// <summary>按**程序集类别**分组（本包默认是命名空间分层——与 Odin 的默认档相反）。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        [TypeSelectorSettings(PreferNamespaces = false)]
+        public Type byAssembly;
+
+        /// <summary>拍平成一层（没有类别子菜单；项多了就不好用——慎重）。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        [TypeSelectorSettings(ShowCategories = false)]
+        public Type flattened;
+
+        /// <summary>连**有值**也不给「（无）」清空入口（默认给；空槽位本来就不给）。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        [TypeSelectorSettings(ShowNoneItem = false)]
+        public Type mustPick;
+
+        /// <summary>**用户过滤器**：只放行名字以 <c>Showcase</c> 开头的类型（下面那个方法说了算）。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        [TypeSelectorSettings(FilterTypesFunction = nameof(IsShowcaseTypeAllowed))]
+        public Type filtered;
 
         #endregion
 

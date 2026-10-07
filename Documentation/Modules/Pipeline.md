@@ -2582,7 +2582,7 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 3. **菜单三条「本批默认」**：按命名空间分层（`GenericMenu` 的 `/`；`/` 不需要转义）；
    当前值带勾；「（无）」清空项**有值时才有**（空槽位点它什么都不发生，与「只声明有真行为的
    选项」冲突）。`[TypeSelectorSettings]` 的 `PreferNamespaces` / `ShowCategories` / `ShowNoneItem`
-   **本批不声明**——日后由它们覆盖这些默认。
+   **本批不声明**——日后由它们覆盖这些默认（**第三十批已落地**，见 §三十四）。
 4. **写回通道**：`ReflectedValueCopier.TryAssign` 加 `ManagedReference` 一格
    （与对象引用那格同构：先看「是不是那一类」，再看「声明类型装不装得下」——判据是
    `declaredType.IsAssignableFrom(selected.GetType())`）。**调用方必须传字段的声明类型**
@@ -2628,7 +2628,8 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 时那一行换成自绘的「当前类型名」按钮 + 候选菜单；配三个旋钮（`ReadOnlyIfNotNullReference` /
 `ShowBaseType` / `NonDefaultConstructorPreference`）；顺带修掉「空槽位选了类型不会自行展开」
 的缺口。**特性计数 89 → 90**。（`CreateInstanceFunction` 是单参 `Type type` 的 resolved string，
-与 `[TypeSelectorSettings].FilterTypesFunction` 同属「要另开一条」的解名形态——**留下一批**；
+与 `[TypeSelectorSettings].FilterTypesFunction` 同属「要另开一条」的解名形态——**留下一批**
+（**第三十批已落地**，单参解名通道连同它一起，见 §三十四）；
 本批连声明都没有，运行时报错会编译不过，正合本包口径。）
 
 ### 目视测量（用户参与；**记录位，看到后填**）
@@ -2706,8 +2707,77 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
   `PolymorphicSlotWriteTests` 5 例、`PolymorphicRowTests` 12 例、`PolymorphicMemberTests` +4、
   `ReflectedValueCopierTests` +2、`XInspectorUsageDetectionTests` +1。
   **EditMode 976 → 1009，0 失败**（PlayMode 281 → 287）。
-- **遗留**：单参解名通道 + `[TypeSelectorSettings]`（含 `CreateInstanceFunction`）；
-  `[TypeRegistryItem]`；两个 hide；`List<IShape>` 的多态元素。
+- **遗留**：单参解名通道 + `[TypeSelectorSettings]`（含 `CreateInstanceFunction`）——
+  **第三十批已落地**（见 §三十四）；`[TypeRegistryItem]`；两个 hide；
+  `List<IShape>` 的多态元素。
+
+---
+
+## 三十四、第三十批：单参解名通道 + `[TypeSelectorSettings]` + `CreateInstanceFunction`（2026-10-07）
+
+**做了什么**：本包第一次编译**带参**调用——「单参 `Type`、返回 <c>TResult</c>」的方法名解析成委托；
+配 `[TypeSelectorSettings]` 的三个**显示旋钮**（命名空间/程序集类别、分类别/拍平、「（无）」项开关）
+与**用户过滤器**（`FilterTypesFunction`，两个选择器都受它收窄）；
+`[PolymorphicDrawerSettings].CreateInstanceFunction` 随之落地。**特性计数 90 → 91**。
+
+### 设计要点
+
+1. **单参编译**（`ReflectedAccessor`）：`TryCreateInvoker<TArgument, TResult>` 照零参版放大
+   （两个形参、`Expression.Call` 补实参、静态忽略实例、`Widen` 收尾），加两个窄口
+   （`TryCreateFilterInvoker` → `Func<object, Type, bool>`、`TryCreateFactoryInvoker` →
+   `Func<object, Type, object>`）。**形状仍由调用方校验**（多一个少一个交给 `Expression.Call`
+   报错、中文兜底）；实例永远「开实例」传、消费者每次现读。
+2. **单参解名：自建单目标编排，刻意不复用 `NamedMethodResolver`**（已亲手核）：那条的契约是
+   「逐目标 + 部分失败**跳过**」，三处错配——① 部分失败时它打「这些目标将被跳过」，
+   而我们**全不生效**（那句话是假话）；② 它的失败文案没有「过滤器已忽略（≠ 特性失效）」那半句；
+   ③「取不到目标对象」那一支它**不告警**。判据本身仍只有一份（`NestedInstanceScope` 四件 +
+   `MethodResolver` 的形状表/上溯/文案全复用），重叠的只是十几行编排（`TypeFunctionBinder`）。
+   **第一个「存活且解析得到方法」的目标说了算**（`FirstAlive` 纪律的推广）；多选同值同理，
+   不做逐目标交集/并集。
+3. **解析一次、绘制期只读**：两个处理器把方法名绑成委托存进 `PropertyState`
+   （照 `[ValueDropdown]` 的范式）；**解析失败只忽略那一项**（过滤器 → 候选不做这道收窄；
+   造实例 → 回落内置工厂），各一条中文告警说明影响范围；绘制期状态缺/未解析一律**静默退回**
+   （构建期已告警过，不重复刷屏）。空串是「没写」——不建状态也不告警。
+4. **三个显示旋钮与 Odin 的默认档差异**：`PreferNamespaces` 本包默认 **`true`**（命名空间分层）——
+   Odin 不写是**程序集类别**；理由：**属性在不在不该改变菜单形状**（为 `ShowNoneItem = false`
+   写一个特性，不该顺手把菜单切成程序集）。程序集简单名**不拆点**（是一层子菜单）。
+   `ShowCategories = false` 拍平（没有搜索框，几百项不可用）。`ShowNoneItem` **只做「抑制」**
+   ——「（无）」项本来就只在有值时出现，关掉它只是那时也不给清空入口
+   （比官方字面读法窄，README 有说明）。
+5. **过滤器插两个菜单**：收窄规则进 `TypeCandidateFilter.Apply`（两个菜单的**唯一公共点**，
+   `include` 设为**必填**——不留「默认悄悄不变」的静默口）；两处菜单构建各读一次
+   `TypeSelectorSettingsView`。**多态路径谓词会被调两次**（`Collect` 一次 + 收尾 `Apply` 一次，
+   收尾不可省——声明类型是从并集里补进来的）；注释与 README 写「请写成纯函数」，
+   用例**只钉结果不钉次数**。
+6. **`CreateInstanceFunction`：解析期回落、点击期不回落**。解析成功 ⇒ 写回只走它
+   （`NonDefaultConstructorPreference` 与构造和候选收窄都无关，候选跳过 `Exclude` 那道，
+   结构性判据照旧）；**解析失败 ⇒ 告警 + 回落内置工厂**（配置错不该让换类型整个不可用）；
+   **点击时返回 `null` / 抛异常 / 返回错类型 ⇒ 拒绝且不写**（函数说「不给」时拿内置档造一个是
+   静默换值的近亲；异常不冒出去打断绘制；返回错类型是「显示的是 X、装进去的是 Y」）。
+7. **误用第三支**：`[TypeSelectorSettings]` 标了、而两个选择器特性一个都没有——判据**与
+   「有没有节点」无关**（没有选择器特性就没有任何本包选择器被渲染），构建期一条告警。
+
+### 边界
+
+- 过滤器失败 = **只忽略过滤器**（选择器照常可用）；`PreferNamespaces` 的默认档与 Odin 相反；
+  `ShowNoneItem` 只做抑制；程序集名不拆点；「函数能造接口/抽象」本批不收（结构性判据照旧）；
+  多选同值下取「第一个解析到的目标」的方法（个别目标没有它的角落按取到的那个算）。
+- **渲染未目视确认**：程序集类别的真实观感、拍平后是否可用、过滤器与自定义工厂的实际效果——
+  展示台四行 + 两条方法就是为目视准备的。
+
+### 规模与遗留
+
+- 生产代码：`Runtime` 两个声明（新 `[TypeSelectorSettings]` + `CreateInstanceFunction` 那一格）、
+  `ReflectedAccessor` 单参三件、`TypeFunctionBinder`、`TypeSelectorProcessors`
+  （两个处理器 + 两个状态 + `View`）、`TypeSelectorMisuse` 第三支、
+  `TypeDrawerSettingsDrawer` / `PolymorphicRow` / `PolymorphicSlotWrite` 的接线。
+- 用例：`TypeSelectorSettingsAttributeTests` 6 例、`ReflectedAccessorTests` +7、
+  `TypeSelectorSettingsTests` 9 例、`TypeDrawerSettingsDrawerTests` +4、
+  `PolymorphicRowTests` +3、`PolymorphicSlotWriteTests` +4、
+  `XInspectorUsageDetectionTests` +1；`PolymorphicDrawerSettingsAttributeTests` 反转 1 条。
+  **EditMode 1009 → 1037，0 失败**（PlayMode 287 → 293）。
+- **遗留**：`[TypeRegistryItem]`（图标撞 `SdfIconType` 独立线）；两个 hide（前置是那条目视测量）；
+  `List<IShape>` 的多态元素。见 Roadmap §十二。
 
 ---
 

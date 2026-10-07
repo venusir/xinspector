@@ -526,6 +526,19 @@ Odin 是「能改但不保存」，本包是「不给改」。代价是少了一
 > `[PolymorphicDrawerSettings].CreateInstanceFunction` 同为单参 `Type type` 的 resolved string，
 > 一批做；显示三旋钮覆盖基座默认）；`[TypeRegistryItem]`（图标撞 `SdfIconType` 独立线）；
 > 两个 hide（前置同上那条目视测量）；`List<IShape>` 多态元素仍另列。
+>
+> **2026-10-07 追记：第三十批已落地**（Pipeline §三十四）——单参解名通道（本包第一次编译
+> **带参**调用）+ `[TypeSelectorSettings]`（三个显示旋钮 + 用户过滤器）+ `CreateInstanceFunction`。
+> 两条自定结论：① **单参解析自建单目标编排、刻意不复用 `NamedMethodResolver`**——那条的
+> 「部分目标跳过」告警与「过滤器全不生效」语义相冲，且不告警「取不到目标」那一支；
+> ② **`CreateInstanceFunction` 解析期回落、点击期不回落**（返回 null = 函数明确拒绝，
+> 回落等于静默换值）。另有一处**默认档差异**要记住：`PreferNamespaces` 本包默认 `true`
+> （命名空间分层），Odin 不写是程序集类别——理由：属性在不在不该改变菜单形状。
+>
+> **下一步**：`[TypeRegistryItem]`（注册表与分类；**图标撞 `SdfIconType` 独立线**，
+> 要么裁子集要么单独立项）；两个 hide（前置是那条目视测量：
+> Unity 原生在多态引用上画不画「引用框」）；`List<IShape>` 多态元素仍另列。
+> **选择器一族至此只剩这两条（加多态元素）。**
 
 ---
 
