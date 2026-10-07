@@ -395,24 +395,17 @@ namespace XInspector.Editor
                 next = child.NextVisible(false) && child.depth == depth;
             }
 
-            // 嵌套层与元素层里的 [ShowInInspector]：用**同一个实例**当取值对象，路径带父前缀
-            // （元素层是 `items.Array.data[0].`，同一套机制）。方法节点同理。两段都排在序列化
-            // 子节点之后——与顶层的三段顺序（序列化 → 反射 → 方法）一致；也都排在下面的排序
-            // 之前，嵌套层/元素层的 [PropertyOrder] 因此同样能排到按钮。
+            // 嵌套层、元素层与**多态容器**里的 [ShowInInspector]：用**同一个实例**当取值对象，
+            // 路径带父前缀（元素层是 `items.Array.data[0].`，多态容器是 `shape.`，同一套机制）。
+            // 方法节点同理。两段都排在序列化子节点之后——与顶层的三段顺序
+            // （序列化 → 反射 → 方法）一致；也都排在下面的排序之前，嵌套层/元素层的
+            // [PropertyOrder] 因此同样能排到按钮。
             //
-            // **多态容器是例外**：里面的 [ShowInInspector] / [Button] 一族要等**读路径**那一批
-            // （路径访问器还不认多态段，`NestedInstanceScope.Compile` 必然编译不出实例）。
-            // 不跳过的话，它们会走 `AppendNestedReflectedMembers` 里那条「取不到实例」告警——
-            // 那句话答非所问：实例明明有，缺的是**取实例的那条链**。真跳过时另给一句文案。
-            if (NestedMemberExpansion.IsPolymorphicReference(parent.Member as FieldInfo))
-            {
-                WarnPolymorphicReadPathSkipped(parent);
-            }
-            else
-            {
-                AppendNestedReflectedMembers(serializedObject, parent);
-                AppendNestedMethodMembers(parent);
-            }
+            // 多态容器走这里靠的是 `NestedInstanceScope.Compile(targets, parent)`：它从祖先链
+            // 取各多态段的**具体类型**去编译路径（读路径那一批起），`parent.Type` 已是具体类型、
+            // `parent.Path` 就是容器路径，两条 appender 原样复用。
+            AppendNestedReflectedMembers(serializedObject, parent);
+            AppendNestedMethodMembers(parent);
 
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只对一层成员调同一个稳定排序）。
@@ -550,34 +543,6 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 重建一个集合的元素层——对账发现长度对不上（或结构刚被改过）时走这里。
-        /// </summary>
-        /// <param name="collection">集合节点。</param>
-        /// <remarks>
-        /// <para>
-        /// <b>流水线与构建期逐条对应</b>（顺序是契约）：建节点 → 第一趟处理器 → 挂链 →
-        /// 分组装配 → 第二趟分组处理器。与构建期的差别只有一处：第一趟**只对新子树**
-        /// 跑（<c>RunNestedProcessors</c> 的既有语义），根与集合节点自己的钩子不重跑——
-        /// 它们的特性没变，重跑等于把「注入只发生一次」的契约破掉。
-        /// </para>
-        /// <para>
-        /// <b>元素层可以递归（深度 &gt; 1），所以这里比构建期多跑两件事</b>：释放旧子树
-        /// **之前**先注销它里面登记过的内层集合（之后状态袋已清、认不出），以及在第一趟
-        /// 处理器**之后**对**新**子树重走一遍元素层展开（否则外层改一次长度，内层元素层
-        /// 就静默消失）。
-        /// </para>
-        /// <para>
-        /// <b>旧子树整体释放。</b> 状态袋里的 <c>IDisposable</c>（内嵌编辑器之类）不释放
-        /// 就是重建一次泄漏一次；旧节点对象同时作废——不得跨同步点持有（见
-        /// <see cref="CollectionElementExpansion"/> 的有效窗口）。
-        /// </para>
-        /// <para>
-        /// <b>这是一次性动作，不是每帧动作。</b> 反射与处理器都发生在这里，而这里只在
-        /// 长度对不上时被调到——「反射仅限构建期」这条规则按此豁免（见
-        /// <see cref="CollectionElementSync"/>）。
-        /// </para>
-        /// </remarks>
-        /// <summary>
         /// 把一个**已展开的**多态容器登记进对账名单（递归覆盖整棵子树）。
         /// </summary>
         /// <param name="tree">属性树。</param>
@@ -586,37 +551,6 @@ namespace XInspector.Editor
         /// 「展开过的多态容器」的判据是**有子节点**：判据不给它展开时 <c>ExpandChildren</c>
         /// 根本没被调过，子节点数是 0。于是这里不需要再问一遍那道闸（问两遍的迟早有一处先漂）。
         /// </remarks>
-        /// <summary>
-        /// 多态容器里被跳过的读路径成员报一句——**只在确实有东西被丢下时**才说。
-        /// </summary>
-        /// <param name="parent">多态成员节点。</param>
-        /// <remarks>
-        /// <para>
-        /// 判据用 <see cref="NestedMemberExpansion.HasNonSerializedNodeMember"/>：它正好覆盖
-        /// 「序列化迭代器看不见、但会产生节点」的那一类（<c>[ShowInInspector]</c> 的字段/属性
-        /// 与 <c>[Button]</c> 一族的方法）。没有这类成员就什么都不说——那是「外观不变」的正常路径。
-        /// </para>
-        /// <para>
-        /// 文案里**必须把已经生效的那半说清楚**：多态段里的条件、分组、顺序、内联这一批是
-        /// 真的生效了，只写「跳过了」会让使用者以为整段都不生效——那与事实相反，
-        /// 而照着错的事实去查，永远查不到东西。
-        /// </para>
-        /// </remarks>
-        private static void WarnPolymorphicReadPathSkipped(InspectorProperty parent)
-        {
-            if (!NestedMemberExpansion.HasNonSerializedNodeMember(parent.Type))
-            {
-                return;
-            }
-
-            DrawerWarnings.Once(
-                parent,
-                "polymorphic-read-path",
-                $"[XInspector] 属性「{parent.Path}」里面是多态引用（[SerializeReference]）：" +
-                "里面的条件、分组、顺序、内联**已生效**，但 [ShowInInspector] 与 [Button] 一族" +
-                "要等读路径那一批——本轮已跳过。");
-        }
-
         private static void RegisterPolymorphicLayersIn(PropertyTree tree, InspectorProperty node)
         {
             if (node.Kind == InspectorPropertyKind.Member &&
@@ -730,6 +664,34 @@ namespace XInspector.Editor
             RunGroupProcessors(container);
         }
 
+        /// <summary>
+        /// 重建一个集合的元素层——对账发现长度对不上（或结构刚被改过）时走这里。
+        /// </summary>
+        /// <param name="collection">集合节点。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>流水线与构建期逐条对应</b>（顺序是契约）：建节点 → 第一趟处理器 → 挂链 →
+        /// 分组装配 → 第二趟分组处理器。与构建期的差别只有一处：第一趟**只对新子树**
+        /// 跑（<c>RunNestedProcessors</c> 的既有语义），根与集合节点自己的钩子不重跑——
+        /// 它们的特性没变，重跑等于把「注入只发生一次」的契约破掉。
+        /// </para>
+        /// <para>
+        /// <b>元素层可以递归（深度 &gt; 1），所以这里比构建期多跑两件事</b>：释放旧子树
+        /// **之前**先注销它里面登记过的内层集合（之后状态袋已清、认不出），以及在第一趟
+        /// 处理器**之后**对**新**子树重走一遍元素层展开（否则外层改一次长度，内层元素层
+        /// 就静默消失）。
+        /// </para>
+        /// <para>
+        /// <b>旧子树整体释放。</b> 状态袋里的 <c>IDisposable</c>（内嵌编辑器之类）不释放
+        /// 就是重建一次泄漏一次；旧节点对象同时作废——不得跨同步点持有（见
+        /// <see cref="CollectionElementExpansion"/> 的有效窗口）。
+        /// </para>
+        /// <para>
+        /// <b>这是一次性动作，不是每帧动作。</b> 反射与处理器都发生在这里，而这里只在
+        /// 长度对不上时被调到——「反射仅限构建期」这条规则按此豁免（见
+        /// <see cref="CollectionElementSync"/>）。
+        /// </para>
+        /// </remarks>
         internal static void RebuildElementLayer(InspectorProperty collection)
         {
             var layer = collection.State.Get<CollectionElementLayerState>();
@@ -1001,10 +963,11 @@ namespace XInspector.Editor
             for (var i = 1; i < targets.Length; i++)
             {
                 // 顶层按**目标自身**的类型重解析；嵌套层按**实例**的类型
-                // （那条字段链的末端类型，多目标可以各不相同）。
+                // （那条字段链的末端类型，多目标可以各不相同）。**末段是多态引用时**
+                // `ValueType` 只是声明类型（接口/抽象类）——实例类型由 `InstanceTypeOf` 现读。
                 var type = scopes == null
                     ? targets[i]?.GetType()
-                    : (i < scopes.Length ? scopes[i]?.ValueType : null);
+                    : (i < scopes.Length ? NestedInstanceScope.InstanceTypeOf(scopes[i], targets[i]) : null);
 
                 if (type == null)
                 {
@@ -1519,7 +1482,8 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 把嵌套类型（或集合元素类型）里带 <c>[ShowInInspector]</c> 的成员收进**复合父节点**之下。
+        /// 把嵌套类型（或集合元素类型、**多态容器**）里带 <c>[ShowInInspector]</c> 的成员
+        /// 收进**复合父节点**之下。
         /// </summary>
         /// <param name="serializedObject">底层序列化对象（目标列表由它给出）。</param>
         /// <param name="parent">复合成员节点（嵌套层的复合成员，或元素节点）。</param>

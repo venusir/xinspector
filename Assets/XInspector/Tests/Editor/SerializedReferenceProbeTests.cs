@@ -530,6 +530,41 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 补充测量：**同类型、同字段值、只是两个不同实例**时，多态槽位算不算混合态。
+        /// </summary>
+        /// <remarks>
+        /// 上一条用例里两个实例的 <c>hp</c> 值也不同，因此严格说它没隔离出「仅实例不同」那一格。
+        /// 这一条把值也调成一样：若仍报混合，则判的是**实例身份**而不是内容，
+        /// 「展开的多态容器恒为单目标」成立（读路径的逐目标口径因此只是保险，不是必需）；
+        /// 若报不混合，多目标展开就可能发生——那时要给 <c>PolymorphicReflectionTests</c>
+        /// 补一条「多目标同值展开后逐目标各读各的」。
+        /// </remarks>
+        [Test]
+        public void 多态槽位同类型同值不同实例算不算混合态()
+        {
+            var a = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            var b = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            try
+            {
+                var so = new SerializedObject(new Object[] { a, b });
+                var prop = so.FindProperty("shape");
+
+                a.shape = new ProbeShape { hp = 7 };
+                b.shape = new ProbeShape { hp = 7 };
+                so.Update();
+                Report(prop, "同类型、同值、不同实例");
+
+                Assert.That(prop.hasMultipleDifferentValues, Is.True,
+                    "仍报混合 ⇒ 判据是「实例身份」——展开的多态容器恒为单目标（实测）。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(a);
+                Object.DestroyImmediate(b);
+            }
+        }
+
         #endregion
 
         #region 工具

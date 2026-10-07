@@ -138,9 +138,12 @@ namespace XInspector.Editor
             for (var i = 0; i < targets.Length; i++)
             {
                 // 嵌套层按**实例的类型**找；某个目标算不出实例类型就算它找不到。
+                // （末段是多态引用时 `ValueType` 只是声明类型——`InstanceTypeOf` 现读实例。）
                 var type = state.Scopes == null
                     ? (TargetObjects.IsAlive(targets[i]) ? targets[i].GetType() : null)
-                    : (i < state.Scopes.Length ? state.Scopes[i]?.ValueType : null);
+                    : (i < state.Scopes.Length
+                        ? NestedInstanceScope.InstanceTypeOf(state.Scopes[i], targets[i])
+                        : null);
 
                 state.Methods[i] = type == null ? null : MethodResolver.BySignature(type, discovery);
 

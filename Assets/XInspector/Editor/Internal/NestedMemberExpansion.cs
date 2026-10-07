@@ -19,7 +19,8 @@ namespace XInspector.Editor
     /// <para>
     /// <b>只做固定形状的那一半。</b> 数组与列表不展开（元素个数随时可变，与「树的形状在构建
     /// 结束后冻结」正面冲突，那是元素节点化的领域）；多态引用（<c>[SerializeReference]</c>）
-    /// 也不展开——那是 L7 那条产品线。
+    /// **同样按需展开**（2026-10-07 起，见 <c>PolymorphicReference</c>）：具体类型变了走
+    /// 「整棵子树重建」那条路（对账由 <c>PolymorphicReferenceSync</c> 做），形状仍不增量。
     /// </para>
     /// <para>
     /// <b>成员级与类级的分组特性自 2026-10-06 起都生效</b>：成员级由构建期装配出分组节点
@@ -195,9 +196,13 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                // 没有可见子级就没什么可展开的（空实例、以及**只带读路径成员**的类型
-                // ——后者要等读路径那一批，那时才谈得上为它展开）。
-                return property.hasVisibleChildren;
+                // 没有可见子级时，只有**具体类型里还有非序列化的本包成员**才值得展开
+                // （典型的是「只放了一个 [ShowInInspector] 属性」或「只放了一个 [Button]」的具体类型）。
+                // 与下面序列化那半边逐字同构——这是判据的**第二条腿**，不是新判据：
+                // 不加这条，那种类型连门都进不了，读路径成员永远没机会生效（且**没有告警**）。
+                // `member.Type` 此时已是**具体类型**（类型解析见 PropertyTreeBuilder），
+                // 于是判据自动按具体类型扫。
+                return property.hasVisibleChildren || HasNonSerializedNodeMember(member.Type);
             }
 
             // 要求 Generic：向量之类也有可见子级，但它们由原生控件整块画（本包不拆）。
@@ -316,10 +321,11 @@ namespace XInspector.Editor
         /// （2026-10-06 核出来并改正：那句话在展开判据里挂了很久，靠另一道闸才没出事）。
         /// </para>
         /// <para>
-        /// 今天真正挡住这类字段的是「序列化属性必须是 Generic」那一关
-        /// （它们在 Unity 里报 <c>ManagedReference</c>）。这条判据仍然留着：
-        /// 展开判据、搜索的构建期告警、路径访问器三处问的是同一个问题，
-        /// 答案只该有一份——三处各写一遍的话，迟早有一处先漂。
+        /// <b>判据只此一份，四个消费者</b>（2026-10-07 读路径那一批起）：展开判据
+        /// （<see cref="IsCompositeCandidate"/>）、递归判据（<see cref="HasSupportedMember"/> 的
+        /// <c>ShouldExpand</c> 那一侧）、多态守卫（<c>PolymorphicReference.NestingBlock</c>）、
+        /// 以及**路径访问器**（<c>ReflectedAccessor.TryCreatePath</c>——那里问的是
+        /// 「这一段要不要按具体类型换基」）。各写一遍的话，迟早有一处先漂。
         /// </para>
         /// </remarks>
         public static bool IsPolymorphicReference(FieldInfo field)

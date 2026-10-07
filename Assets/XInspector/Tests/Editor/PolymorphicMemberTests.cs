@@ -222,12 +222,16 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 多态段里的读路径成员被**响亮跳过**：给的是专门文案，不是那句答非所问的「取不到实例」。
+        /// 多态段里的读路径成员**成为节点**——读路径那一批已开，跳过告警已撤。
         /// </summary>
+        /// <remarks>
+        /// 这条此前钉的是「响亮跳过」（专门告警、成员不进树）；读路径落地后翻面：
+        /// 成员进树、且**一条告警都不该有**（旧告警留着的症状是「说了跳过、其实没跳过」）。
+        /// </remarks>
         [Test]
-        public void 多态段里的读路径成员被跳过并专门告警()
+        public void 多态段里的读路径成员成为节点且不告警()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("要等读路径那一批"));
+            LogAssert.NoUnexpectedReceived();
 
             var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
             target.shape = new AnnotatedShape();
@@ -237,10 +241,11 @@ namespace XInspector.Tests.Editor
                 var shape = Find(tree.Root, "shape");
 
                 Assert.That(shape.Children.Count, Is.GreaterThan(0), "序列化成员照常展开。");
-                Assert.That(
-                    Find(shape, "shape.badge"),
-                    Is.Null,
-                    "[ShowInInspector] 的成员这一批还不进树——读路径没开。");
+
+                var badge = Find(shape, "shape.badge");
+                Assert.That(badge, Is.Not.Null, "[ShowInInspector] 的成员进了树。");
+                Assert.That(badge.Kind, Is.EqualTo(InspectorPropertyKind.ReflectedMember));
+                Assert.That(badge.Parent, Is.SameAs(shape), "挂在多态容器之下。");
             }
             finally
             {
@@ -259,7 +264,13 @@ namespace XInspector.Tests.Editor
             try
             {
                 var tree = BuildTree(target);
-                Assert.That(Find(tree.Root, "shape").Children.Count, Is.GreaterThan(0));
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(shape.Children.Count, Is.GreaterThan(0));
+                Assert.That(
+                    CountReadPathNodes(shape),
+                    Is.EqualTo(0),
+                    "没有读路径成员时，一个反射/方法节点都不该多出来。");
             }
             finally
             {
@@ -338,26 +349,28 @@ namespace XInspector.Tests.Editor
 
         #region 多选
 
-        /// <summary>多选混合态一律不展开——不拿一个目标的结构冒充全体。</summary>
+        /// <summary>多选混合态一律不展开——不拿一个目标的结构冒充全体（读路径成员同样不出现）。</summary>
         /// <remarks>
         /// 实测：<c>hasMultipleDifferentValues</c> 在「同类型、只是两个实例」时就已经为真
         /// （区分不出类型是否一致），而 <c>managedReferenceValue</c> 给的是主目标那个实例。
         /// 故判据只能取「一律不展开」——与「多选下不增删元素」同款惯例，**不告警**。
+        /// 夹具用 <see cref="AnnotatedShape"/>（带读路径成员）：读路径那一批落地后，
+        /// 混合态连反射节点也不该出现——孩子数归零这一条一并钉住了那件事。
         /// </remarks>
         [Test]
         public void 多选混合态不展开()
         {
             var a = ScriptableObject.CreateInstance<PolymorphicFixture>();
             var b = ScriptableObject.CreateInstance<PolymorphicFixture>();
-            a.shape = new Circle { radius = 1f };
-            b.shape = new Circle { radius = 2f };
+            a.shape = new AnnotatedShape { size = 1 };
+            b.shape = new AnnotatedShape { size = 2 };
             try
             {
                 var tree = PropertyTree.Create(new SerializedObject(new Object[] { a, b }));
                 try
                 {
                     var shape = Find(tree.Root, "shape");
-                    Assert.That(shape.Children.Count, Is.EqualTo(0), "混合态不展开。");
+                    Assert.That(shape.Children.Count, Is.EqualTo(0), "混合态不展开（连读路径成员一起挡）。");
                     Assert.That(shape.Type, Is.EqualTo(typeof(IShape)), "类型退回声明类型。");
                 }
                 finally
@@ -408,6 +421,27 @@ namespace XInspector.Tests.Editor
             }
 
             return null;
+        }
+
+        /// <summary>整棵子树里读路径节点的个数（<c>[ShowInInspector]</c> 与方法节点）。</summary>
+        /// <param name="node">子树根。</param>
+        /// <returns>个数。</returns>
+        private static int CountReadPathNodes(InspectorProperty node)
+        {
+            var count = 0;
+
+            foreach (var child in node.Children)
+            {
+                if (child.Kind == InspectorPropertyKind.ReflectedMember ||
+                    child.Kind == InspectorPropertyKind.Method)
+                {
+                    count++;
+                }
+
+                count += CountReadPathNodes(child);
+            }
+
+            return count;
         }
 
         /// <summary>经**另一个** SerializedObject 改一个 bool，再让树那个 Update。</summary>
@@ -467,7 +501,7 @@ namespace XInspector.Tests.Editor
         public int segments = 8;
     }
 
-    /// <summary>带**读路径**成员的具体类型（这一批还不支持它进树）。</summary>
+    /// <summary>带**读路径**成员的具体类型（反射成员与序列化成员混在一起）。</summary>
     [Serializable]
     internal class AnnotatedShape : IShape
     {
@@ -475,7 +509,7 @@ namespace XInspector.Tests.Editor
         [BoxGroup("有注解")]
         public int size = 1;
 
-        /// <summary>读路径成员——本批跳过，且要**响亮**地跳过。</summary>
+        /// <summary>读路径成员——与序列化成员同层，一起进树。</summary>
         [ShowInInspector]
         public string badge => "★";
     }

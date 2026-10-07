@@ -152,6 +152,40 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 多态段里的**反射成员**按当前值参与节点级匹配（活值通道在多态段里同样生效）。
+        /// </summary>
+        /// <remarks>夹具的 <c>hp = 30</c> ⇒ <c>Doubled = "60"</c>，序列化字段里没有 <c>"60"</c>。</remarks>
+        [Test]
+        public void 多态段里的反射成员的值参与搜索()
+        {
+            var target = ScriptableObject.CreateInstance<SearchablePolyValueFixture>();
+            try
+            {
+                using (var tree = BuildTree(target))
+                {
+                    var poly = Find(tree.Root, "poly");
+
+                    Assert.That(poly.Children.Count, Is.GreaterThan(0), "多态引用按需展开。");
+
+                    var scope = ScopeOf(poly, "60");
+
+                    Assert.That(
+                        scope.VisibilityOf(Find(poly, "poly.Doubled")),
+                        Is.EqualTo(SearchVisibility.KeepAll),
+                        "活值 \"60\" 是多态段里那个反射成员的值——它应当命中。");
+                    Assert.That(
+                        scope.VisibilityOf(Find(poly, "poly.hp")),
+                        Is.EqualTo(SearchVisibility.Hidden),
+                        "序列化的 hp（30）不匹配，被过滤。");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         /// <summary>标在反射成员上：没有序列化后端，也就没有子成员。</summary>
         [Test]
         public void 标在反射成员上时告警()
@@ -1261,10 +1295,32 @@ namespace XInspector.Tests.Editor
     [HideMonoScript]
     internal sealed class SearchableOnReferenceFixture : ScriptableObject
     {
-        /// <summary>多态引用：成员进不了树。</summary>
+        /// <summary>多态引用：里面的成员按需进树（2026-10-07 起），搜索按行掩码过滤。</summary>
         [SerializeReference]
         [Searchable]
         public SearchStats poly = new SearchStats();
+    }
+
+    /// <summary>多态段里活值通道的载荷：一个序列化成员 + 一个反射成员。</summary>
+    [Serializable]
+    internal sealed class SearchPolyPayload
+    {
+        /// <summary>序列化成员，兼作活值的来源。</summary>
+        public int hp = 30;
+
+        /// <summary>活值：跟着 <see cref="hp"/> 走（30 → "60"）。</summary>
+        [ShowInInspector]
+        public int Doubled => hp * 2;
+    }
+
+    /// <summary>多态段里活值通道的对照资产。</summary>
+    [HideMonoScript]
+    internal sealed class SearchablePolyValueFixture : ScriptableObject
+    {
+        /// <summary>多态引用：里面带一个活值反射成员。</summary>
+        [SerializeReference]
+        [Searchable]
+        public SearchPolyPayload poly = new SearchPolyPayload();
     }
 
     /// <summary>标在反射成员上的对照资产。</summary>

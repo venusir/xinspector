@@ -208,6 +208,30 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **多态槽位里的具体类型用到了本包**时判据看不出来——这是记录在案的近似（不修）。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 判据只吃**声明类型**（这里是没有任何特性的接口），看不见槽位里装着的具体类型上的
+        /// 特性。后果：这种组件**不被自动接管**，多态段里的读路径成员不会生效——
+        /// 逃生口是给它一个显式 <c>[CustomEditor]</c>（见包 README 与 Roadmap §十二）。
+        /// </para>
+        /// <para>
+        /// 为什么留着：要看具体类型就得在「这个类型用没用到本插件」这一问里解引用**运行时
+        /// 实例**——多选、空槽位、类型随时可变，那是构建期判据不该做的事。
+        /// 这条若翻红，说明判据改了，请同步 README 与 Roadmap 的那两处措辞。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void IsUsedBy_多态槽位里的具体类型不算()
+        {
+            Assert.That(
+                XInspectorUsageDetection.IsUsedBy(typeof(PolymorphicBlindSpotFixture)),
+                Is.False,
+                "记录在案的近似：判据只看声明类型。");
+        }
+
+        /// <summary>
         /// **嵌套类型上只挂类级分组**的类型必须被判为「用到了本插件」。
         /// <para>
         /// 类级分组自 2026-10-06 起会真的分发（<c>ClassLevelGroupProcessor</c>）——判据看不见它，
@@ -545,6 +569,28 @@ namespace XInspector.Tests.Editor
     internal class InspectedOnlyNested
     {
         /// <summary>非序列化属性——序列化迭代器看不见它。</summary>
+        [ShowInInspector]
+        public int Tag => 1;
+    }
+
+    /// <summary>多态槽位：声明类型是**没有特性**的接口，具体类型里有本包特性（控制项）。</summary>
+    internal sealed class PolymorphicBlindSpotFixture : ScriptableObject
+    {
+        /// <summary>判据只看这个字段的**声明类型**（接口），看不见槽位里的具体类型。</summary>
+        [SerializeReference]
+        public IBlindSpotShape shape;
+    }
+
+    /// <summary>没有特性的槽位类型——判据看到的就是它。</summary>
+    internal interface IBlindSpotShape
+    {
+    }
+
+    /// <summary>用到了本包的具体类型——自动接管的判据**看不见**它（那条近似就是此事）。</summary>
+    [Serializable]
+    internal class BlindSpotShape : IBlindSpotShape
+    {
+        /// <summary>唯一的用法。</summary>
         [ShowInInspector]
         public int Tag => 1;
     }
