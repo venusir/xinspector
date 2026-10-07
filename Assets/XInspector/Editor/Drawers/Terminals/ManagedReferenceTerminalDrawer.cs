@@ -26,11 +26,17 @@ namespace XInspector.Editor
     /// 与 <c>[InlineProperty]</c> 的取舍同款（那边也是「摊平子字段、不画折叠头」）。
     /// </para>
     /// <para>
+    /// <b>两个形态：本类画原生那一行</b>（标了 <c>[PolymorphicDrawerSettings]</c> 的字段由子类
+    /// <see cref="PolymorphicRowTerminalDrawer"/> 换成自绘的选择器行）——差别**只在那一行**
+    /// （<see cref="DrawRow"/> 一个虚方法），子节点那半（搜索框、只读罩、缩进、过滤）两边共用，
+    /// 不复制。
+    /// </para>
+    /// <para>
     /// <b>渲染未经目视确认。</b> 本仓不测 IMGUI——原生那一行到底画出什么（有没有三角、
     /// 类型名是不是下拉），只有人眼能答；这条与 L0 的验证记录同一类，写进了包 README。
     /// </para>
     /// </remarks>
-    internal sealed class ManagedReferenceTerminalDrawer : XInspectorDrawer
+    internal class ManagedReferenceTerminalDrawer : XInspectorDrawer
     {
         #region XInspectorDrawer
 
@@ -58,11 +64,7 @@ namespace XInspector.Editor
                 return;
             }
 
-            // 原生那一行：只读罩与它自己的展开器照旧（值仍由 Unity 读写、Undo 由它记）。
-            using (new EditorGUI.DisabledScope(property.State.IsReadOnly))
-            {
-                EditorGUILayout.PropertyField(entry.SerializedProperty, label, false);
-            }
+            DrawRow(property, entry.SerializedProperty, label);
 
             // 搜索框与复合末端同款：画在只读罩**之外**（输入框本身不是数据）。
             if (property.Attributes.Has<SearchableAttribute>())
@@ -90,6 +92,27 @@ namespace XInspector.Editor
                 {
                     EditorGUI.indentLevel--;
                 }
+            }
+        }
+
+        #endregion
+
+        #region Protected API
+
+        /// <summary>
+        /// 画「那一行」——本类画原生那一行（<c>includeChildren: false</c>），
+        /// <see cref="PolymorphicRowTerminalDrawer"/> 覆写成自绘的选择器行。
+        /// </summary>
+        /// <param name="property">节点。</param>
+        /// <param name="serializedProperty">它的序列化属性。</param>
+        /// <param name="label">标签。</param>
+        protected virtual void DrawRow(
+            InspectorProperty property, SerializedProperty serializedProperty, GUIContent label)
+        {
+            // 原生那一行：只读罩与它自己的展开器照旧（值仍由 Unity 读写、Undo 由它记）。
+            using (new EditorGUI.DisabledScope(property.State.IsReadOnly))
+            {
+                EditorGUILayout.PropertyField(serializedProperty, label, false);
             }
         }
 

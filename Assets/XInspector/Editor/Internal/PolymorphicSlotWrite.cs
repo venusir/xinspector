@@ -66,5 +66,34 @@ namespace XInspector.Editor
 
             return true;
         }
+
+        /// <summary>
+        /// 清空多态槽位（菜单里的「（无）」项）：写 <c>null</c> 并**当场提交**；失败时什么都不写。
+        /// </summary>
+        /// <param name="destination">多态槽位的序列化属性。</param>
+        /// <param name="declaredType">**字段的声明类型**。</param>
+        /// <param name="undoEnabled">这次提交要不要进撤销栈（窗口路径传 <c>false</c>）。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>清空并提交成功返回 <c>true</c>。</returns>
+        /// <remarks>清空**不需要造实例**，故不经过 <see cref="PolymorphicInstanceFactory"/>。</remarks>
+        public static bool TryClear(
+            SerializedProperty destination, Type declaredType, bool undoEnabled, out string reason)
+        {
+            if (!ReflectedValueCopier.TryAssign(null, destination, declaredType, out reason))
+            {
+                return false;
+            }
+
+            if (undoEnabled)
+            {
+                destination.serializedObject.ApplyModifiedProperties();
+            }
+            else
+            {
+                destination.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            return true;
+        }
     }
 }

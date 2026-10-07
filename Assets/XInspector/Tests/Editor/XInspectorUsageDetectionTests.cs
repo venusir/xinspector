@@ -292,6 +292,16 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 只挂 <c>[PolymorphicDrawerSettings]</c> 的类型同样为真——同样靠绘制器那一半
+        /// （末端是按特性选的，但判据走的是链上那枚替换型绘制器）。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂多态选择器特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(PolymorphicDrawerSettingsOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 集合被本包接管、且**元素类型用到了本包**时为真——与元素层的安全阀镜像：
         /// 那种集合真的会建元素层，元素里的特性真的会生效。
         /// </summary>
@@ -628,6 +638,15 @@ namespace XInspector.Tests.Editor
         [SerializeReference]
         [TypeDrawerSettings]
         public Type chosen;
+    }
+
+    /// <summary>只挂多态选择器特性的资产。</summary>
+    internal sealed class PolymorphicDrawerSettingsOnlyFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法：多态引用槽位。</summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings]
+        public IDisposable shape;
     }
 
     /// <summary>集合被本包接管、元素类型也用到了本包的资产。</summary>

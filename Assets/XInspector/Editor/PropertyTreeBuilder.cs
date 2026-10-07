@@ -36,6 +36,11 @@ namespace XInspector.Editor
         /// <summary>展开过的多态引用容器：原生那一行照画，子节点走本包的树。</summary>
         private static readonly ManagedReferenceTerminalDrawer ManagedReferenceTerminal =
             new ManagedReferenceTerminalDrawer();
+
+        /// <summary>同上，但那一行换成自绘的类型选择器（字段标了 [PolymorphicDrawerSettings]）。</summary>
+        private static readonly PolymorphicRowTerminalDrawer PolymorphicRowTerminal =
+            new PolymorphicRowTerminalDrawer();
+
         private static readonly ReflectedMemberTerminalDrawer ReflectedTerminal =
             new ReflectedMemberTerminalDrawer();
 
@@ -1151,9 +1156,14 @@ namespace XInspector.Editor
                     // 多态引用容器：末端必须**画原生那一行**，否则值（那份引用）就没人画了——
                     // 用户看不见也换不了具体类型。故它既不能用复合末端（只画折叠头），
                     // 也不能按子节点数选（重建到零子节点时终端会变，而链是冻结的）。
+                    // 标了 [PolymorphicDrawerSettings] 的字段把「那一行」换成自绘的选择器
+                    //（同一个末端的子类，差别只在 DrawRow）——末端选型是这条分支唯一能
+                    // 无头断言的地方。
                     if (node.State.Get<PolymorphicLayerState>() != null)
                     {
-                        return ManagedReferenceTerminal;
+                        return node.Attributes.Has<PolymorphicDrawerSettingsAttribute>()
+                            ? PolymorphicRowTerminal
+                            : ManagedReferenceTerminal;
                     }
 
                     return node.Children.Count > 0 ? CompositeMemberTerminal : MemberTerminal;
