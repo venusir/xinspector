@@ -140,7 +140,23 @@
 > （泛型接口＝泛型＋接口，静态类归抽象）。
 > **多选（各目标不一致）退回 Unity 原生那一行**；类型写回**不进撤销栈**——`System.Type` 的
 > 托管引用撤销恢复不出来（实测），本包宁可让 Ctrl+Z 跳过这一步。
-> 多态字段自己的「换具体类型」仍由 Unity 原生那一行承担，本包不提供。
+> 多态字段自己的「换具体类型」**默认仍由 Unity 原生那一行承担**；标了
+> `[PolymorphicDrawerSettings]` 的字段（下面「多态选择器」一段）改用本包自绘的选择器。
+
+### 多态选择器
+
+| 特性 | 预期看到 |
+|---|---|
+| `[SerializeReference, PolymorphicDrawerSettings]`（`picked`） | 多态字段的那一行换成**本包自绘的「当前类型名」按钮**（不再是 Unity 原生那一行）：点开是候选菜单——只列**装得进这个槽位、且造得出实例**的实现。清空（菜单里的「（无）」）再点它，选一个类型——**子字段立刻出现**（对账即展开） |
+| `PolymorphicDrawerSettings(ShowBaseType = true)`（`outlined`） | 行上带**基类型**：显示成「ShowcaseSquare （IShowcaseShape）」（格式本包自定）。对照上面 `picked`（只显示具体类型名） |
+| `PolymorphicDrawerSettings(ReadOnlyIfNotNullReference = true)`（`lockedIn`） | **有值之后那一行变灰**（不许再换类型），而**子字段照常可编辑**——这个旋钮只锁「改类型」那一行。想再点按钮：先把槽位清空（取消勾选不行它没勾选框，直接改代码或换回别的状态） |
+| `PolymorphicDrawerSettings(NonDefaultConstructorPreference = LogWarning)`（`guardedPick`） | 菜单里选 `ShowcaseParameterized`（**只有带参构造**）：Console 里出现一条「按 LogWarning 档不构造」的说明，槽位**原样不动**。对照：`picked` 用默认档（`ConstructIdeal`）选它就会挑那个带参构造、参数填 0 |
+| 对照：上面的 `shape`（**没标特性**） | 那一行仍是 **Unity 原生**的多态 UI——标与不标的差别一眼可见 |
+
+> **回退**：槽位有值、但那个类型**用不到本包**时这一行退回 Unity 原生（Console 里一条说明）——
+> 本包只接管「用得到本包」的类型。**点当前类型 = 无操作**（不会拿一个同类型的新实例把你的值换掉）。
+> **换类型这一下能撤销**（与上面类型选择器相反）。官方的 `CreateInstanceFunction` 还没做
+> （要单参解名通道，留下一批）。
 
 ### 调色板
 

@@ -135,6 +135,35 @@ namespace XInspector.Samples
         [SerializeReference]
         public IShowcaseShape shape = new ShowcaseCircle();
 
+        /// <summary>
+        /// **多态选择器**：标了特性之后，那一行换成**本包自绘的**「当前类型名」按钮——
+        /// 点开是本包扫出来的候选菜单（只列装得进、造得出的实现）。不标特性的多态字段
+        /// （上面那个 <c>shape</c>）仍由 Unity 原生那一行承担。空槽位时直接点它选第一个类型。
+        /// </summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings]
+        public IShowcaseShape picked = new ShowcaseCircle();
+
+        /// <summary>行上带**基类型**：显示成「ShowcaseCircle （IShowcaseShape）」（格式本包自定）。</summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings(ShowBaseType = true)]
+        public IShowcaseShape outlined = new ShowcaseSquare();
+
+        /// <summary>赋过一次值之后不许再换类型——**只锁那一行**，子字段照常可编辑。</summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings(ReadOnlyIfNotNullReference = true)]
+        public IShowcaseShape lockedIn = new ShowcaseCircle();
+
+        /// <summary>
+        /// 选中**只有带参构造**的实现时**告警而不构造**（<see cref="ShowcaseParameterized"/> 就是
+        /// 那种实现）——<c>NonDefaultConstructorPreference</c> 的非默认档；默认档
+        /// （<c>ConstructIdeal</c>）会挑参数最少的构造、参数填默认值。
+        /// </summary>
+        [SerializeReference]
+        [PolymorphicDrawerSettings(
+            NonDefaultConstructorPreference = NonDefaultConstructorPreference.LogWarning)]
+        public IShowcaseShape guardedPick = new ShowcaseCircle();
+
         #endregion
 
         #region 值绘制
@@ -1310,5 +1339,24 @@ namespace XInspector.Samples
         /// <summary>与圆完全不同的成员与分组。</summary>
         [BoxGroup("方形")]
         public float side = 1f;
+    }
+
+    /// <summary>
+    /// **只有带参构造**的实现——<c>NonDefaultConstructorPreference</c> 那几档的演示对象
+    /// （带一个本包特性，否则这个类型不会展开、也就看不到行上的差别）。
+    /// </summary>
+    [Serializable]
+    public class ShowcaseParameterized : IShowcaseShape
+    {
+        /// <summary>构造写下的值（默认档构造它时填 0，告警档根本不构造）。</summary>
+        [BoxGroup("参数化")]
+        public int seed;
+
+        /// <summary>唯一的构造（带参）。</summary>
+        /// <param name="seed">种子。</param>
+        public ShowcaseParameterized(int seed)
+        {
+            this.seed = seed;
+        }
     }
 }

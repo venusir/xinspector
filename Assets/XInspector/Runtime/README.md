@@ -259,7 +259,9 @@ public static string BuildTag = "静态成员也可以标";
 | `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |
 | `[TypeDrawerSettings]` 的字段形态 | **必须写成 `[SerializeReference] public System.Type t;`**——裸的 `System.Type` 不在序列化数据里（进不了 Inspector）；忘了加会有**构建期告警**点名要说加它。Odin 用自己的序列化器兜住了这一层，**这是本包与它的一处差异** |
 | `[TypeDrawerSettings]` 的候选 | 本包自己扫（Unity 没有公开的候选集入口）：`BaseType` 的派生按 `Filter` 过滤；**不写 `BaseType` 时按 `object` 收——接口不在其列**，要接口请把基类型写成那个接口。`TypeInclusionFilter` 成员名照官方、**数值本包自定**；一个类型可同时命中多位（**泛型接口**＝泛型＋接口，**静态类**归抽象）。候选在**点击那一刻**现算，不缓存 |
-| `[TypeDrawerSettings]` 的菜单与写回 | 菜单按**命名空间分层**、当前值带勾、「（无）」清空项**有值时才有**——三条都是本批默认（日后由 `[TypeSelectorSettings]` 覆盖）。**多选退回原生那一行**（不告警）；**写回不进撤销栈**——`System.Type` 的托管引用撤销**恢复不出来**（实测：恢复出的对象不可用），本包宁可让 Ctrl+Z 跳过这一步。多态字段自己的「换具体类型」仍由 Unity 原生那一行承担，本包不提供（`[PolymorphicDrawerSettings]` 一族还没做） |
+| `[TypeDrawerSettings]` 的菜单与写回 | 菜单按**命名空间分层**、当前值带勾、「（无）」清空项**有值时才有**——三条都是本批默认（日后由 `[TypeSelectorSettings]` 覆盖）。**多选退回原生那一行**（不告警）；**写回不进撤销栈**——`System.Type` 的托管引用撤销**恢复不出来**（实测：恢复出的对象不可用），本包宁可让 Ctrl+Z 跳过这一步 |
+| `[PolymorphicDrawerSettings]` 的行 | 标了特性的**多态引用**字段把原生那一行换成自绘的「当前类型名」按钮 + 候选菜单（候选 = 声明类型的派生 ∩ 装得进 ∩ **造得出**；**声明类型自己是具体类时也在候选里**）；空槽位也能点它选第一个类型，**选了就展开**。不标特性的多态字段**一个字不动**（仍由 Unity 原生承担）。**回退**：有值但类型用不到本包（或撞守卫）时退回原生（用不到本包那档留一条 Console 说明）。**点当前类型 = 无操作**；菜单带「（无）」清空项 |
+| `[PolymorphicDrawerSettings]` 的旋钮 | `ReadOnlyIfNotNullReference` **只锁那一行**（改类型），子字段照常；`ShowBaseType` 格式「名字 （基类型）」由本包定；`NonDefaultConstructorPreference` 四档照官方文案、**数值本包自定**（默认 `ConstructIdeal`：挑参数最少的公开构造、参数填 C# 默认值；`Exclude` 把无参构造缺失者剔出候选；`LogWarning` 不构造只告警；`PreferUninitialized` 用 `FormatterServices.GetUninitializedObject`）。官方的 `CreateInstanceFunction` **本批不声明**（要单参解名通道，留下一批）。**换类型这一下能撤销**（与类型槽位相反） |
 | 只读与多对象 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存。`[MinMaxSlider]` 在多对象值不一致时退回普通绘制（双滑块没有混合值形态） |
 
 ### 内嵌编辑器特性

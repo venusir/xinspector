@@ -57,7 +57,9 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
 
 3. **末端绘制器不要自定义。** 末端由构建期**按节点形状**显式追加（根与分组接
    `ChildrenDrawer`、普通成员接 `UnityFallbackDrawer`、**展开过的复合成员**接
-   `CompositeMemberTerminalDrawer`）。它之所以不进注册表，是因为
+   `CompositeMemberTerminalDrawer`、**展开过的多态容器**接 `ManagedReferenceTerminalDrawer`
+   ——字段标了 `[PolymorphicDrawerSettings]` 时换 `PolymorphicRowTerminalDrawer`，
+   两者**只差那一行**，`DrawRow` 一个虚方法，子节点那半共用）。它之所以不进注册表，是因为
    一个写错的匹配条件就能让某属性链为空，症状是「它静默地什么都不画」——最难归因的
    一类问题。显式追加让链条永不为空。
 

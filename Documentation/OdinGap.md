@@ -16,9 +16,9 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-07，第二十八批之后）：**
+**本项目的家底（2026-10-07，第二十九批之后）：**
 
-- 公开特性 **89 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **90 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
   **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
@@ -100,6 +100,12 @@
   （本包第一次写 `managedReferenceValue`；实测未 Apply 的改动会被 `Update()` 丢掉，故当场提交；
   撤销不安全，**刻意不进撤销栈**）。字段要写成 `[SerializeReference] public System.Type t;`，
   误用有构建期告警点名。见 Pipeline §三十二。
+- **多态字段的自绘选择器 + `[PolymorphicDrawerSettings]`**（2026-10-07，第二十九批，
+  特性计数 89 → 90）：标了特性的多态字段把原生那一行换成自绘的「当前类型名按钮 + 候选菜单」
+  （候选 = 声明类型的派生 ∩ 装得进 ∩ 造得出）；三个旋钮（`ReadOnlyIfNotNullReference` 只锁那一行 /
+  `ShowBaseType` / `NonDefaultConstructorPreference` 四档）；顺带修掉「空槽位选了类型不会自行展开」
+  （登记表收两种、对账首建、重接容器自己的链）。`CreateInstanceFunction` 留给单参解名通道那一批。
+  见 Pipeline §三十三。
 
 ---
 
@@ -200,7 +206,7 @@
 | `[InlineEditor]` | ✅ 已实现 | 六模式 + 四对象字段模式 + 预览；递归上限等自定值见 Pipeline §七 |
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
-| `[PolymorphicDrawerSettings]` | ❌ 缺 | **L7-Inspector，可做**：官方原话「Provides options for **Polymorphic Fields rendered using Odin**」——旋钮挂在原生多态绘制器上（`CreateInstanceFunction` / `ReadOnlyIfNotNullReference` / `NonDefaultConstructorPreference` / `ShowBaseType`）。**不需要自研序列化器**，需要**自绘选择器** |
+| `[PolymorphicDrawerSettings]` | ✅ 已实现 | 2026-10-07（第二十九批）：**多态字段的自绘选择器**——标了特性的字段把原生那一行换成「当前类型名」按钮 + 候选菜单（只列装得进、造得出的实现；空槽位也能选）。三个旋钮已做（`ReadOnlyIfNotNullReference` 只锁那一行 / `ShowBaseType` 显示基类型 / `NonDefaultConstructorPreference` 四档照官方文案、数值本包自定）；**`CreateInstanceFunction` 留到单参解名通道那一批**（单参 `Type type` 的 resolved string，与 `[TypeSelectorSettings].FilterTypesFunction` 同款）。回退边界：有值但类型用不到本包时退回原生（一次性告警）。见 Pipeline §三十三 |
 | `[TypeDrawerSettings]` | ✅ 已实现 | 2026-10-07（第二十八批，**自绘选择器一族的第一块**）：`System.Type` 字段画成类型选择器——一行「当前类型名」按钮 + 本包自绘的分层候选菜单（点击才现算）。**字段要写成 `[SerializeReference] public System.Type t;`**（裸字段进不了序列化数据，**实测**；误用有**构建期告警**点名要说加它）；`BaseType` + `Filter` 收窄候选，`TypeInclusionFilter` 六成员照官方、**数值本包自定**（照 `PrefabKind` 先例）；多选退回原生那一行。见 Pipeline §三十二 |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ✅ 已实现 | 表格呈现；**不配绘制器、配处理器**（构建期建列模型并补一份 `[ListDrawerSettings]`） |
@@ -208,7 +214,9 @@
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 20 / 缺 2 / 不做 2**（2026-10-07 第二十八批：`[TypeDrawerSettings]` 转已实现，
+**小计：已实现 21 / 缺 1 / 不做 2**（2026-10-07 第二十九批：`[PolymorphicDrawerSettings]` 转已实现，
+缺 2→1——Type Specifics 只剩 `[HideReferenceObjectPicker]` 一个缺口。
+2026-10-07 第二十八批：`[TypeDrawerSettings]` 转已实现，
 缺 3→2——这一项挪过三次层（L3 → L7 前置 → 这里），最终答案是「通道在，只差字段加
 `[SerializeReference]` 这个约定」＋一条自绘选择器。此前写着 18/5/1，
 是 `[ColorPalette]` 转已实现后没跟着改；同日 `[TableMatrix]` 由「缺」改判**不作为**，
@@ -403,10 +411,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 89 已实现 + 5 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 90 已实现 + 4 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 89 个：
+已实现的 90 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -417,12 +425,13 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
   `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
-- **值绘制**（18）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+- **值绘制**（19）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
   `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
   `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
   `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）、
   `[ColorPalette]`（2026-10-07，**卡在设计的那一层补上了**：工程内调色板资产 + 按名查找）、
-  `[TypeDrawerSettings]`（2026-10-07，第二十八批：**自绘选择器一族的第一块**——类型选择器基座）
+  `[TypeDrawerSettings]`（2026-10-07，第二十八批：**自绘选择器一族的第一块**——类型选择器基座）、
+  `[PolymorphicDrawerSettings]`（2026-10-07，第二十九批：多态字段的自绘选择器，三个旋钮）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
 - **预制体上下文**（6，2026-10-04 L2 收尾之一）：四个条件 `[ShowIn]` `[HideIn]` `[EnableIn]`
@@ -454,15 +463,16 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 5 个」也不等于「5 份工作量」**：2026-10-07 核验之后（[Pipeline §二十九](Modules/Pipeline.md)），
-剩下的缺口**全部是可做的**，且都是**同一件事的不同侧面**——选择器一族**第一块已落地**
-（第二十八批：基座 + `[TypeDrawerSettings]`，见 Pipeline §三十二），剩下的都挂在同一套选择器/绘制器上：
+**「缺 4 个」也不等于「4 份工作量」**：2026-10-07 核验之后（[Pipeline §二十九](Modules/Pipeline.md)），
+剩下的缺口**全部是可做的**，且都是**同一件事的不同侧面**——选择器一族**前两块已落地**
+（第二十八批：基座 + `[TypeDrawerSettings]`；第二十九批：多态字段的自绘选择器 + 三个旋钮，
+见 Pipeline §三十二 / §三十三），剩下的都挂在同一套选择器/绘制器上：
 
 | 缺口 | 真实前提 |
 |---|---|
-| `[PolymorphicDrawerSettings]` `[TypeSelectorSettings]` | 自绘选择器（旋钮挂在「本包的选择器」上）——**基座已落地**，这两个是加旋钮 |
+| `[TypeSelectorSettings]` | 选择器上的显示旋钮（`PreferNamespaces` / `ShowCategories` / `ShowNoneItem` 覆盖基座默认）+ **单参解名通道**（`FilterTypesFunction` 是 `bool f(Type)` 的 resolved string——与 `[PolymorphicDrawerSettings].CreateInstanceFunction` 同款，一批做） |
 | `[TypeRegistryItem]` | 选择器 + 注册表（**图标那项撞 `SdfIconType` 独立线**） |
-| `[HideReferenceObjectPicker]` `[HideDuplicateReferenceBox]` | 「有一个引用框可抑制」⇒ 同样先得有那个绘制器 |
+| `[HideReferenceObjectPicker]` `[HideDuplicateReferenceBox]` | 「有一个引用框可抑制」⇒ 同样先得有那个绘制器；前置是那条**目视测量** |
 
 **「卡在设计」那一列早已归零**（`[ColorPalette]`，2026-10-07）；
 **字典与矩阵已判不作为**（要自研序列化器，见 L7 一节）。
@@ -723,8 +733,11 @@ L7 原先记的是「要求自己实现一套**序列化器**与**多态引用�
 > `[ShowInInspector]`、`[Button]` 一族、按名回调与指向实例反射成员/方法的条件**全部生效**，
 > 路径可穿过多态段继续下钻；「响亮跳过」告警已撤。**选择器一族的第一块也已落地**（第二十八批，
 > 见 Pipeline §三十二）：自绘类型选择器的基座（候选枚举 + 分层菜单 + 写回通道）配上
-> `[TypeDrawerSettings]`——**至此只剩**「选择器上的旋钮」（`[PolymorphicDrawerSettings]`
-> `[TypeSelectorSettings]` `[TypeRegistryItem]`）与两个 hide。
+> `[TypeDrawerSettings]`——**选择器一族的第二块也已落地**（第二十九批，见 Pipeline §三十三）：
+> 多态字段的「改类型」在标了 `[PolymorphicDrawerSettings]` 时改走本包选择器（原生那一行换成
+> 自绘行），配三个旋钮；`CreateInstanceFunction` 留给单参解名通道。
+> **至此只剩**：单参解名通道 + `[TypeSelectorSettings]`（那三个显示旋钮）、
+> `[TypeRegistryItem]`（图标撞 `SdfIconType` 独立线）、两个 hide（前置是那条目视测量）。
 
 ---
 

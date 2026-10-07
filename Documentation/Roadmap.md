@@ -513,6 +513,19 @@ Odin 是「能改但不保存」，本包是「不给改」。代价是少了一
 > **下一步**：选择器上的旋钮（`[PolymorphicDrawerSettings]` `[TypeSelectorSettings]`
 > `[TypeRegistryItem]`——**基座已落地，它们是加旋钮**）与两个 hide（前置是那条目视测量：
 > Unity 原生在多态引用上画不画「引用框」）；`List<IShape>` 多态元素仍另列。
+>
+> **2026-10-07 追记：选择器一族的第二块也已落地**（第二十九批，见 Pipeline §三十三）——
+> 多态字段的自绘选择器（标了 `[PolymorphicDrawerSettings]` 时原生那一行换成自绘行）
+> ＋三个旋钮＋**空槽位即时展开**（顺带修掉「选了类型不会自行展开」）。与报价单的两条偏差：
+> ① **回退规则**（有值但类型用不到本包 ⇒ 退回原生 + 一次性告警）——它的前提是
+> 「**原生那一行有换类型入口**」，**待目视确认**；若确认没有，改走本节上面的备选
+> （给 `ShouldExpand` 加一条「字段自己标了特性 ⇒ 展开」的腿，代价是展开用不到本包的类型）；
+> ② **写回判据合并成一条**（`declaredType.IsInstanceOfType(value)` 同时管类型槽位与多态槽位）。
+>
+> **下一步**：**单参解名通道 + `[TypeSelectorSettings]`**（`FilterTypesFunction` 与
+> `[PolymorphicDrawerSettings].CreateInstanceFunction` 同为单参 `Type type` 的 resolved string，
+> 一批做；显示三旋钮覆盖基座默认）；`[TypeRegistryItem]`（图标撞 `SdfIconType` 独立线）；
+> 两个 hide（前置同上那条目视测量）；`List<IShape>` 多态元素仍另列。
 
 ---
 

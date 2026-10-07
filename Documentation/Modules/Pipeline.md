@@ -2622,6 +2622,95 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 
 ---
 
+## 三十三、第二十九批：多态字段的自绘选择器与 `[PolymorphicDrawerSettings]`（2026-10-07）
+
+**做了什么**：**多态字段的「改类型」改走本包选择器**——字段带 `[PolymorphicDrawerSettings]`
+时那一行换成自绘的「当前类型名」按钮 + 候选菜单；配三个旋钮（`ReadOnlyIfNotNullReference` /
+`ShowBaseType` / `NonDefaultConstructorPreference`）；顺带修掉「空槽位选了类型不会自行展开」
+的缺口。**特性计数 89 → 90**。（`CreateInstanceFunction` 是单参 `Type type` 的 resolved string，
+与 `[TypeSelectorSettings].FilterTypesFunction` 同属「要另开一条」的解名形态——**留下一批**；
+本批连声明都没有，运行时报错会编译不过，正合本包口径。）
+
+### 目视测量（用户参与；**记录位，看到后填**）
+
+原生的多态那一行画不画「引用框」、有没有换类型入口、基类型显不显示——
+在展示台里看一眼即可（本仓不测 IMGUI）。**结论：待填。**
+
+> 这条是 **D6 回退规则的前提**：回退（有值且本包没接管 ⇒ 退回原生）只有在「原生那一行
+> **有**换类型入口」时才是可用的；若看下来没有入口，回退就是死路，要改走备选
+>（给 `ShouldExpand` 加一条「字段自己标了特性 ⇒ 展开」的腿——代价是展开用不到本包的类型，
+> 与安全阀正面冲突；改法与代价见 Roadmap §十二）。
+
+### 设计要点
+
+1. **行的两条路径**：展开态（有层状态）走**新末端** `PolymorphicRowTerminalDrawer`
+   （继承 `ManagedReferenceTerminalDrawer`，差别**只有那一行**——`DrawRow` 一个虚方法；
+   子节点那半含搜索框、只读罩、缩进、过滤四处判断，复制一份迟早漂）；未展开态（空槽位 /
+   撞守卫 / 类型用不到本包）走链上的替换型绘制器 `PolymorphicDrawerSettingsDrawer`。
+   **末端选型是这条分支唯一能无头断言的地方**（本仓不测 IMGUI），故两态分成两个类、
+   `ChainTail` 断言精确类型。
+2. **判断全在纯函数里**（`PolymorphicRow`）：`Decide`（7 档：`DrawRow` / `TerminalOwnsRow` /
+   `FallbackNotBacked` / `FallbackTypeSlot` / `FallbackMultiSelect` / `FallbackGuarded` /
+   `FallbackNotTakenOver`）、`TextFor`、`ShouldDisableRow`、`ShouldRewrite`（**点当前类型
+   = 无操作**——不拿同类型的新实例换掉用户已经填好的值）、`DeclaredTypeOf`（字段的声明类型；
+   展开态节点 `Type` 是具体类型，不能用）。
+3. **候选 = 声明类型的派生 ∩ 装得进 ∩ 造得出**。「可实例化」（非抽象/非接口/非开放泛型/
+   非 `UnityEngine.Object` 一族）**必须在过滤位之外另立**——`TypeInclusionFilter` 的匹配是
+   「求交非空」，传 `IncludeConcreteTypes` 照样收下开放泛型 `List<>`（表达能力所限）。
+   **声明类型自己是具体类时也在候选里**（`[SerializeReference] Circle c;` 的唯一选项，
+   而 `Collect` 的语义是「派生」会把它剔掉）。菜单带**「（无）」清空项**（有值时才有，
+   与类型选择器同款）。
+4. **实例化四档**（`PolymorphicInstanceFactory`）：有（或不需要）无参构造时四档一律
+   `Activator`；没有无参构造时——`ConstructIdeal` 挑参数最少的公开构造、参数逐个填
+   `ButtonParameters.DefaultFor`（与按钮参数区同一份答案）；`Exclude` 直接把这类剔出候选；
+   `LogWarning` **不构造**、只失败（调用方告警）；`PreferUninitialized` 用
+   `FormatterServices.GetUninitializedObject`（**不跑构造**，用例用哨兵字段钉住）。
+5. **写回判据合并成一条**：`declaredType.IsInstanceOfType(value)` 同时管类型槽位与多态槽位
+   （逐格等价已核；`typeof(Type).IsInstanceOfType(typeof(X))` 为真），只有拒绝文案变。
+   `PolymorphicSlotWrite` **默认带撤销**（用户对象的写回能撤销，探针实测）、窗口路径才关；
+   与 `TypeSlotWrite` 的恒定 `WithoutUndo`（`System.Type` 撤销会弄坏槽位）**刻意相反**，
+   两个文件互相点名 + 各一条撤销用例。**实测补记**：批处理测试里
+   `ApplyModifiedProperties` 的隐式撤销登记观察不到（编辑器里由它自己登记，文档口径）——
+   撤销用例用探针同款的显式 `RecordObject` 钉「值换得回来」这一半。
+6. **空槽位即时展开**（顺带修掉的缺口）：登记表从「只收已展开」放宽到**两种都收**——
+   未展开的挂 `PolymorphicWatchState`（只记上次看到的具体类型，每帧判据退化成一次引用比较），
+   对账发现类型变了且过得了构建期同一道闸（`ShouldExpand`）就**首建**：走同一条七步流水线，
+   额外只多做一件——**重接容器自己的链**（末端从原生兜底换成多态末端；对账在一切绘制之前，
+   换链安全）。实例化三件套之外的第四条：**判据必须在问闸之前先按具体类型改写节点**——
+   否则 `ShouldExpand` 看到的是声明类型（接口），安全阀会把该展开的也挡住（**实测踩到**）。
+   注销判据同步补上第二种状态（免得只看不展开的条目变成僵尸）；每帧成本是一条
+   **记录**（零分配的类型比较 + 两次状态查找；`ShouldExpand` 只在类型变化那一刻跑）。
+   已知的**不对称**（记录在案）：换到一个用不到本包的类型时，**重建路径照常展开**
+   （链已冻结，退不回原生全量），只有**首建**那条路会按闸退回原生。
+7. **误用告警两条**：构建期扫「没有节点」的（`TypeSelectorMisuse` 现在一趟扫两个特性；
+   多态那支点名「**要加 `[SerializeReference]`**」）；绘制期管「有节点但不是托管引用」
+   （`FallbackNotBacked`）与「是类型槽位」（`FallbackTypeSlot`）两档。
+
+### 边界（都写进了包 README）
+
+- **回退规则**：特性在、槽位有值、本包没接管这一格 ⇒ 退回 Unity 原生（类型用不到本包那档
+  一次性告警；撞守卫那档不额外告警——构建期已响过；多选那档不告警）。
+- **`ReadOnlyIfNotNullReference` 只锁那一行**（改类型），不锁子字段——锁整棵子树是
+  `[ReadOnly]` 的事。`ShowBaseType` 的格式「名字 （基类型）」由本包定。
+- 与 `[TypeDrawerSettings]` 同字段共存时后者赢（它是 `ValuePriority` 的替换型，画完不调下一个）；
+  写回判据只有一条，两条路不可能给出不同的接受结论。
+- **渲染未目视确认**：自绘行与原生行的观感对照只有人眼能答（与既有两个末端同款）。
+
+### 规模与遗留
+
+- 生产代码：`Runtime` 两个声明（特性 + 枚举）、`PolymorphicInstanceFactory`、
+  `PolymorphicSlotWrite`（含 `TryClear`）、`PolymorphicRow`（行 + 判据 + 候选）、
+  绘制器与末端各一、`ManagedReferenceTerminalDrawer` 抽 `DrawRow`、`TerminalFor` 分支、
+  `PolymorphicWatchState` + 对账首建 + 登记/注销放宽、`TypeSelectorMisuse` 扩扫。
+- 用例：`PolymorphicDrawerSettingsAttributeTests` 6 例、`PolymorphicInstanceFactoryTests` 9 例、
+  `PolymorphicSlotWriteTests` 5 例、`PolymorphicRowTests` 12 例、`PolymorphicMemberTests` +4、
+  `ReflectedValueCopierTests` +2、`XInspectorUsageDetectionTests` +1。
+  **EditMode 976 → 1009，0 失败**（PlayMode 281 → 287）。
+- **遗留**：单参解名通道 + `[TypeSelectorSettings]`（含 `CreateInstanceFunction`）；
+  `[TypeRegistryItem]`；两个 hide；`List<IShape>` 的多态元素。
+
+---
+
 ## 附录 · 审计记忆
 
 > 本节是**附录**：它的内容是跨轮次的审计留档，**不参与正文的批次顺序**。
