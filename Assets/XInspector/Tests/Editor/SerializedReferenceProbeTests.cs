@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.TestTools;
 using XInspector.Editor;
 using Object = UnityEngine.Object;
 
@@ -378,7 +379,171 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 探针四：进管线的三条行为（各自决定一个设计点）
+
+        /// <summary>
+        /// **测量**：自引用的多态引用在 <c>NextVisible</c> 下**停不停得下来**。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 展开的守卫要防的是「深」还是「根本停不下来」——这两件事的处置完全不同：
+        /// 前者加深度预算就够，后者必须有一道**硬刹车**，否则构建期就无限递归。
+        /// </para>
+        /// <para>
+        /// <b>实测结论：是后者。</b>自引用的多态子树在 <c>NextVisible</c> 下**是无限的**
+        /// （本用例走满 5000 的上限）。环没有被 Unity 切断——回边照样 <c>hasVisibleChildren</c>。
+        /// 故枚举带硬上限：真无限时这条**不会挂死**，而是把「撞到上限」当成结论记下来。
+        /// </para>
+        /// <para>
+        /// 递归类型会触发 Unity 自己的「Serialization depth limit」告警（那是类型的账、
+        /// 不是本包的），故这里临时 <c>ignoreFailingMessages</c>，并把收到的警告记进日志。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void 自引用的多态引用在枚举下停不停得下来()
+        {
+            const int cap = 5000;
+            var target = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            var notices = new List<string>();
+
+            void Handler(string condition, string stackTrace, LogType type)
+            {
+                notices.Add($"{type}: {condition}");
+            }
+
+            var previous = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true;
+            Application.logMessageReceived += Handler;
+            try
+            {
+                var node = new ProbeNode { id = 0 };
+                node.next = node; // 自引用
+                target.node = node;
+
+                var so = new SerializedObject(target);
+                var root = so.FindProperty("node");
+                Assert.That(root, Is.Not.Null, "自引用的多态字段照样在序列化数据里。");
+
+                // **整棵子树**走：每一跳都带 enterChildren，否则只走了兄弟那一圈——
+                // 那样量到的是「node 有几个字段」，不是「环有没有铺开」。
+                // （第一版就是这么写错的：`enterChildren = false` 让它只走了 2 个属性，
+                //   而回边自己的 hasVisibleChildren 其实是 true。）
+                var visited = 0;
+                var maxDepth = 0;
+                var cursor = root.Copy();
+                var end = cursor.GetEndProperty();
+                while (visited < cap
+                       && cursor.NextVisible(true)
+                       && !SerializedProperty.EqualContents(cursor, end))
+                {
+                    visited++;
+                    maxDepth = Math.Max(maxDepth, cursor.depth);
+                }
+
+                var backEdge = so.FindProperty("node.next");
+
+                TestContext.WriteLine(
+                    $"[探针] 自引用枚举：走过 {visited} 个属性（上限 {cap}），最大 depth = {maxDepth}");
+                TestContext.WriteLine(
+                    $"[探针] 回边 node.next：{Describe(backEdge)}，hasVisibleChildren = {backEdge?.hasVisibleChildren}");
+                TestContext.WriteLine(
+                    $"[探针] 期间 Unity 报了 {notices.Count} 条日志"
+                    + (notices.Count > 0 ? "，第一条：" + notices[0] : string.Empty));
+
+                Assert.That(backEdge, Is.Not.Null, "回边自己还是一个属性。");
+                Assert.That(backEdge.hasVisibleChildren, Is.True,
+                    "回边**有**可见子级——环没有被 Unity 切断。");
+                Assert.That(visited, Is.EqualTo(cap),
+                    "**枚举不会自己停下来**：自引用的多态子树在 NextVisible 下是无限的（走满上限）。"
+                    + "⇒ 展开的刹车是**必须**的，不是保险——没有它，构建期就无限递归。"
+                    + "这也是「按具体类型的链去重」比「深度预算」更该先落地的理由：它停在第一次重复处，"
+                    + "既更早、也说得清为什么。");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Handler;
+                LogAssert.ignoreFailingMessages = previous;
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **测量**：多态字段在多选下的混合态——<c>hasMultipleDifferentValues</c> 与
+        /// <c>managedReferenceValue</c> 分别给什么。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 这条决定「多选下展不展开」的判据。关键在**同类型不同实例**那一格：
+        /// 若它也为真，<c>hasMultipleDifferentValues</c> 就不能当判据——那会把常规的
+        /// 多选编辑整个挡在门外。
+        /// </para>
+        /// <para>
+        /// 另一头是 <c>managedReferenceValue</c>：它是「取主目标那个实例」还是「混合态给 null」，
+        /// 决定它能不能直接拿来当运行时类型与对账的来源（本包纪律：不拿一个目标冒充全体）。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void 多态字段在多选下的混合态()
+        {
+            var a = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            var b = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            try
+            {
+                var so = new SerializedObject(new Object[] { a, b });
+                var prop = so.FindProperty("shape");
+                Assert.That(prop, Is.Not.Null);
+
+                a.shape = new ProbeShape { hp = 1 };
+                b.shape = new ProbeShape { hp = 2 };
+                so.Update();
+                Report(prop, "同类型、不同实例");
+
+                // **决定性的一条**：同类型、只是两个实例，它就已经报混合了 ⇒
+                // 它不能当「各目标的类型是否一致」的判据，否则常规的多选编辑会整个被挡在门外。
+                Assert.That(prop.hasMultipleDifferentValues, Is.True,
+                    "同类型不同实例也报混合 ⇒ hasMultipleDifferentValues 不能用来判「类型一致」。");
+                Assert.That(prop.managedReferenceValue, Is.SameAs(a.shape),
+                    "混合态下属性给的是**主目标那个实例**——所以不能拿它冒充全体（本包既有纪律）。");
+
+                b.shape = new ProbeDerivedShape { hp = 3 };
+                so.Update();
+                Report(prop, "不同具体类型");
+                Assert.That(prop.hasMultipleDifferentValues, Is.True);
+
+                b.shape = null;
+                so.Update();
+                Report(prop, "一个有一个空");
+                Assert.That(prop.hasMultipleDifferentValues, Is.True);
+
+                a.shape = null;
+                b.shape = null;
+                so.Update();
+                Report(prop, "两个都空");
+                Assert.That(prop.hasMultipleDifferentValues, Is.False,
+                    "两个都空 ⇒ 不算混合（这是唯一「不一致却报一致」的一格）。");
+                Assert.That(prop.managedReferenceValue, Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(a);
+                Object.DestroyImmediate(b);
+            }
+        }
+
+        #endregion
+
         #region 工具
+
+        /// <summary>把一格的混合态写进日志，供上面的测量用例读。</summary>
+        /// <param name="property">多态字段的序列化属性。</param>
+        /// <param name="capture">这一格在测什么。</param>
+        private static void Report(SerializedProperty property, string capture)
+        {
+            var value = property.managedReferenceValue;
+            TestContext.WriteLine(
+                $"[探针] {capture}：hasMultiple={property.hasMultipleDifferentValues}；"
+                + $"managedReferenceValue={(value == null ? "null" : value.GetType().Name)}");
+        }
 
         /// <summary>把「找没找到 / 是什么类型」写成一行，供测量用例打日志用。</summary>
         /// <param name="property">序列化属性；可以为 null。</param>
@@ -429,6 +594,30 @@ namespace XInspector.Tests.Editor
 
         /// <summary>对照：一维数组。</summary>
         public int[] plainArray;
+
+        /// <summary>自引用的多态引用（探针四）。</summary>
+        [SerializeReference]
+        public ProbeNode node;
+    }
+
+    /// <summary>探针四用的自引用类型。</summary>
+    [Serializable]
+    internal class ProbeNode
+    {
+        /// <summary>一个普通字段。</summary>
+        public int id;
+
+        /// <summary>指向同类型的多态引用——自引用时枚举会怎样，是本条要测的。</summary>
+        [SerializeReference]
+        public ProbeNode next;
+    }
+
+    /// <summary>探针用的派生实例类型（用来构造「不同具体类型」那一格）。</summary>
+    [Serializable]
+    internal class ProbeDerivedShape : ProbeShape
+    {
+        /// <summary>派生类型独有的一格。</summary>
+        public int extra;
     }
 
     /// <summary>探针用的契约类型。</summary>
