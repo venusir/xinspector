@@ -33,7 +33,8 @@ namespace XInspector.Editor
         /// </summary>
         /// <remarks>
         /// 非 null 时，取值是 <c>访问器(实例(目标))</c> 而不是 <c>访问器(目标)</c>——
-        /// 实例由一条构建期编译的字段链每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath"/>），
+        /// 实例由一条构建期编译的字段链每帧现读（见
+        /// <see cref="ReflectedAccessor.TryCreatePath(Type, string, out ReflectedAccessor, out string)"/>），
         /// 因此父字段被重新赋值之后跟着走。
         /// </remarks>
         private readonly ReflectedAccessor[] _scopes;

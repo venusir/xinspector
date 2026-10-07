@@ -301,29 +301,6 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 把复合成员的直接子级展开成真节点（递归下去）。
-        /// </summary>
-        /// <param name="serializedObject">底层序列化对象。</param>
-        /// <param name="parent">复合成员节点。</param>
-        /// <remarks>
-        /// <para>
-        /// 子节点的值入口一律用 <see cref="SerializedObject.FindProperty"/> 按各自路径取
-        /// **独立**实例——迭代器是共享的（老坑：存进节点会让所有节点指向最后一个属性）。
-        /// </para>
-        /// <para>
-        /// <b>子节点不过 <c>memberFilter</c>。</b> 那个过滤器的存在理由只是排除
-        /// EditorWindow 自己的那几个内部字段（判据是 <c>field == null</c> 即拒、
-        /// 声明类型必须可赋给窗口基类），套到嵌套层会把整层**静默滤掉**。
-        /// </para>
-        /// </remarks>
-        /// <param name="serializedObject">底层序列化对象。</param>
-        /// <param name="parent">复合父节点。</param>
-        /// <remarks>
-        /// 反射成员与方法节点**一律收**（嵌套层与元素层同）：元素路径
-        /// （<c>items.Array.data[i]</c>）自 2026-10-06 起被
-        /// <see cref="ReflectedAccessor.TryCreatePath"/> 认，取实例的那条链照样成立。
-        /// </remarks>
-        /// <summary>
         /// 成员节点该用哪个类型：多态字段取**具体类型**，其余取声明类型。
         /// </summary>
         /// <param name="field">成员的字段；Unity 注入的成员为 <c>null</c>。</param>
@@ -355,6 +332,28 @@ namespace XInspector.Editor
             return field != null ? field.FieldType : typeof(object);
         }
 
+        /// <summary>
+        /// 把复合成员的直接子级展开成真节点（递归下去）。
+        /// </summary>
+        /// <param name="serializedObject">底层序列化对象。</param>
+        /// <param name="parent">复合成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 子节点的值入口一律用 <see cref="SerializedObject.FindProperty"/> 按各自路径取
+        /// **独立**实例——迭代器是共享的（老坑：存进节点会让所有节点指向最后一个属性）。
+        /// </para>
+        /// <para>
+        /// <b>子节点不过 <c>memberFilter</c>。</b> 那个过滤器的存在理由只是排除
+        /// EditorWindow 自己的那几个内部字段（判据是 <c>field == null</c> 即拒、
+        /// 声明类型必须可赋给窗口基类），套到嵌套层会把整层**静默滤掉**。
+        /// </para>
+        /// <para>
+        /// 反射成员与方法节点**一律收**（嵌套层与元素层同）：元素路径
+        /// （<c>items.Array.data[i]</c>）自 2026-10-06 起被
+        /// <see cref="ReflectedAccessor.TryCreatePath(Type, string, out ReflectedAccessor, out string)"/> 认，
+        /// 取实例的那条链照样成立。
+        /// </para>
+        /// </remarks>
         private static void ExpandChildren(SerializedObject serializedObject, InspectorProperty parent)
         {
             var property = parent.ValueEntry?.SerializedProperty;
@@ -1490,7 +1489,7 @@ namespace XInspector.Editor
         /// <remarks>
         /// <para>
         /// 取值对象是**同一个嵌套实例**（元素层是**那个元素**），由一条构建期编译的字段链
-        /// 每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath"/>）——不是绑死的实例，
+        /// 每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath(Type, string, out ReflectedAccessor, out string)"/>）——不是绑死的实例，
         /// 因此父字段被重新赋值之后取值跟着走。逐目标的访问器编译走
         /// <see cref="NestedInstanceScope.Compile"/>：与条件族、按名回调族**同一份实现**
         /// （此前这里自有一份逐目标循环，是天然的漂移点）。

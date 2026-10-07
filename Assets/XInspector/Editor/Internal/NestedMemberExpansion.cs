@@ -646,7 +646,7 @@ namespace XInspector.Editor
         /// <remarks>
         /// <b>只看实例字段</b>（<see cref="BindingFlags"/> 里没有 <c>Static</c>）：路径表达的是
         /// 「从这个实例往下走」，静态成员不在实例里，够不着也不该够着。
-        /// <see cref="ReflectedAccessor.TryCreatePath"/> 也用本方法，两条路对「哪些段认得」必须一致。
+        /// <see cref="ReflectedAccessor.TryCreatePath(Type, string, out ReflectedAccessor, out string)"/> 也用本方法，两条路对「哪些段认得」必须一致。
         /// </remarks>
         internal static FieldInfo FindDeclaredField(Type type, string name)
         {

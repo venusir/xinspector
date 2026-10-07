@@ -109,6 +109,14 @@ internal sealed class MyDrawer : AttributeDrawer<MyAttribute>
   （判据每轮按当前前置类型重算）；**按名解析取「最近的 `Kind.Member` 祖先」**，
   内层元素节点比外层近，故不会看错层；而与成员引用同款，按名解析是**两级**语义
   （最近容器 → 根绝对名，**不查中间祖先**）——本轮明确保持并补了用例钉住。
+  **多态容器也是容器**（`Kind.Member`、路径就是那个字段的序列化路径如 `shape`）：容器的
+  `Type` 是**具体类型**（按 `managedReferenceValue` 解析）；路径可以**穿过**它继续下钻——
+  穿段要按具体类型换基，具体类型由**树从节点祖先链**给
+  （`NestedInstanceScope.PolymorphicTypesFor`：**非末段**多态段一段一格、按路径出现顺序，
+  缺格**响亮拒绝**；末段不需要换基，读到实例即可）。**按名解析实例上的成员/方法时不要用
+  `ReflectedAccessor.ValueType`**：末段是多态引用时它只是**声明类型**（接口/抽象类），
+  要实例类型走 `NestedInstanceScope.InstanceTypeOf`（只在末段确是多态引用时现读一次实例，
+  构建/重建期）。
   新增任何「要拿实例」的节点种类时，都要走这条出口并配一条钉住作用域的用例。
 - **自己渲染子节点的绘制器，要认「子节点策略」。** 页签与水平分组通过 `PropertyState` 上的
   `GroupChildrenLayout` 决定「画哪几个子节点」，`[Searchable]` 用 `SearchScope` 决定

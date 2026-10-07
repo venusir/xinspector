@@ -1300,7 +1300,7 @@ L6 的立项理由一直写着「自己做展开的**唯一理由**是让本包�
 |---|---|
 | `objectReferenceValue` | 只对对象引用有效（嵌套的 `stats` 是 `Generic`） |
 | `boxedValue` | 给的是**序列化数据的装箱快照**：读不到非序列化成员（那正是 `[ShowInInspector]` 存在的理由），给不出可调用的活实例，每次还分配一个箱子 |
-| `managedReferenceValue` | 只对 `[SerializeReference]`（本包刻意不展开） |
+| `managedReferenceValue` | 只对 `[SerializeReference]`（**2026-10-07 起本包按需展开**，见 §三十 / §三十一） |
 
 于是唯一可行的是 **`targetObjects` + 按 `propertyPath` 逐段编译式下钻**
 （`ReflectedAccessor.TryCreatePath`）：构建期合成一条委托链，绘制期只剩委托调用——
@@ -2472,6 +2472,78 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 - 用例：`PolymorphicMemberTests` 11 例、`SerializedReferenceProbeTests` 11 例（其中三条是本批的测量）、
   两条既有守卫翻面（`NestedMemberTests`、`SearchableTests`）。**EditMode 925 → 929，0 失败**。
 - **遗留**：读路径那一批；自绘类型选择器一族；`List<IShape>` 的多态元素。
+
+> **2026-10-07 追记（第二十七批）：读路径已落地**——多态段里的 `[ShowInInspector]` /
+> `[Button]` 一族 / 按名回调 / 指向实例反射成员的条件全部生效，「响亮跳过」那条告警已撤
+> （见 §三十一）。上面「边界」的第一条与「遗留」的第一项**都已过期**，照 §三十一 读。
+
+---
+
+## 三十一、第二十七批：多态段里的读路径（2026-10-07）
+
+**做了什么**：多态段里的 `[ShowInInspector]`、`[Button]` 一族、按名回调（`[InlineButton]` /
+`[OnValueChanged]` / `[CustomContextMenu]`）与**指向实例反射成员/方法的条件族**
+（含 `[ValueDropdown]` 数据源）**全部生效**——取/调的是**槽位里那个实例**；
+路径可以**穿过**多态段继续下钻（`shape.inner.Tag`、`shape.points.Array.data[0].Tag`）。
+§三十 里那条「响亮跳过」告警撤掉。**特性计数 +0**，是 L7 的第二步。
+
+### 两条决策
+
+1. **穿段按「树给的具体类型」换基。** 多态段是路径上唯一的**类型断点**——声明类型常常是
+   接口/抽象类，下一段的字段只在具体类型上。`TryCreatePath` 因此多收一个
+   `Type[] polymorphicTypes`（**非末段**多态段按路径出现顺序各占一格，缺格**响亮拒绝**），
+   段内插一层 `TypeIs` 收窄：类型对不上（多选、陈旧调用）时给 `null` 走既有空传播，
+   **不是每帧抛**。**末段**多态段不需要换基（读到实例即可，`ValueType` 保持声明类型——
+   那是它的契约）。具体类型由 `NestedInstanceScope.PolymorphicTypesFor` 从**节点祖先链**取；
+   **不含容器自身**——它必然是路径末段，于是「从 `Parent` 上溯」恰好就是要穿过的那些段。
+2. **实例类型只开一个出口：`NestedInstanceScope.InstanceTypeOf`。**
+   `ReflectedAccessor.ValueType` 是末段的**静态类型**，多态末段上它是接口/抽象类；
+   按名解析实例成员/方法的三处（`ResolveAccessors`、`ButtonProcessors`、`NamedMethodResolver`）
+   改走 `InstanceTypeOf`——只在末段确是多态引用时**现读一次实例**（构建/重建期，
+   同既有的豁免），其余逐字返回 `ValueType`。**没有把三处的顶层三元整体收进新函数**：
+   三处顶层口径并不一致（`ButtonProcessors` 走 `TargetObjects.IsAlive`，另两处走
+   `targets[i]?.GetType()`），统一会**悄悄改掉「已销毁目标」的判活语义**——
+   正是「改型会弄丢白送语义」那类坑。
+
+### 判据补腿与逐闸核对
+
+- `IsCompositeCandidate` 多态支补上序列化那半边同款的**第二条腿**
+  （`hasVisibleChildren || HasNonSerializedNodeMember(member.Type)`）——不加它，
+  「只放一个 `[ShowInInspector]` 的具体类型」连门都进不了（**没有告警**）。
+  经验第十一条第三次应验：闸门不止一道。
+- 逐闸核对（都不动）：`ShouldExpand` 末尾 `HasSupportedMember` 已按具体类型递归；
+  `HasNonSerializedNodeMember` 已覆盖三类成员；**自动接管的盲区照旧**——`WouldExpand`
+  只吃声明类型，看不见具体实现里的特性，逃生口是显式 `[CustomEditor]`。本批补了一条
+  **钉住用例**把这条近似钉实（多态槽位里的具体类型**不算**「用到了本包」，**实测**）。
+- `IsPolymorphicReference` 的消费者清单更新为**四处**（展开判据、递归判据、多态守卫、
+  **路径访问器**）——最后一处的语义从「拒绝」变成「要不要按具体类型换基」；
+  remarks 里旧的「搜索的构建期告警」消费者**已不存在**（过期句，本批改掉）。
+
+### 一处补充测量（实测）
+
+`多态槽位同类型同值不同实例算不算混合态`（`SerializedReferenceProbeTests`）：
+**仍报混合** ⇒ 判据是**实例身份**而不是内容 ⇒ **展开的多态容器恒为单目标**
+（§三十 只测过「同类型、值也不同」那一格，本批把它隔离出来了）。
+读路径的逐目标口径因此是保险，不是必需。
+
+### 边界（都写进了包 README）
+
+- **`List<IShape>` 多态元素不做**（元素层展开判据不收多态元素）；自绘选择器一族是下一块。
+- **换实现/清空槽位的既有语义不变**：读路径节点随子树一起重建/撤掉（用例钉住）。
+- **渲染未目视确认**：多态容器「原生一行 + 本包子节点」是否双三角，只有人眼能答。
+
+### 规模与遗留
+
+- 生产代码：`ReflectedAccessor`（穿段换基）、`NestedInstanceScope`（`Compile` 改收节点、
+  `PolymorphicTypesFor`、`InstanceTypeOf`）、`ReflectedMemberResolver` / `MemberReferenceResolver`
+  （往下传具体类型）、`NestedMemberExpansion`（判据补腿）、`PropertyTreeBuilder`（接线、
+  撤告警、`ResolveAccessors`）、`ButtonProcessors` / `NamedMethodResolver`。
+- 用例：`PolymorphicReflectionTests` 新建 15 例、`ReflectedAccessorTests` 换 1 条补 6 条、
+  `PolymorphicMemberTests` 翻 1 条，`SearchableTests` / `SerializedReferenceProbeTests` /
+  `XInspectorUsageDetectionTests` 各 +1。**EditMode 929 → 952，0 失败**（PlayMode 274 不动）。
+- 顺带修正：上一批把 `RebuildElementLayer` 与 `RegisterPolymorphicLayersIn` 的文档
+  挤到了 `WarnPolymorphicReadPathSkipped` 头上（三块叠在一起），本批删除告警时一并归位。
+- **遗留**：自绘类型选择器一族；`List<IShape>` 的多态元素。
 
 ---
 

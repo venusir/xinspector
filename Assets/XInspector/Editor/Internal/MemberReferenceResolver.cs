@@ -217,7 +217,8 @@ namespace XInspector.Editor
     /// <para>
     /// <b>反射那一级找的是「同一个实例」。</b> 嵌套层与元素层里，成员名指的是**同层**的成员
     /// ——在根上找就会拿到根上的同名成员，「条件看错了对象」，静默且极难归因。实例由一条
-    /// 构建期编译的字段链每帧现读（见 <see cref="ReflectedAccessor.TryCreatePath"/>），
+    /// 构建期编译的字段链每帧现读（见
+    /// <see cref="ReflectedAccessor.TryCreatePath(Type, string, out ReflectedAccessor, out string)"/>），
     /// 父字段被重新赋值后跟着走。
     /// </para>
     /// <para>

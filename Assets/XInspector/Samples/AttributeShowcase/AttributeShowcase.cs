@@ -127,7 +127,8 @@ namespace XInspector.Samples
         public ClassLevelGroupedShowcase grouped = new ClassLevelGroupedShowcase();
 
         /// <summary>
-        /// 多态引用：具体类型里带了本包特性，于是**按需展开**——里面的条件、分组、顺序、内联生效。
+        /// 多态引用：具体类型里带了本包特性，于是**按需展开**——里面的条件、分组、顺序、内联生效，
+        /// <c>[ShowInInspector]</c> 与 <c>[Button]</c> 一族也一样（读/调的是槽位里那个实例）。
         /// 换掉具体实现（<see cref="ShowcaseCircle"/> ↔ <see cref="ShowcaseSquare"/>）会整棵子树重建；
         /// 清空则退回原生那一行。
         /// </summary>
@@ -1239,7 +1240,7 @@ namespace XInspector.Samples
     }
 
     /// <summary>
-    /// 多态引用的槽位类型（2026-10-07 起：里面的**序列化成员**按需进树）。
+    /// 多态引用的槽位类型（2026-10-07 起：里面的**序列化成员与读路径成员**都按需进树）。
     /// <para>
     /// 声明成接口是刻意的——多态引用的主战场就是接口与抽象类，
     /// 「用不用得到本包」按**实例的具体类型**判，而不是这个接口。
@@ -1264,6 +1265,17 @@ namespace XInspector.Samples
 
         /// <summary>开关自己。</summary>
         public bool filled = true;
+
+        /// <summary>多态段里的读路径成员：值跟着 <see cref="radius"/> 走，只读。</summary>
+        [ShowInInspector]
+        public float Diameter => radius * 2f;
+
+        /// <summary>多态段里的按钮：改的是**槽位里那个实例**（点一下半径翻倍）。</summary>
+        [Button("半径翻倍")]
+        public void DoubleRadius()
+        {
+            radius *= 2f;
+        }
     }
 
     /// <summary>换掉具体类型时用的另一个实现——子树会整棵重建。</summary>
