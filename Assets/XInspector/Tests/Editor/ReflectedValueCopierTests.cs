@@ -352,17 +352,17 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 非类型值写不进托管引用槽位——本包目前只在**类型槽位**上写托管引用。
+        /// 非类型值写不进**类型槽位**——声明类型（<c>System.Type</c>）装不下它。
         /// </summary>
         /// <remarks>
-        /// 「把托管对象写进多态槽位」不在本轮范围：那要先定「选中值怎么回落到声明类型」的语义，
-        /// 而原生多态 UI 今天已经在做这件事（见 README 的多态引用一节）。
+        /// 判据与多态槽位**同一条**（<c>declaredType.IsInstanceOfType(value)</c>，第二十九批合并）：
+        /// 装不下的原因一律是「声明类型装不下」，不再按槽位种类分两种说法。
         /// </remarks>
         [Test]
-        public void 非类型值写不进托管引用槽位()
+        public void 非类型值写不进类型槽位()
         {
-            AssertReject("类型槽位", new ReflectedCopierPoco(), "chosenType");
-            AssertReject("类型槽位", 42, "chosenType");
+            AssertReject("声明类型", new ReflectedCopierPoco(), "chosenType");
+            AssertReject("声明类型", 42, "chosenType");
         }
 
         /// <summary>类型值写不进**非类型**的托管引用槽位——声明类型装不下一只 <c>Type</c>。</summary>
@@ -428,6 +428,50 @@ namespace XInspector.Tests.Editor
             {
                 Object.DestroyImmediate(other);
             }
+        }
+
+        #endregion
+
+        #region 多态槽位（实例）
+
+        /// <summary>
+        /// 多态槽位写的是**一个实例**：匹配声明类型就收，且落盘、读回来是同一个活实例。
+        /// </summary>
+        /// <remarks>
+        /// 与类型槽位共用**同一条判据**（<c>declaredType.IsInstanceOfType(value)</c>）——
+        /// 这个特性是第二十九批放宽的那一格（此前托管引用只认 <c>System.Type</c>）。
+        /// </remarks>
+        [Test]
+        public void 多态槽位接受匹配的新实例()
+        {
+            var instance = new ReflectedCopierPoco { value = 3 };
+
+            Assert.That(
+                ReflectedValueCopier.TryAssign(
+                    instance, Property("chosenPoco"), typeof(ReflectedCopierPoco), out var reason),
+                Is.True,
+                reason);
+
+            _serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(
+                new SerializedObject(_target).FindProperty("chosenPoco").managedReferenceValue,
+                Is.SameAs(instance),
+                "写进去的是那个活实例。");
+        }
+
+        /// <summary>实例装不进声明类型时拒绝，且**什么都不写**。</summary>
+        [Test]
+        public void 不匹配的实例写不进多态槽位()
+        {
+            var destination = Property("chosenPoco");
+
+            Assert.That(
+                ReflectedValueCopier.TryAssign(
+                    "不是那个类型", destination, typeof(ReflectedCopierPoco), out var reason),
+                Is.False);
+            Assert.That(reason, Does.Contain("声明类型"));
+            Assert.That(destination.managedReferenceValue, Is.Null, "拒绝时必须原样不动。");
         }
 
         #endregion

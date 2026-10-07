@@ -63,6 +63,11 @@ namespace XInspector.Editor
         /// 唯一的例外是字符串：取空串而不是 <c>null</c>。文本框拿到 <c>null</c> 会显示成空，
         /// 而用户点进去又清空时会得到空串，两种「空」在状态里换来换去没有意义。
         /// </para>
+        /// <para>
+        /// <b>多态槽位的构造参数也用它</b>（<c>PolymorphicInstanceFactory</c> 挑「最直接的构造」
+        /// 时逐个参数填的就是这里）——两处问的是同一个问题（「没给定时填什么」），
+        /// 答案该由同一份代码回答。
+        /// </para>
         /// </remarks>
         public static object DefaultFor(Type type)
         {
