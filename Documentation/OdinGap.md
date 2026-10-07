@@ -702,6 +702,12 @@ L7 原先记的是「要求自己实现一套**序列化器**与**多态引用�
 > | **Serializer** | 字典与矩阵随资产存档（`[DictionaryDrawerSettings]` `[TableMatrix]`） | ⛔ **本包不作为**——Unity 不序列化它们，要做得先有一套自己的序列化器；Odin 自己的原话是「继承 `SerializedMonoBehaviour`」 |
 >
 > **该不该做、若做分几批、边界画在哪**，见 [Roadmap](Roadmap.md) 的 L7 一节。
+>
+> **2026-10-07 追记：第一步（多态引用进管线）已落地**——`[SerializeReference]` 里的
+> **序列化成员**按需成为真节点，里面的条件、分组、顺序、内联随之生效；换实现整棵重建；
+> 自引用有守卫。**剩下的两半没动**：多态段里的**读路径**（`[ShowInInspector]` / `[Button]` 一族）
+> 与**自绘选择器一族**（L7 那 6 个「可做」项仍全在，`[TypeDrawerSettings]` 仍记在那条线上）。
+> 见 Pipeline §三十。
 
 ---
 
