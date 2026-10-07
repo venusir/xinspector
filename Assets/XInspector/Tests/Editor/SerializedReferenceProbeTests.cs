@@ -312,6 +312,95 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// **测量**：类型槽位的 <c>hasVisibleChildren</c> 是什么——决定它会不会被多态管线展开成
+        /// 「RuntimeType 的空壳子树」。
+        /// </summary>
+        /// <remarks>
+        /// 类型槽位的「具体类型」是 <c>System.RuntimeType</c>（见上一条测量）。它若报有可见子级，
+        /// 本包多态展开判据的最后一条腿（<c>hasVisibleChildren</c>）就会放行，
+        /// 之后是一条按 <c>RuntimeType</c> 解析的空壳子树。
+        /// </remarks>
+        [Test]
+        public void 类型槽位报不报可见子级()
+        {
+            var target = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            try
+            {
+                var so = new SerializedObject(target);
+                so.FindProperty("managedTypeField").managedReferenceValue = typeof(ProbeShape);
+                so.ApplyModifiedPropertiesWithoutUndo();
+
+                var prop = new SerializedObject(target).FindProperty("managedTypeField");
+                TestContext.WriteLine(
+                    $"[探针] 类型槽位：{Describe(prop)}，hasVisibleChildren = {prop.hasVisibleChildren}；"
+                    + $"managedReferenceValue 的运行时类 = {prop.managedReferenceValue?.GetType().FullName}");
+
+                Assert.That(
+                    prop.hasVisibleChildren,
+                    Is.False,
+                    "实测为假 ⇒ 类型槽位不会被展开成空壳子树。这条若翻红（Unity 换了行为），"
+                    + "要在 NestedMemberExpansion.IsCompositeCandidate 的多态支加一道"
+                    + "「值是 System.Type 就不展开」的前置。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// **测量**：没 <c>Apply</c> 的改动，活不活得过一次 <c>Update()</c>。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 决定「菜单回调里的写回」要不要**当场提交**。菜单回调发生在绘制周期之外，
+        /// 宿主（Inspector 路径是 <c>Update → Draw → Apply</c>）管不到它；若改动活不过下一帧开头的
+        /// <c>Update()</c>，那么既有三个菜单写回（<c>[ValueDropdown]</c> 两条通道、
+        /// <c>[AssetSelector]</c>、<c>[AssetList]</c>）就有同一个隐患——本批**只报不修**。
+        /// </para>
+        /// <para>普通字段与类型槽位各测一格：两者的属性形态不同（<c>Integer</c> 对 <c>ManagedReference</c>）。</para>
+        /// </remarks>
+        [Test]
+        public void 未提交的改动活不活得过Update()
+        {
+            var target = ScriptableObject.CreateInstance<ManagedReferenceProbeFixture>();
+            target.plainArray = new[] { 1 };
+            try
+            {
+                var so = new SerializedObject(target);
+
+                so.FindProperty("plainArray").arraySize = 2;
+                so.FindProperty("managedTypeField").managedReferenceValue = typeof(ProbeShape);
+
+                // **不 Apply**，只 Update——下一帧宿主开头就是这样。
+                so.Update();
+
+                var size = so.FindProperty("plainArray").arraySize;
+                var type = so.FindProperty("managedTypeField").managedReferenceValue as Type;
+                TestContext.WriteLine(
+                    $"[探针] Update 之后（未 Apply）：arraySize = {size}（设的是 2）；"
+                    + $"类型槽位 = {type?.Name ?? "null"}（设的是 typeof(ProbeShape)）");
+
+                Assert.That(
+                    size,
+                    Is.EqualTo(1),
+                    "**实测：Update() 会丢掉未 Apply 的改动**（arraySize 回到 1）"
+                    + "⇒ 绘制周期之外的写回（菜单回调）必须**当场**用设值的那个 SerializedObject 调 "
+                    + "ApplyModifiedProperties。**推论（未实测）**：既有三个菜单写回"
+                    + "（[ValueDropdown] 两条通道 / [AssetSelector] / [AssetList]）若在绘制周期之外执行，"
+                    + "会有同一个隐患——需要一次手动确认，本批只报不修。");
+                Assert.That(
+                    type,
+                    Is.Null,
+                    "类型槽位同理：未 Apply 的托管引用改动也被 Update() 丢掉了。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
         /// 多态引用的写回**进撤销栈**——「若把它纳进管线，那五件事还在不在」里最先要问的一件。
         /// </summary>
         /// <remarks>
