@@ -269,6 +269,7 @@ namespace XInspector.Tests.Editor
                     typeof(TypeDrawerFixtureCircle), // 全名相同 ⇒ 第二条算重复
                 },
                 TypeInclusionFilter.IncludeAll,
+                null, // 用户过滤器：这一条不测它
                 out var duplicates);
 
             Assert.That(duplicates, Is.EqualTo(1));
@@ -328,6 +329,97 @@ namespace XInspector.Tests.Editor
             var without = TypeSelectorOptions.Build(candidates, null);
             Assert.That(without[0].IsCurrent, Is.False);
             Assert.That(without[1].IsCurrent, Is.False, "空槽位没有当前值。");
+        }
+
+        #endregion
+
+        #region 显示旋钮与用户过滤器（[TypeSelectorSettings] 的三个旋钮落点）
+
+        /// <summary>
+        /// 用户过滤器收窄候选：**被它挡下的不计入「全名相同」那个计数**（判据在去重之前）；
+        /// <c>null</c> 逐字等于既有行为。
+        /// </summary>
+        [Test]
+        public void 用户过滤器收窄候选()
+        {
+            var source = new[]
+            {
+                typeof(TypeDrawerFixtureCircle),
+                typeof(TypeDrawerFixtureSquare),
+                typeof(TypeDrawerFixtureSquare), // 与上一条全名相同
+            };
+
+            var filtered = TypeCandidateFilter.Apply(
+                source, TypeInclusionFilter.IncludeAll, type => type != typeof(TypeDrawerFixtureSquare),
+                out var duplicates);
+
+            Assert.That(filtered, Has.Member(typeof(TypeDrawerFixtureCircle)));
+            Assert.That(filtered, Has.No.Member(typeof(TypeDrawerFixtureSquare)));
+            Assert.That(duplicates, Is.EqualTo(0), "被过滤器挡下的不占重复计数。");
+
+            var unfiltered = TypeCandidateFilter.Apply(
+                source, TypeInclusionFilter.IncludeAll, null, out var plainDuplicates);
+
+            Assert.That(unfiltered.Count, Is.EqualTo(2), "null 过滤器 = 不过滤。");
+            Assert.That(plainDuplicates, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// 菜单路径三种模式：默认命名空间分层；<c>PreferNamespaces = false</c> 取程序集简单名
+        /// ——**程序集名不拆点**（测试程序集名自带点，正好钉住这条）；<c>ShowCategories = false</c> 拍平。
+        /// </summary>
+        [Test]
+        public void 菜单路径三种模式()
+        {
+            var type = typeof(TypeDrawerFixtureCircle);
+
+            Assert.That(
+                TypeSelectorOptions.MenuPath(type, true, true),
+                Is.EqualTo("XInspector/Tests/Editor/TypeDrawerFixtureCircle"),
+                "默认：命名空间各段分层。");
+
+            Assert.That(
+                TypeSelectorOptions.MenuPath(type, false, true),
+                Is.EqualTo("Venusir.Xinspector.Editor.Tests/TypeDrawerFixtureCircle"),
+                "程序集简单名**不拆点**——是一层子菜单。");
+
+            Assert.That(
+                TypeSelectorOptions.MenuPath(type, true, false),
+                Is.EqualTo("TypeDrawerFixtureCircle"),
+                "拍平：没有类别层。");
+            Assert.That(
+                TypeSelectorOptions.MenuPath(type, false, false),
+                Is.EqualTo("TypeDrawerFixtureCircle"));
+
+            Assert.That(
+                TypeSelectorOptions.MenuPath(type),
+                Is.EqualTo(TypeSelectorOptions.MenuPath(type, true, true)),
+                "一参重载 = 默认档。");
+        }
+
+        /// <summary>「（无）」清空项的出现条件：**有值**且旋钮没关掉它。</summary>
+        [Test]
+        public void 清空项的出现条件()
+        {
+            Assert.That(TypeSelectorOptions.ShouldShowNone(true, true), Is.True);
+            Assert.That(TypeSelectorOptions.ShouldShowNone(false, true), Is.False, "空槽位本来就不给。");
+            Assert.That(TypeSelectorOptions.ShouldShowNone(true, false), Is.False, "旋钮关掉：连有值也不给。");
+            Assert.That(TypeSelectorOptions.ShouldShowNone(false, false), Is.False);
+        }
+
+        /// <summary>选项表透传两个显示开关（类别层在不在），当前值勾选不受影响。</summary>
+        [Test]
+        public void 选项表透传显示开关()
+        {
+            var candidates = new[] { typeof(TypeDrawerFixtureCircle), typeof(TypeDrawerFixtureSquare) };
+
+            var categorized = TypeSelectorOptions.Build(candidates, typeof(TypeDrawerFixtureSquare), true, true);
+            Assert.That(categorized[0].Path, Does.Contain("/"), "有类别层。");
+            Assert.That(categorized[1].IsCurrent, Is.True, "当前值照旧带勾。");
+
+            var flat = TypeSelectorOptions.Build(candidates, null, true, false);
+            Assert.That(flat[0].Path, Does.Not.Contain("/"), "拍平。");
+            Assert.That(flat[1].Path, Is.EqualTo("TypeDrawerFixtureSquare"));
         }
 
         #endregion

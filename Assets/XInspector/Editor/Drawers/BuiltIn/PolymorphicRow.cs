@@ -197,8 +197,11 @@ namespace XInspector.Editor
             NonDefaultConstructorPreference preference,
             Type currentType)
         {
+            // `[TypeSelectorSettings]` 的一次性视图（三个显示旋钮 + 用户过滤器）。
+            var view = TypeSelectorSettingsView.Of(property);
+
             var candidates = PolymorphicCandidateFilter.Candidates(
-                declaredType, preference, out var duplicates, out var error);
+                declaredType, preference, view.Filter, out var duplicates, out var error);
 
             if (error != null)
             {
@@ -216,7 +219,8 @@ namespace XInspector.Editor
                     nameof(PolymorphicRow) + ".empty",
                     $"[XInspector] 属性「{property.Path}」的多态选择器没有候选" +
                     $"（声明类型 = {ReflectedAccessor.DescribeType(declaredType)}，" +
-                    $"构造偏好 = {preference}）——检查那个类型下有没有**装得进、造得出**的实现。");
+                    $"构造偏好 = {preference}）——检查那个类型下有没有**装得进、造得出**的实现；" +
+                    "若标了 [TypeSelectorSettings].FilterTypesFunction，过滤器也可能把候选全滤掉。");
                 return;
             }
 
@@ -229,13 +233,15 @@ namespace XInspector.Editor
                     "**全名相同**（同名类型落在不同程序集里）——只保留了其中一个。");
             }
 
-            var options = TypeSelectorOptions.Build(candidates, currentType);
+            var options = TypeSelectorOptions.Build(
+                candidates, currentType, view.PreferNamespaces, view.ShowCategories);
             var menu = new GenericMenu();
             var target = serializedProperty.Copy();
             var undoEnabled = property.Owner?.UndoEnabled ?? false;
 
-            // 「（无）」清空项：**有值时才有**（空槽位点它什么都不发生）。
-            if (currentType != null)
+            // 「（无）」清空项：**有值时才有**（`ShowNoneItem = false` 连那时也不给；
+            // 空槽位点它什么都不发生）。
+            if (TypeSelectorOptions.ShouldShowNone(currentType != null, view.ShowNoneItem))
             {
                 menu.AddItem(
                     new GUIContent(NoTypeText),
@@ -409,12 +415,18 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="declaredType">**字段的声明类型**（多态槽位的语义是「装得进这个槽位」）。</param>
         /// <param name="preference">非默认构造的处置档（<c>Exclude</c> 会剔掉无参构造缺失者）。</param>
+        /// <param name="include">
+        /// **用户过滤器**（<c>[TypeSelectorSettings].FilterTypesFunction</c>）；<c>null</c> 表示不过滤。
+        /// **两处都要传**：<c>Collect</c> 与收尾那次 <c>Apply</c>——收尾不可省，声明类型自己是从
+        /// 下面的并集里进来的、没经过 <c>Collect</c> 的 <c>Apply</c>，漏了它「声明类型逃过过滤」。
+        /// </param>
         /// <param name="duplicates">被丢弃的「全名相同」候选个数。</param>
         /// <param name="error">扫描本身失败的原因；成功时为 <c>null</c>。</param>
         /// <returns>成品候选表（已排序、已去重）。</returns>
         public static List<Type> Candidates(
             Type declaredType,
             NonDefaultConstructorPreference preference,
+            Func<Type, bool> include,
             out int duplicates,
             out string error)
         {
@@ -429,7 +441,7 @@ namespace XInspector.Editor
             }
 
             var raw = TypeCandidateQuery.Collect(
-                declaredType, TypeInclusionFilter.IncludeConcreteTypes, out _, out error);
+                declaredType, TypeInclusionFilter.IncludeConcreteTypes, include, out _, out error);
 
             if (error != null)
             {
@@ -461,7 +473,8 @@ namespace XInspector.Editor
                 result.Add(type);
             }
 
-            return TypeCandidateFilter.Apply(result, TypeInclusionFilter.IncludeConcreteTypes, out duplicates);
+            return TypeCandidateFilter.Apply(
+                result, TypeInclusionFilter.IncludeConcreteTypes, include, out duplicates);
         }
     }
 }

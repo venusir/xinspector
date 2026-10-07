@@ -292,22 +292,56 @@ namespace XInspector.Tests.Editor
         public void 候选表含声明类型自己且按档收窄()
         {
             var candidates = PolymorphicCandidateFilter.Candidates(
-                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.ConstructIdeal, out _, out var error);
+                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.ConstructIdeal, null, out _, out var error);
 
             Assert.That(error, Is.Null);
             Assert.That(candidates, Has.Member(typeof(PolymorphicRowCircle)));
             Assert.That(candidates, Has.Member(typeof(PolymorphicRowNoDefaultCtor)), "ConstructIdeal 档不剔它。");
 
             var concreteDeclared = PolymorphicCandidateFilter.Candidates(
-                typeof(PolymorphicRowCircle), NonDefaultConstructorPreference.ConstructIdeal, out _, out _);
+                typeof(PolymorphicRowCircle), NonDefaultConstructorPreference.ConstructIdeal, null, out _, out _);
 
             Assert.That(concreteDeclared, Has.Member(typeof(PolymorphicRowCircle)), "声明类型自己是候选。");
 
             var excluded = PolymorphicCandidateFilter.Candidates(
-                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.Exclude, out _, out _);
+                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.Exclude, null, out _, out _);
 
             Assert.That(excluded, Has.No.Member(typeof(PolymorphicRowNoDefaultCtor)), "Exclude 档剔掉。");
             Assert.That(excluded, Has.Member(typeof(PolymorphicRowCircle)), "有无参构造的照留。");
+        }
+
+        /// <summary>用户过滤器也收窄多态候选。</summary>
+        [Test]
+        public void 用户过滤器收窄多态候选()
+        {
+            var filtered = PolymorphicCandidateFilter.Candidates(
+                typeof(IPolymorphicRowShape),
+                NonDefaultConstructorPreference.ConstructIdeal,
+                type => type == typeof(PolymorphicRowCircle),
+                out _,
+                out var error);
+
+            Assert.That(error, Is.Null);
+            Assert.That(filtered, Has.Member(typeof(PolymorphicRowCircle)));
+            Assert.That(filtered, Has.No.Member(typeof(PolymorphicRowPlain)));
+        }
+
+        /// <summary>
+        /// **声明类型自己也受谓词过滤**——钉住「收尾那次 <c>Apply</c> 不可省」：
+        /// 声明类型是从并集里补进来的、没经过 <c>Collect</c> 的 <c>Apply</c>，漏了那一次它就会逃过过滤。
+        /// </summary>
+        [Test]
+        public void 声明类型自己也受谓词过滤()
+        {
+            var filtered = PolymorphicCandidateFilter.Candidates(
+                typeof(PolymorphicRowCircle),
+                NonDefaultConstructorPreference.ConstructIdeal,
+                type => type != typeof(PolymorphicRowCircle), // 把声明类型自己滤掉
+                out _,
+                out var error);
+
+            Assert.That(error, Is.Null);
+            Assert.That(filtered, Has.No.Member(typeof(PolymorphicRowCircle)), "声明类型不该逃过过滤。");
         }
 
         #endregion

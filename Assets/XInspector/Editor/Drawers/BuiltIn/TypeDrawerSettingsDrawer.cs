@@ -128,8 +128,12 @@ namespace XInspector.Editor
             TypeDrawerSettingsAttribute attribute,
             Type declaredType)
         {
+            // `[TypeSelectorSettings]` 的一次性视图：三个显示旋钮 + 用户过滤器。
+            // 特性没标时逐字等于基座既有行为（旋钮全 true、过滤器 null）。
+            var view = TypeSelectorSettingsView.Of(property);
+
             var candidates = TypeCandidateQuery.Collect(
-                attribute.BaseType, attribute.Filter, out var duplicates, out var error);
+                attribute.BaseType, attribute.Filter, view.Filter, out var duplicates, out var error);
 
             if (error != null)
             {
@@ -147,7 +151,8 @@ namespace XInspector.Editor
                     nameof(TypeDrawerSettingsDrawer) + ".empty",
                     $"[XInspector] 属性「{property.Path}」的类型选择器没有候选" +
                     $"（BaseType = {DescribeBaseType(attribute.BaseType)}，Filter = {attribute.Filter}）——" +
-                    "检查基类型与过滤位。");
+                    "检查基类型与过滤位；若标了 [TypeSelectorSettings].FilterTypesFunction，" +
+                    "过滤器也可能把候选全滤掉。");
                 return;
             }
 
@@ -161,14 +166,14 @@ namespace XInspector.Editor
             }
 
             var current = serializedProperty.managedReferenceValue as Type;
-            var options = TypeSelectorOptions.Build(candidates, current);
+            var options = TypeSelectorOptions.Build(candidates, current, view.PreferNamespaces, view.ShowCategories);
 
             var menu = new GenericMenu();
             var target = serializedProperty.Copy();
 
-            // 「（无）」清空项：**有值时才有**——空槽位点它什么都不发生，
-            // 与「只声明有真行为的选项」冲突；而按钮那时本来写着「（无）」。
-            if (current != null)
+            // 「（无）」清空项：**有值时才有**（`ShowNoneItem = false` 连那时也不给）——
+            // 空槽位点它什么都不发生，与「只声明有真行为的选项」冲突；而按钮那时本来写着「（无）」。
+            if (TypeSelectorOptions.ShouldShowNone(current != null, view.ShowNoneItem))
             {
                 menu.AddItem(NoTypeLabel, false, OnSelected, new Selection(target, null, declaredType));
                 menu.AddSeparator(string.Empty);
@@ -352,9 +357,19 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="source">原始候选。</param>
         /// <param name="filter">过滤位。</param>
+        /// <param name="include">
+        /// **用户过滤器**（<c>[TypeSelectorSettings].FilterTypesFunction</c>）；<c>null</c> 表示不过滤。
+        /// 它是「候选收窄」的又一归口——与种类过滤位同级，**在去重之前**判
+        ///（被它挡下的不占「全名相同」那个计数）。
+        /// </param>
         /// <param name="duplicateCount">被丢弃的「全名相同」候选个数。</param>
         /// <returns>成品候选表。</returns>
-        public static List<Type> Apply(IEnumerable<Type> source, TypeInclusionFilter filter, out int duplicateCount)
+        /// <remarks>
+        /// <b>谓词会按需被调用</b>（多态那条路径上收窄发生在两处，多数类型会被问两次）——
+        /// 过滤器请写成**纯函数**。
+        /// </remarks>
+        public static List<Type> Apply(
+            IEnumerable<Type> source, TypeInclusionFilter filter, Func<Type, bool> include, out int duplicateCount)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var result = new List<Type>();
@@ -362,7 +377,7 @@ namespace XInspector.Editor
 
             foreach (var type in source)
             {
-                if (IsNoise(type) || !IsIncluded(type, filter))
+                if (IsNoise(type) || !IsIncluded(type, filter) || (include != null && !include(type)))
                 {
                     continue;
                 }
@@ -395,6 +410,7 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="baseType">基类型；<c>null</c> 表示不额外约束（按 <c>object</c> 收，**不含接口**）。</param>
         /// <param name="filter">种类过滤位。</param>
+        /// <param name="include">用户过滤器；<c>null</c> 表示不过滤（见 <see cref="TypeCandidateFilter.Apply"/>）。</param>
         /// <param name="duplicateCount">被丢弃的「全名相同」候选个数。</param>
         /// <param name="error">扫描本身失败的原因；成功时为 <c>null</c>。</param>
         /// <returns>成品候选表（失败时为空表，原因在 <paramref name="error"/> 里，**不静默**）。</returns>
@@ -403,7 +419,8 @@ namespace XInspector.Editor
         /// 真抛了也要给「空候选 + 一句原因」而不是把编辑器炸掉——外部 API 的行为不猜。
         /// </remarks>
         public static List<Type> Collect(
-            Type baseType, TypeInclusionFilter filter, out int duplicateCount, out string error)
+            Type baseType, TypeInclusionFilter filter, Func<Type, bool> include,
+            out int duplicateCount, out string error)
         {
             duplicateCount = 0;
             error = null;
@@ -414,7 +431,7 @@ namespace XInspector.Editor
             {
                 var raw = new List<Type>(TypeCache.GetTypesDerivedFrom(effective));
                 raw.RemoveAll(type => type == effective); // 基类型自身不是候选（语义是「派生」）。
-                return TypeCandidateFilter.Apply(raw, filter, out duplicateCount);
+                return TypeCandidateFilter.Apply(raw, filter, include, out duplicateCount);
             }
             catch (Exception exception)
             {
@@ -460,38 +477,90 @@ namespace XInspector.Editor
             public bool IsCurrent { get; }
         }
 
-        /// <summary>建选项表：菜单路径 + 当前值标勾。</summary>
+        /// <summary>建选项表：菜单路径 + 当前值标勾（显示旋钮透传）。</summary>
         /// <param name="candidates">候选（已排序）。</param>
         /// <param name="current">当前选中的类型；可以为 <c>null</c>。</param>
+        /// <param name="preferNamespaces">类别名取命名空间还是程序集简单名。</param>
+        /// <param name="showCategories">分不分类别层。</param>
         /// <returns>选项表。</returns>
-        public static List<Option> Build(IList<Type> candidates, Type current)
+        public static List<Option> Build(
+            IList<Type> candidates, Type current, bool preferNamespaces, bool showCategories)
         {
             var options = new List<Option>(candidates.Count);
 
             for (var i = 0; i < candidates.Count; i++)
             {
                 var type = candidates[i];
-                options.Add(new Option(MenuPath(type), type, type == current));
+                options.Add(new Option(MenuPath(type, preferNamespaces, showCategories), type, type == current));
             }
 
             return options;
         }
 
+        /// <summary><see cref="Build"/> 的默认档（命名空间分层 + 分类别）。</summary>
+        /// <param name="candidates">候选（已排序）。</param>
+        /// <param name="current">当前选中的类型；可以为 <c>null</c>。</param>
+        /// <returns>选项表。</returns>
+        public static List<Option> Build(IList<Type> candidates, Type current)
+        {
+            return Build(candidates, current, true, true);
+        }
+
         /// <summary>
-        /// 菜单路径 = 命名空间各段（<c>/</c> 分层）+ 显示名。
+        /// 「（无）」清空项该不该出现：**有值**（既有判据）且旋钮没把它关掉。
+        /// </summary>
+        /// <param name="hasValue">槽位有没有值。</param>
+        /// <param name="showNoneItem"><c>[TypeSelectorSettings].ShowNoneItem</c>。</param>
+        /// <returns>该出现返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// 这是本包对官方「是否显示 &lt;none&gt; 项」的落地：**只做「抑制」**——空槽位那一半
+        /// 维持既有判据（放了也点了 no-op，正是本包拒绝声明的那类选项）。
+        /// </remarks>
+        public static bool ShouldShowNone(bool hasValue, bool showNoneItem)
+        {
+            return hasValue && showNoneItem;
+        }
+
+        /// <summary>
+        /// 菜单路径 = 类别层 + 显示名；<c>showCategories = false</c> 时**拍平**。
         /// </summary>
         /// <param name="type">类型。</param>
+        /// <param name="preferNamespaces">类别名取命名空间（<c>true</c>）还是程序集简单名（<c>false</c>）。</param>
+        /// <param name="showCategories">分不分类别层。</param>
         /// <returns>菜单路径。</returns>
         /// <remarks>
         /// <c>/</c> **不需要转义**：C# 标识符与 <c>FullName</c> 里不可能有它。
-        /// 全局命名空间的类型没有前缀，直接落在根上。
+        /// **命名空间天然是层级**（点分拆层）；**程序集简单名不拆点**——点分名只是一个名字
+        /// （<c>Venusir.Xinspector.Editor</c> 是一层子菜单，不是四层）。全局命名空间与空类别
+        /// 都直接落在根上。
         /// </remarks>
-        public static string MenuPath(Type type)
+        public static string MenuPath(Type type, bool preferNamespaces, bool showCategories)
         {
             var display = DisplayName(type);
-            var ns = type.Namespace;
 
-            return string.IsNullOrEmpty(ns) ? display : ns.Replace('.', '/') + "/" + display;
+            if (!showCategories)
+            {
+                return display;
+            }
+
+            var category = preferNamespaces ? type.Namespace : type.Assembly.GetName().Name;
+
+            if (string.IsNullOrEmpty(category))
+            {
+                return display;
+            }
+
+            return preferNamespaces
+                ? category.Replace('.', '/') + "/" + display
+                : category + "/" + display;
+        }
+
+        /// <summary><see cref="MenuPath"/> 的默认档（命名空间分层 + 分类别）。</summary>
+        /// <param name="type">类型。</param>
+        /// <returns>菜单路径。</returns>
+        public static string MenuPath(Type type)
+        {
+            return MenuPath(type, true, true);
         }
 
         /// <summary>
