@@ -302,6 +302,17 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 只挂 <c>[TypeSelectorSettings]</c> 的类型同样为真——靠**处理器**那一半被认出来
+        /// （它自己不产生节点、也不画；判据看不见它的症状是「连那句『没有选择器由本包渲染』
+        /// 的告警都不会出现」）。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂类型选择器设置的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(TypeSelectorSettingsOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 集合被本包接管、且**元素类型用到了本包**时为真——与元素层的安全阀镜像：
         /// 那种集合真的会建元素层，元素里的特性真的会生效。
         /// </summary>
@@ -647,6 +658,15 @@ namespace XInspector.Tests.Editor
         [SerializeReference]
         [PolymorphicDrawerSettings]
         public IDisposable shape;
+    }
+
+    /// <summary>只挂类型选择器设置的资产。</summary>
+    internal sealed class TypeSelectorSettingsOnlyFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法：设置单独标。</summary>
+        [SerializeReference]
+        [TypeSelectorSettings]
+        public Type chosen;
     }
 
     /// <summary>集合被本包接管、元素类型也用到了本包的资产。</summary>

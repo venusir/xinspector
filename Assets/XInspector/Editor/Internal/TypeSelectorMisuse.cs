@@ -26,6 +26,11 @@ namespace XInspector.Editor
     /// <b>「有节点但不是托管引用」（如标在 <c>int</c> 上）不在这里管</b>——那种字段绘制器跑得到，
     /// 由绘制器的判据档位告警（见 <c>PolymorphicRow.Disposition</c> 的 <c>FallbackNotBacked</c>）。
     /// </para>
+    /// <para>
+    /// <b>第三支与前两支的判据不同：<c>[TypeSelectorSettings]</c> 标了、而两个选择器特性一个都没有</b>
+    /// ——它**与「有没有节点」无关**：没有选择器特性就没有任何本包选择器被渲染，有节点也一样是 no-op。
+    /// 三支的 key 后缀各不相同（<c>:type</c> / <c>:poly</c> / <c>:settings</c>）。
+    /// </para>
     /// </remarks>
     internal static class TypeSelectorMisuse
     {
@@ -50,7 +55,22 @@ namespace XInspector.Editor
                     var typeSelector = field.IsDefined(typeof(TypeDrawerSettingsAttribute), true);
                     var polySelector = field.IsDefined(typeof(PolymorphicDrawerSettingsAttribute), true);
 
-                    if ((!typeSelector && !polySelector) || HasNode(members, field))
+                    if (!typeSelector && !polySelector)
+                    {
+                        // **第三支**：设置标了、可它配的两个选择器一个都没有——判据与「有没有节点」
+                        // 无关（没有选择器特性就没有任何本包选择器被渲染，有节点也一样是 no-op）。
+                        if (field.IsDefined(typeof(TypeSelectorSettingsAttribute), true))
+                        {
+                            DrawerWarnings.Once(
+                                root,
+                                nameof(TypeSelectorMisuse) + ":" + current.Name + "." + field.Name + ":settings",
+                                BuildSettingsText(current, field));
+                        }
+
+                        continue;
+                    }
+
+                    if (HasNode(members, field))
                     {
                         continue;
                     }
@@ -114,6 +134,19 @@ namespace XInspector.Editor
 
             return $"[XInspector] 字段「{label}」标了 [{attribute}]，但它没有进序列化数据" +
                    "（也就不进 Inspector）——该特性不会生效。";
+        }
+
+        /// <summary>第三支的文案：设置标了、可它配的选择器一个都没有。</summary>
+        /// <param name="declaringType">声明类型。</param>
+        /// <param name="field">字段。</param>
+        /// <returns>文案。</returns>
+        private static string BuildSettingsText(Type declaringType, FieldInfo field)
+        {
+            var label = declaringType.Name + "." + field.Name;
+
+            return $"[XInspector] 字段「{label}」标了 [TypeSelectorSettings]，" +
+                   "但它配的是**本包自绘的类型选择器**——这一格上既没有 [TypeDrawerSettings] 也没有 " +
+                   "[PolymorphicDrawerSettings]，没有任何选择器由本包渲染，该特性不会生效。";
         }
     }
 }
