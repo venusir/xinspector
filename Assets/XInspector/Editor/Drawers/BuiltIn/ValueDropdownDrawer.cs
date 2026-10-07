@@ -597,6 +597,12 @@ namespace XInspector.Editor
                 case SerializedPropertyType.ObjectReference:
                     return TryAssignObject(value, destination, declaredType, out reason);
 
+                // 托管引用（[SerializeReference]）：本包目前只认**类型槽位**（值是一只 System.Type）。
+                // 「把托管对象写进多态槽位」不在本轮范围——那要先定「选中值怎么回落到声明类型」的语义，
+                // 而原生多态 UI 今天已经在做这件事。
+                case SerializedPropertyType.ManagedReference:
+                    return TryAssignType(value, destination, declaredType, out reason);
+
                 case SerializedPropertyType.Vector2 when value is Vector2 vector2:
                     destination.vector2Value = vector2;
                     return true;
@@ -751,6 +757,60 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 托管引用那一格：**类型槽位**（存一只 <c>System.Type</c>）的写回与清空。
+        /// </summary>
+        /// <param name="value">选中的值：一只 <c>Type</c>，或清空用的 <c>null</c>。</param>
+        /// <param name="destination">目标属性。</param>
+        /// <param name="declaredType">
+        /// 目标的声明类型。**调用方要传字段的声明类型**（<c>FieldInfo.FieldType</c>），
+        /// 不能传节点的 <c>Type</c>——类型槽位有值时那个是 <c>RuntimeType</c>，
+        /// 把「字段声明的是 <c>System.Type</c>」这条信息丢了。
+        /// </param>
+        /// <param name="reason">拒绝的原因。</param>
+        /// <returns>写入成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <b>两道校验，与对象引用那格同构。</b> 先看「是不是那一类」（值必须是一只 <c>Type</c>），
+        /// 再看「声明类型装不装得下」——判据是 <c>declaredType.IsAssignableFrom(selected.GetType())</c>，
+        /// 即「槽位能不能装下一只 <c>Type</c> 实例」：<c>System.Type</c> / <c>object</c> 装得下，
+        /// 而 <c>[SerializeReference] IShape</c> 这种非类型槽位装不下（<c>RuntimeType</c> 不是
+        /// <c>IShape</c>），拒绝。
+        /// </remarks>
+        private static bool TryAssignType(
+            object value, SerializedProperty destination, Type declaredType, out string reason)
+        {
+            reason = null;
+
+            if (value == null)
+            {
+                // 赋 null 与置 RefIdNull 两条路都通（实测），这里用前者——它同时也是
+                // 「槽位里本来就空」时的自然写法。
+                destination.managedReferenceValue = null;
+                return true;
+            }
+
+            if (!(value is Type selected))
+            {
+                reason =
+                    $"目标是一格托管引用，而选中的值是 {ReflectedValueFormatter.TypeName(value.GetType())}" +
+                    "——本包目前只在**类型槽位**上写托管引用（值必须是一只 System.Type）";
+                return false;
+            }
+
+            if (declaredType != null && declaredType != typeof(object) &&
+                !declaredType.IsAssignableFrom(selected.GetType()))
+            {
+                reason =
+                    $"目标的声明类型是 {ReflectedAccessor.DescribeType(declaredType)}——它装不下一只" +
+                    $"类型引用（选中的是 {ReflectedAccessor.DescribeType(selected)}；" +
+                    "类型槽位要把字段声明成 System.Type 并加 [SerializeReference]）";
+                return false;
+            }
+
+            destination.managedReferenceValue = selected;
+            return true;
+        }
+
+        /// <summary>
         /// 值是不是「能原样放进 <c>long</c>」的整型。
         /// </summary>
         /// <param name="value">值。</param>
@@ -778,7 +838,8 @@ namespace XInspector.Editor
         {
             if (value == null)
             {
-                return $"目标是 {destination.propertyType}，而选中的值是空值——只有字符串与对象引用收空值";
+                return $"目标是 {destination.propertyType}，而选中的值是空值——" +
+                       "只有字符串、对象引用，以及托管引用槽位（清空）收空值";
             }
 
             return $"目标是 {destination.propertyType}，而选中的值是 " +

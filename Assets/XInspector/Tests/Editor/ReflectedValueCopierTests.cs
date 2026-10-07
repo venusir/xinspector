@@ -268,9 +268,9 @@ namespace XInspector.Tests.Editor
                 okReason);
         }
 
-        /// <summary>空值只在字符串与对象引用两格放行，别处一律拒绝。</summary>
+        /// <summary>空值只在字符串、对象引用与托管引用（清空）几格放行，别处一律拒绝。</summary>
         [Test]
-        public void 空值只在字符串与对象引用放行()
+        public void 空值只在字符串对象引用与托管引用放行()
         {
             AssertReject("空值", null, "integer");
             AssertReject("空值", null, "boolean");
@@ -301,6 +301,133 @@ namespace XInspector.Tests.Editor
         {
             Assert.That(ReflectedValueCopier.TryAssign(1, null, typeof(int), out var reason), Is.False);
             Assert.That(reason, Is.Not.Null.And.Not.Empty);
+        }
+
+        #endregion
+
+        #region 类型槽位（托管引用）
+
+        /// <summary>类型槽位写的是「那只 <c>Type</c> 实例」本身，且落盘、读得回来。</summary>
+        /// <remarks>
+        /// 断言用**引用比较**而不是 <c>Is.EqualTo(typeof(…))</c>：失败时 NUnit 会格式化那个值，
+        /// 而托管引用恢复出来的对象一旦状态不干净，格式化会**把编辑器整个搞崩**
+        /// （同类崩溃实测踩过一次，见「类型槽位写回进撤销栈」的 remarks）。
+        /// </remarks>
+        [Test]
+        public void 写回类型槽位()
+        {
+            Assert.That(
+                ReflectedValueCopier.TryAssign(
+                    typeof(ReflectedCopierPoco), Property("chosenType"), typeof(Type), out var reason),
+                Is.True,
+                reason);
+
+            _serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            var after = new SerializedObject(_target).FindProperty("chosenType").managedReferenceValue;
+            Assert.That(
+                ReferenceEquals(after, typeof(ReflectedCopierPoco)),
+                Is.True,
+                "写进去的类型留得住（新开一个 SerializedObject 也读得到，且是同一个实例）。");
+        }
+
+        /// <summary>清空：空值是类型槽位唯一收的「非类型」。</summary>
+        [Test]
+        public void 清空类型槽位()
+        {
+            Property("chosenType").managedReferenceValue = typeof(ReflectedCopierEnum);
+            _serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(
+                ReflectedValueCopier.TryAssign(null, Property("chosenType"), typeof(Type), out var reason),
+                Is.True,
+                reason);
+
+            _serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(
+                new SerializedObject(_target).FindProperty("chosenType").managedReferenceValue,
+                Is.Null,
+                "空值把槽位清干净。");
+        }
+
+        /// <summary>
+        /// 非类型值写不进托管引用槽位——本包目前只在**类型槽位**上写托管引用。
+        /// </summary>
+        /// <remarks>
+        /// 「把托管对象写进多态槽位」不在本轮范围：那要先定「选中值怎么回落到声明类型」的语义，
+        /// 而原生多态 UI 今天已经在做这件事（见 README 的多态引用一节）。
+        /// </remarks>
+        [Test]
+        public void 非类型值写不进托管引用槽位()
+        {
+            AssertReject("类型槽位", new ReflectedCopierPoco(), "chosenType");
+            AssertReject("类型槽位", 42, "chosenType");
+        }
+
+        /// <summary>类型值写不进**非类型**的托管引用槽位——声明类型装不下一只 <c>Type</c>。</summary>
+        [Test]
+        public void 类型值写不进非类型槽位()
+        {
+            var destination = Property("chosenPoco");
+
+            Assert.That(
+                ReflectedValueCopier.TryAssign(
+                    typeof(ReflectedCopierPoco), destination, DeclaredTypeOf("chosenPoco"), out var reason),
+                Is.False);
+            Assert.That(reason, Does.Contain("声明类型"));
+            Assert.That(destination.managedReferenceValue, Is.Null, "拒绝时必须原样不动。");
+        }
+
+        /// <summary>
+        /// **实测并钉住**：类型槽位的写回刻意**不进撤销栈**——撤一次收回的是**先前那一步**。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 为什么刻意不进：值是一只 <c>System.Type</c> 的托管引用，**撤销恢复不回来**——
+        /// 撤销真的要把这一格写回去时（槽位与快照不同），恢复出来的引用**不可用**：
+        /// 实测读到过不洁的 <c>RuntimeType</c> 对象、也见过读它抛 <c>NotSupportedException</c>，
+        /// 甚至有一次 NUnit 想格式化它把**编辑器整个搞崩**。状态不确定，故**不给它钉用例**
+        /// （给未定义行为钉断言只会得到 flaky 测试）；登记撤销反而会让 Ctrl+Z 主动去恢复一只
+        /// 不洁的对象——不登记则 Ctrl+Z 跳过这一步，两害相权取其轻。
+        /// </para>
+        /// <para>
+        /// <b>挡不住的那一半：</b> <c>Undo.RecordObject</c> 记的是**整个对象**的状态，
+        /// 故同对象上其它撤销的记录仍会尝试恢复这张槽位——那是 Unity 的限制，
+        /// 本批只记录、不修（见 Pipeline 与 README）。
+        /// </para>
+        /// <para>
+        /// 已知可撤销的一步记在**另一个资产**上：记在同一对象上会把这次写回一并回滚。
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void 类型槽位写回刻意不进撤销栈()
+        {
+            var other = ScriptableObject.CreateInstance<ReflectedValueCopierFixture>();
+            try
+            {
+                // 先记一步已知可撤销的（撤销栈因此非空、行为确定；且在别的对象上，撤不到我们）。
+                Undo.RecordObject(other, "已知可撤销的一步");
+                other.integer = 99;
+
+                Assert.That(
+                    TypeSlotWrite.TryWrite(
+                        typeof(ReflectedCopierPoco), Property("chosenType"), typeof(Type), out var reason),
+                    Is.True,
+                    reason);
+
+                Undo.PerformUndo();
+
+                Assert.That(other.integer, Is.EqualTo(7), "撤一次收回的是**先前那一步**——说明它才是栈顶。");
+                Assert.That(
+                    ReferenceEquals(Property("chosenType").managedReferenceValue, typeof(ReflectedCopierPoco)),
+                    Is.True,
+                    "我们的写回没进撤销栈：撤销动不了它。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(other);
+            }
         }
 
         #endregion
@@ -404,6 +531,7 @@ namespace XInspector.Tests.Editor
                     SerializedPropertyType.Float => property.floatValue.ToString("R"),
                     SerializedPropertyType.String => property.stringValue,
                     SerializedPropertyType.ObjectReference => property.objectReferenceValue?.name ?? "(null)",
+                    SerializedPropertyType.ManagedReference => property.managedReferenceValue?.ToString() ?? "(null)",
                     SerializedPropertyType.Enum => property.enumValueIndex.ToString(),
                     SerializedPropertyType.Color => property.colorValue.ToString(),
                     SerializedPropertyType.Vector2 => property.vector2Value.ToString(),
@@ -472,6 +600,14 @@ namespace XInspector.Tests.Editor
 
         /// <summary>四元数目标。</summary>
         public Quaternion quaternion;
+
+        /// <summary>类型槽位：<c>[SerializeReference]</c> 包的 <c>System.Type</c>——类型选择器写回的目标。</summary>
+        [SerializeReference]
+        public Type chosenType;
+
+        /// <summary>托管引用，但**不是**类型槽位——「类型值写不进非类型槽位」那条用它。</summary>
+        [SerializeReference]
+        public ReflectedCopierPoco chosenPoco;
     }
 
     /// <summary>目标枚举。</summary>
