@@ -474,6 +474,31 @@ namespace XInspector.Samples
 
         #endregion
 
+        #region 类型选择
+
+        /// <summary>
+        /// 类型选择器：一行「当前类型名」，点开是本包自绘的候选菜单（按命名空间分层，当前值带勾）。
+        /// **字段必须是托管引用的 <c>System.Type</c>**——裸的进不了序列化数据，选择器就没有落点
+        ///（误用会有一条构建期告警点名要说加 <c>[SerializeReference]</c>）。
+        /// </summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        public Type anyType;
+
+        /// <summary>候选收窄到某个基类型的派生（这里是上面多态那段用的接口）。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings(BaseType = typeof(IShowcaseShape))]
+        public Type shapeType;
+
+        /// <summary>只要具体的类与接口（不要抽象类与泛型）；泛型接口会同时命中「接口」与「泛型」两位。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings(
+            BaseType = typeof(IShowcaseShape),
+            Filter = TypeInclusionFilter.IncludeConcreteTypes | TypeInclusionFilter.IncludeInterfaces)]
+        public Type shapeTypeNarrowed;
+
+        #endregion
+
         #region 预览
 
         /// <summary>预览方块（默认 64 像素）+ 右侧可编辑的对象字段。拖个贴图/模型进来就能看到预览。</summary>

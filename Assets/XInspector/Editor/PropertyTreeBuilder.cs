@@ -122,6 +122,11 @@ namespace XInspector.Editor
             // 哪天 Unity 换了行为，那几条会先红。
             members.AddRange(CollectMethodMembers(targetType));
 
+            // 类型选择器的误用扫描必须在**这里**（成员收齐之后、排序之前）：裸 System.Type 字段
+            // **根本没有节点**（绘制器永远跑不到它），告警只能由构建期按「有没有节点」这个**结果**反推。
+            // 位置在排序前后都行（扫描不看顺序），放在这里是为了紧挨着「成员收齐」这条界线。
+            TypeSelectorMisuse.WarnAboutUnreachableFields(targetType, members, root);
+
             // [PropertyOrder]：三段都收完之后、**分组装配之前**做一次稳定排序。
             // 位置由 OdinGap 记着的落点决定（「成员收集之后、分组装配之前」）——
             // 装配是唯一消费这份顺序的地方：它决定根下散字段的次序、组内成员的次序，

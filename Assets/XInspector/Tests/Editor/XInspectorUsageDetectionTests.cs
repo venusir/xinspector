@@ -282,6 +282,16 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
+        /// 只挂 <c>[TypeDrawerSettings]</c> 的类型必须被判为「用到了本插件」——它靠绘制器那一半
+        /// 被认出来（处理器表对它一无所知）。
+        /// </summary>
+        [Test]
+        public void IsUsedBy_只挂类型选择器特性的类型为真()
+        {
+            Assert.That(XInspectorUsageDetection.IsUsedBy(typeof(TypeDrawerSettingsOnlyFixture)), Is.True);
+        }
+
+        /// <summary>
         /// 集合被本包接管、且**元素类型用到了本包**时为真——与元素层的安全阀镜像：
         /// 那种集合真的会建元素层，元素里的特性真的会生效。
         /// </summary>
@@ -609,6 +619,15 @@ namespace XInspector.Tests.Editor
         /// <summary>只标了列表设置——靠绘制器那一半被认出来。</summary>
         [ListDrawerSettings]
         public int[] values = { 1 };
+    }
+
+    /// <summary>只挂类型选择器特性的资产。</summary>
+    internal sealed class TypeDrawerSettingsOnlyFixture : ScriptableObject
+    {
+        /// <summary>唯一的用法：托管引用的 <c>System.Type</c> 槽位。</summary>
+        [SerializeReference]
+        [TypeDrawerSettings]
+        public Type chosen;
     }
 
     /// <summary>集合被本包接管、元素类型也用到了本包的资产。</summary>
