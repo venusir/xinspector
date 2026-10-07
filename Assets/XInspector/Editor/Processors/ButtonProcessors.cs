@@ -130,7 +130,7 @@ namespace XInspector.Editor
             }
 
             var container = NestedInstanceScope.ContainerOf(property);
-            state.Scopes = container == null ? null : NestedInstanceScope.Compile(targets, container.Path);
+            state.Scopes = NestedInstanceScope.Compile(targets, container);
 
             state.Methods = new MethodInfo[targets.Length];
             var missing = 0;

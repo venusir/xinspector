@@ -452,12 +452,13 @@ namespace XInspector.Editor
             var container = SerializedMemberResolver.FindNestedScopeNode(property);
             var requirement = MemberKindNames.ReflectionRequirement(kind);
 
-            // 第 2 级：嵌套 / 元素容器上的反射成员与方法。找不到就**停在这里**——
+            // 第 2 级：嵌套 / 元素 / 多态容器上的反射成员与方法。找不到就**停在这里**——
             // 回落到根上找会「看错对象」（同层没有、根上恰好同名时尤其难查）。
             if (container != null)
             {
                 return ReflectedMemberResolver.TryResolveNested(
-                    container.Type, container.Path, targets, memberName, requirement, whenMissing,
+                    container.Type, container.Path, NestedInstanceScope.PolymorphicTypesFor(container),
+                    targets, memberName, requirement, whenMissing,
                     out read, out declaredType, out reason);
             }
 

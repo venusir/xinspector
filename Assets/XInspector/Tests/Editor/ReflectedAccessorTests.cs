@@ -553,21 +553,85 @@ namespace XInspector.Tests.Editor
             Assert.That(Reject("Matrix.Array.data[0]"), Does.Contain("多维"), "多维数组不做。");
         }
 
+        /// <summary>末段是多态引用时**读到的是实例**——路径不必被拒（读路径那一批的开闸处）。</summary>
+        [Test]
+        public void 多态引用末段读到实例()
+        {
+            var fixture = new PathFixture { Payload = new PathStats { Hp = 10 } };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Payload", out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.SameAs(fixture.Payload), "读到的是槽位里那个活实例。");
+            Assert.That(accessor.Member.Name, Is.EqualTo("Payload"));
+        }
+
         /// <summary>
-        /// 多态引用段被**响亮拒绝**——展开判据不给它开半扇门，路径也就不该穿过它。
+        /// 末段是多态引用时 <c>ValueType</c> 是**声明类型**——接口槽位上它不等于实例的类型。
         /// </summary>
         /// <remarks>
-        /// 今天走不到这里（展开判据根本不展开这类字段，所以没有哪条节点的路径会穿过它），
-        /// 留着的是给那天的接口：真走到了要有话说，而不是「在 X 上找不到名为 Y 的字段」
-        /// 这种答非所问的原因。两条判据同源（<c>IsPolymorphicReference</c>）。
+        /// 这是契约不是缺陷：要「实例是什么类型」走 <c>NestedInstanceScope.InstanceTypeOf</c>
+        /// （按名找成员/方法的那几处用的就是它）。
         /// </remarks>
         [Test]
-        public void 多态引用段被拒绝()
+        public void 多态引用末段的ValueType是声明类型()
+        {
+            var fixture = new PathFixture { PayloadOfInterface = new PathPayload() };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "PayloadOfInterface", out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.SameAs(fixture.PayloadOfInterface));
+            Assert.That(accessor.ValueType, Is.EqualTo(typeof(IPathPayload)), "静态类型契约：声明类型。");
+        }
+
+        /// <summary>空槽位给 <c>null</c>（引用类型的空传播），不抛。</summary>
+        [Test]
+        public void 多态引用空槽位给null()
+        {
+            var fixture = new PathFixture();
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "Payload", out var accessor, out var reason), Is.True, reason);
+            Assert.DoesNotThrow(() => Assert.That(accessor.Read(fixture), Is.Null));
+        }
+
+        /// <summary>**穿过**多态段继续下钻：不给具体类型时响亮拒绝并说明（类型只有调用方知道）。</summary>
+        [Test]
+        public void 穿过多态段不给具体类型时拒绝并说明()
         {
             Assert.That(ReflectedAccessor.TryCreatePath(
-                typeof(PathFixture), "Payload.Hp", out var accessor, out var reason), Is.False);
+                typeof(PathFixture), "PayloadOfInterface.Hp", out var accessor, out var reason), Is.False);
             Assert.That(accessor, Is.Null);
-            Assert.That(reason, Does.Contain("多态引用"));
+            Assert.That(reason, Does.Contain("具体类型"));
+        }
+
+        /// <summary>给了具体类型就按它换基读下去——且换实例后跟着走（每帧现读）。</summary>
+        [Test]
+        public void 穿过多态段按具体类型下钻()
+        {
+            var fixture = new PathFixture { PayloadOfInterface = new PathPayload { Hp = 10 } };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "PayloadOfInterface.Hp", new[] { typeof(PathPayload) },
+                out var accessor, out var reason), Is.True, reason);
+            Assert.That(accessor.Read(fixture), Is.EqualTo(10));
+
+            fixture.PayloadOfInterface = new PathPayload { Hp = 99 };
+            Assert.That(accessor.Read(fixture), Is.EqualTo(99), "换实例后跟着走（每帧现读）。");
+        }
+
+        /// <summary>
+        /// 具体类型对不上时**按空链处置、不抛**（收窄守卫那一格）：后面照走既有空传播——
+        /// 值类型字段读到 <c>default</c>，不是别人实例的值、更不是 <c>InvalidCastException</c>。
+        /// </summary>
+        [Test]
+        public void 具体类型对不上时按空链处置不抛()
+        {
+            var fixture = new PathFixture { PayloadOfInterface = new PathPayload { Hp = 5 } };
+
+            Assert.That(ReflectedAccessor.TryCreatePath(
+                typeof(PathFixture), "PayloadOfInterface.Hp", new[] { typeof(PathPayloadAlt) },
+                out var accessor, out var reason), Is.True, reason);
+            Assert.DoesNotThrow(() => Assert.That(accessor.Read(fixture), Is.EqualTo(0), "不是 5——没拿别人实例的值。"));
         }
 
         /// <summary>路径超过深度上限被拒绝。</summary>
@@ -757,9 +821,13 @@ namespace XInspector.Tests.Editor
         /// <summary>多维数组——索引段要拒绝它（序列化系统本来就看不见它，节点也不会走这条路径）。</summary>
         public int[,] Matrix = new int[2, 2];
 
-        /// <summary>多态引用——路径穿过它必须被拒绝。</summary>
+        /// <summary>多态引用（具体类槽位）——末段读实例与空槽位的落点。</summary>
         [UnityEngine.SerializeReference]
         public PathStats Payload;
+
+        /// <summary>多态引用（接口槽位）——`ValueType` 是声明类型、穿段要具体类型两处的落点。</summary>
+        [UnityEngine.SerializeReference]
+        public IPathPayload PayloadOfInterface;
 
         /// <summary>撞深度上限用的长链（<c>Deep.B.C.D.E</c> 是五段）。</summary>
         public DeepA Deep = new DeepA();
@@ -783,6 +851,25 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>一个值。</summary>
         public string Name = "内层";
+    }
+
+    /// <summary>接口槽位的类型——多态引用的主战场（声明类型是接口）。</summary>
+    internal interface IPathPayload
+    {
+    }
+
+    /// <summary>接口槽位的一个实现：穿段下钻读的就是它。</summary>
+    internal sealed class PathPayload : IPathPayload
+    {
+        /// <summary>穿段下钻的目标字段。</summary>
+        public int Hp = 5;
+    }
+
+    /// <summary>接口槽位的另一个实现——「具体类型对不上」的那一格。</summary>
+    internal sealed class PathPayloadAlt : IPathPayload
+    {
+        /// <summary>某个字段（内容不重要，类型不同才是要点）。</summary>
+        public int Hp = -1;
     }
 
     /// <summary>值类型成员——中段是 struct 时的读法。</summary>

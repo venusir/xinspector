@@ -77,11 +77,16 @@ namespace XInspector.Editor
         }
 
         /// <summary>
-        /// 在**嵌套实例（或集合元素）**上解析一个成员引用。
+        /// 在**嵌套实例（或集合元素、多态容器）**上解析一个成员引用。
         /// </summary>
         /// <typeparam name="T">读取器的类型（通常是成员的值类型；列表那一格是 <see cref="IList"/>）。</typeparam>
-        /// <param name="nestedType">嵌套实例的声明类型。</param>
+        /// <param name="nestedType">嵌套实例的类型（多态容器上是**具体类型**）。</param>
         /// <param name="containerPath">嵌套实例相对根目标的序列化路径（如 <c>stats</c>）。</param>
+        /// <param name="polymorphicTypes">
+        /// 路径上**非末段**多态引用段的具体类型（按路径出现顺序，浅 → 深）；
+        /// 路径上没有要穿过的多态段时传 <c>null</c>。本层不认识节点，故由调用方从**树节点链**取
+        /// （见 <see cref="NestedInstanceScope.PolymorphicTypesFor"/>）。
+        /// </param>
         /// <param name="targets">根目标对象列表。</param>
         /// <param name="memberName">成员名。</param>
         /// <param name="requirement">对成员**声明类型**的要求。</param>
@@ -105,6 +110,7 @@ namespace XInspector.Editor
         public static bool TryResolveNested<T>(
             Type nestedType,
             string containerPath,
+            Type[] polymorphicTypes,
             object[] targets,
             string memberName,
             MemberTypeRequirement requirement,
@@ -131,7 +137,7 @@ namespace XInspector.Editor
             }
 
             if (!ReflectedAccessor.TryCreatePath(
-                    target.GetType(), containerPath, out var scope, out reason))
+                    target.GetType(), containerPath, polymorphicTypes, out var scope, out reason))
             {
                 return false;
             }

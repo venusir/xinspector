@@ -61,12 +61,20 @@ namespace XInspector.Editor
         /// <b>路径以索引段收尾时为 <c>null</c></b>（如元素节点的 <c>items.Array.data[0]</c>）：
         /// 末段不是任何成员，没有单一 <see cref="MemberInfo"/> 可记——此时看
         /// <see cref="ValueType"/>（它是元素类型）。
+        /// <b>末段是多态引用时照常是那个字段</b>（读到的是槽位里的实例）；
+        /// 判断「末段是不是多态引用」就靠它（<c>NestedInstanceScope.InstanceTypeOf</c> 用这一条）。
         /// </remarks>
         public MemberInfo Member { get; }
 
         /// <summary>
         /// 成员的值类型（字段的 <c>FieldType</c> / 属性的 <c>PropertyType</c>）。
         /// </summary>
+        /// <remarks>
+        /// <b>它是末段的「静态类型」，不保证是实例的运行时类型。</b> 多态引用（<c>[SerializeReference]</c>）
+        /// 收尾的路径上，声明类型常常是接口/抽象类——拿它去按名找成员/方法就会找错对象
+        /// （症状：按钮报「找不到方法」、反射成员静默算「不一致」）。要**实例**的运行时类型走
+        /// <see cref="NestedInstanceScope.InstanceTypeOf"/>（它只在末段确是多态引用时现读一次实例）。
+        /// </remarks>
         public Type ValueType { get; }
 
         /// <summary>
@@ -276,6 +284,38 @@ namespace XInspector.Editor
         public static bool TryCreatePath(
             Type rootType, string path, out ReflectedAccessor accessor, out string reason)
         {
+            return TryCreatePath(rootType, path, null, out accessor, out reason);
+        }
+
+        /// <summary>
+        /// 同上，另收「路径上各多态引用段的**具体类型**」——多态引用进管线之后，路径要能**穿过**它。
+        /// </summary>
+        /// <param name="rootType">根目标的类型（被检视对象的类型）。</param>
+        /// <param name="path">点分路径，如 <c>shape.inner.hp</c>。</param>
+        /// <param name="polymorphicTypes">
+        /// 路径上**非末段**多态引用（<c>[SerializeReference]</c>）段的具体类型，按**路径出现顺序**
+        /// （浅 → 深）各占一格；<c>null</c> 表示不穿过任何多态段。缺格时**响亮拒绝**——
+        /// 具体类型只有调用方知道（树侧从节点祖先链取，见 <c>NestedInstanceScope.PolymorphicTypesFor</c>）。
+        /// </param>
+        /// <param name="accessor">编译出的访问器；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因（中文，可直接拼进告警）；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>多态引用段是路径上唯一的「类型断点」。</b> 其余段都能从声明类型推出下一段的类型，
+        /// 多态段的声明类型常常是接口/抽象类，下一段的字段只在**具体类型**上——于是穿段时
+        /// 按调用方给的具体类型换基，并用 <c>TypeIs</c> **收窄**：类型对不上（多选、陈旧调用）
+        /// 时给 <c>null</c> 而不是每帧抛，与逐段空传播同一条纪律。
+        /// **末段**多态段不需要换基——读到实例即可，<see cref="ValueType"/> 保持声明类型
+        /// （要实例类型走 <see cref="NestedInstanceScope.InstanceTypeOf"/>）。
+        /// </para>
+        /// <para>
+        /// 深度预算照旧只数字段段——多态段占一格，与普通字段段同款。
+        /// </para>
+        /// </remarks>
+        public static bool TryCreatePath(
+            Type rootType, string path, Type[] polymorphicTypes, out ReflectedAccessor accessor, out string reason)
+        {
             accessor = null;
 
             if (rootType == null || string.IsNullOrEmpty(path))
@@ -291,6 +331,7 @@ namespace XInspector.Editor
             var lastValueType = (Type)null;
             var depth = 0;
             var start = 0;
+            var polymorphicIndex = 0;
 
             while (start < path.Length)
             {
@@ -387,14 +428,6 @@ namespace XInspector.Editor
                     return false;
                 }
 
-                if (NestedMemberExpansion.IsPolymorphicReference(field))
-                {
-                    reason =
-                        $"路径段「{name}」是多态引用（[SerializeReference]）——展开判据不给它开半扇门" +
-                        "（那是 L7 那条产品线），路径也就不该穿过它";
-                    return false;
-                }
-
                 var source = body ?? Convert(instance, field.DeclaringType);
 
                 // **空传播**：中间段为 null 时整条链给 null，而不是每帧抛 NullReferenceException。
@@ -411,6 +444,36 @@ namespace XInspector.Editor
                 current = field.FieldType;
                 last = field;
                 lastValueType = field.FieldType;
+
+                // 多态引用段：**末段**照读（读到的是槽位里那个实例；`ValueType` 保持声明类型，
+                // 那是它的契约），**非末段**要按具体类型换基才谈得上继续下钻——具体类型只有
+                // 调用方知道（树侧从节点祖先链给，见 `NestedInstanceScope.PolymorphicTypesFor`）。
+                if (NestedMemberExpansion.IsPolymorphicReference(field) && separator >= 0)
+                {
+                    var concrete = polymorphicTypes != null && polymorphicIndex < polymorphicTypes.Length
+                        ? polymorphicTypes[polymorphicIndex++]
+                        : null;
+
+                    if (concrete == null)
+                    {
+                        reason =
+                            $"路径段「{name}」是多态引用（[SerializeReference]）——穿过去继续下钻要按它的" +
+                            "**具体类型**解析，而这次编译没有拿到那一段的具体类型";
+                        return false;
+                    }
+
+                    if (concrete != field.FieldType)
+                    {
+                        // **收窄**到具体类型：类型对不上（多选、陈旧调用）时给 `null`，而不是每帧抛
+                        // ——与逐段空传播同一条纪律。
+                        body = Expression.Condition(
+                            Expression.TypeIs(body, concrete),
+                            Expression.Convert(body, concrete),
+                            Expression.Constant(null, concrete));
+                    }
+
+                    current = concrete;
+                }
 
                 if (separator < 0)
                 {

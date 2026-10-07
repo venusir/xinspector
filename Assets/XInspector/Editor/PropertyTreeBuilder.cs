@@ -1550,7 +1550,7 @@ namespace XInspector.Editor
             }
 
             var targets = serializedObject.targetObjects;
-            var scopes = NestedInstanceScope.Compile(targets, parent.Path);
+            var scopes = NestedInstanceScope.Compile(targets, parent);
             var usable = 0;
 
             for (var i = 0; scopes != null && i < scopes.Length; i++)
