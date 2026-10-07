@@ -2547,6 +2547,81 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 
 ---
 
+## 三十二、第二十八批：类型选择器基座与 `[TypeDrawerSettings]`（2026-10-07）
+
+**做了什么**：**自绘选择器一族的第一块**——本包自己的类型选择器（候选枚举 + 分层菜单 +
+写回通道 + 替换型绘制器），配上第一个消费者 `[TypeDrawerSettings]`（`BaseType` +
+`TypeInclusionFilter` 收窄候选）。**特性计数 88 → 89**。
+
+### 五条测量先落地（其中两条改了设计）
+
+| 测量 | 结论 |
+|---|---|
+| 类型槽位（`[SerializeReference] System.Type`）的 `hasVisibleChildren` | **假** ⇒ 不会被多态管线展开成 RuntimeType 的空壳子树（钉住用例：`类型槽位不展开`） |
+| 未 `Apply` 的改动活不活得过 `Update()` | **活不过——会被丢掉**（arraySize 设 2、Update 后读回 1）⇒ 绘制周期之外的写回（菜单回调）**必须当场提交** |
+| `TypeCache.GetTypesDerivedFrom(接口)` | 含实现类与**派生接口**、含抽象实现类；**不含接口自己** |
+| 同上：抽象类 / `typeof(object)` | 抽象类的派生含具体派生类、不含基类自己；`object` 的派生**含类与结构体、不含接口** |
+| 同上：**开放泛型** | **不抛**，且含闭合实现（`ITypeCacheProbeGeneric<>` → `…GenericImplementation`） |
+
+第二条还留了一个**推论（未实测）**：既有三个菜单写回（`[ValueDropdown]` 两条通道 /
+`[AssetSelector]` / `[AssetList]`）若在绘制周期之外执行，可能有同一个隐患——**只报不修**，
+需要一次人工确认（见 `SerializedReferenceProbeTests` 那条用例的断言消息）。
+
+### 设计要点
+
+1. **候选枚举不复用 `EditorTypeScanner`**（三条理由每条都足以单独否决）：它是编译期泛型
+   （这里的基类型是**运行期变量**）、它的准入判据是「有公开无参构造」（那是注册表单例的要求，
+   而候选类型不需要能实例化）、它的告警文案是注册表口径（会打到没写错的使用方头上）。
+   只借两条做法：`TypeCache`（域重载自动失效）、扫描收在 Editor 侧（`TypeCandidateQuery`
+   是 `TypeCache` 在本包的**唯一出现处**）。
+2. **过滤是求交非空**：`TypeInclusionFilter` 六成员照官方、**数值本包自定**（照 `PrefabKind`
+   先例）；一个类型可同时命中多位（**泛型接口**命中「泛型 + 接口」、**静态类**归「抽象」——
+   IL 里就是 `abstract sealed`）。`BaseType == null` 按 `object` 收——**接口不在其列**
+   （上面第四条测量），要接口得显式写基类型；这条写进了 README。候选**不缓存**（`TypeCache`
+   自己就是缓存，多一个失效点不划算）；编译器生成的类型（闭包、匿名）**无条件剔除**。
+3. **菜单三条「本批默认」**：按命名空间分层（`GenericMenu` 的 `/`；`/` 不需要转义）；
+   当前值带勾；「（无）」清空项**有值时才有**（空槽位点它什么都不发生，与「只声明有真行为的
+   选项」冲突）。`[TypeSelectorSettings]` 的 `PreferNamespaces` / `ShowCategories` / `ShowNoneItem`
+   **本批不声明**——日后由它们覆盖这些默认。
+4. **写回通道**：`ReflectedValueCopier.TryAssign` 加 `ManagedReference` 一格
+   （与对象引用那格同构：先看「是不是那一类」，再看「声明类型装不装得下」——判据是
+   `declaredType.IsAssignableFrom(selected.GetType())`）。**调用方必须传字段的声明类型**
+   （`FieldInfo.FieldType`），不能传节点的 `Type`——类型槽位有值时那个是 `RuntimeType`。
+   `TypeSlotWrite.TryWrite` 成功后**当场** `ApplyModifiedPropertiesWithoutUndo()`。
+5. **这一步刻意不进撤销栈（实测）**：撤销真的要把类型槽位写回去时（槽位与快照不同），
+   恢复出来的引用**不可用**——读到过不洁的 `RuntimeType` 对象、见过读它抛
+   `NotSupportedException`、甚至有一次 NUnit 格式化它**把编辑器整个搞崩**。状态不确定，
+   故**不给它钉断言**（给未定义行为钉用例只会得到 flaky 测试）；登记撤销反而会让 Ctrl+Z
+   主动去恢复一只不洁的对象，**不登记则 Ctrl+Z 跳过这一步**——两害相权取其轻。
+   挡不住的那一半：`Undo.RecordObject` 记的是**整个对象**，同对象上其它撤销的记录仍会尝试
+   恢复这张槽位（Unity 的限制，本批只记录不修）。用户对象的多态引用没有这个问题
+   （既有撤销探针能过），这是「值是 `System.Type`」特有的一格。
+6. **误用告警只能在构建期**：裸 `System.Type` 字段**根本没有节点**（绘制器永远跑不到），
+   故判据看**结果**——「这个字段有没有变成节点」，自动罩住所有不建节点的原因；
+   文案能点名的那一支直接说「**要加 `[SerializeReference]`**」。作用域只到最外层类型。
+
+### 边界
+
+- 多选（各目标不一致）**退回原生那一行**——本包选择器表达不了「各目标类型不同」，
+  而原生多态行本来就支持多目标赋值（不告警，与 `[PropertyRange]` 同款）。
+- 类型槽位**不展开**（P1 + 钉住用例）；`[TypeSelectorSettings]` / `[PolymorphicDrawerSettings]`
+  的旋钮与图标/`SdfIconType` **一个都不声明**；不碰样式系统。
+- **渲染未目视确认**：按钮外观、菜单分层实际观感只有人眼能答（与既有弹层型特性同款）。
+
+### 规模与遗留
+
+- 生产代码：`Runtime` 两个声明（特性 + 枚举）、`ReflectedValueCopier` 加一格 +
+  `TypeSlotWrite`、`TypeDrawerSettingsDrawer`（绘制器 + 四个纯逻辑块）、
+  `TypeSelectorMisuse` + `PropertyTreeBuilder` 一行接线。
+- 用例：`TypeDrawerSettingsDrawerTests` 新建 13 例、`ReflectedValueCopierTests` +5、
+  `SerializedReferenceProbeTests` +2、`TypeCacheProbeTests` 新建 3 例、
+  `XInspectorUsageDetectionTests` +1、Runtime 7 例。
+- **遗留**：选择器上的旋钮（`[PolymorphicDrawerSettings]` `[TypeSelectorSettings]`
+  `[TypeRegistryItem]`——**基座已落地，它们是加旋钮**）与两个 hide（前置是那条目视测量）；
+  `List<IShape>` 的多态元素。见 Roadmap §十二。
+
+---
+
 ## 附录 · 审计记忆
 
 > 本节是**附录**：它的内容是跨轮次的审计留档，**不参与正文的批次顺序**。

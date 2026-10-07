@@ -125,6 +125,23 @@
 > 与 Odin 的差异：弹出层是编辑器自带菜单，**没有搜索框、图标与多选**；它那几个只为那个窗口存在的
 > 选项（以及只对列表有意义的选项）因此**不声明**——写了会编译不过。
 
+### 类型选择
+
+| 特性 | 预期看到 |
+|---|---|
+| `[SerializeReference, TypeDrawerSettings]`（`anyType`） | 一行「当前类型名」的**假字段按钮**：点开是本包自绘的候选菜单——**按命名空间分层**、当前值带勾、有值时最上面多一项「（无）」（点它清空）。不设约束时候选是「除接口以外的所有类型」——分层是唯一能用的导航 |
+| `TypeDrawerSettings(BaseType = typeof(IShowcaseShape))`（`shapeType`） | 候选收窄到上面多态那段那个接口的派生（`ShowcaseCircle` / `ShowcaseSquare`）——菜单小得多，一眼看完 |
+| `TypeDrawerSettings(BaseType = …, Filter = IncludeConcreteTypes \| IncludeInterfaces)`（`shapeTypeNarrowed`） | 与上一条同一个基类型，但**只要具体的类与接口**——抽象类与泛型不进菜单。（过滤位的差异在 `anyType` 那种不设约束的场景里最明显：候选是整个工程的类型，分层菜单才显出用处。） |
+
+> **字段必须是托管引用的 `System.Type`**（`[SerializeReference]`）——裸的 `System.Type` 字段
+> 不在序列化数据里、进不了 Inspector；忘了加会在 Console 里得到一条**构建期告警**，直接点名
+> 「要加 `[SerializeReference]`」。**这是本包与 Odin 的一处差异**（Odin 用自己的序列化器兜住了
+> 这一层）。`TypeInclusionFilter` 的成员名照官方、**数值本包自定**；一个类型可同时命中多位
+> （泛型接口＝泛型＋接口，静态类归抽象）。
+> **多选（各目标不一致）退回 Unity 原生那一行**；类型写回**不进撤销栈**——`System.Type` 的
+> 托管引用撤销恢复不出来（实测），本包宁可让 Ctrl+Z 跳过这一步。
+> 多态字段自己的「换具体类型」仍由 Unity 原生那一行承担，本包不提供。
+
 ### 调色板
 
 | 特性 | 预期看到 |

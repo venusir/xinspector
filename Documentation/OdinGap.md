@@ -16,9 +16,9 @@
 > 对应的类名仍是 `[EnableGUI]`/`[OnInspectorGUI]`）。故「109」是当初的笔误，
 > 下面的表一直是对的。
 
-**本项目的家底（2026-10-07，第二十七批之后）：**
+**本项目的家底（2026-10-07，第二十八批之后）：**
 
-- 公开特性 **88 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
+- 公开特性 **89 个**（清单见文末「总账」），分十一族：分组与条件、状态与门控、标签与外观、
   值绘制、校验与钳制、**预制体上下文**、按钮、回调、**反射成员**、**结构与顺序**、
   **集合与表格**，另有调试 1 个
 - 自定义分组的公开基类 `PropertyGroupAttribute`（外加自建枚举 `TitleAlignments`、`ButtonSizes`、
@@ -94,6 +94,12 @@
   读路径那一批接着把 `[ShowInInspector]`、`[Button]` 一族、按名回调与指向实例反射成员/方法的
   条件**全部打开**（含**穿过**多态段继续下钻）；穿段的具体类型由树从节点祖先链给，实例类型
   只开一个出口（`NestedInstanceScope.InstanceTypeOf`）。见 Pipeline §三十 / §三十一。
+- **类型选择器基座 + `[TypeDrawerSettings]`**（2026-10-07，第二十八批，特性计数 88 → 89）：
+  **自绘选择器一族的第一块**——候选枚举（`TypeCache` + `BaseType` / `TypeInclusionFilter` 收窄，
+  数值本包自定）、分层菜单（点击才现算、当前值带勾、「（无）」清空项）、**写回通道**
+  （本包第一次写 `managedReferenceValue`；实测未 Apply 的改动会被 `Update()` 丢掉，故当场提交；
+  撤销不安全，**刻意不进撤销栈**）。字段要写成 `[SerializeReference] public System.Type t;`，
+  误用有构建期告警点名。见 Pipeline §三十二。
 
 ---
 
@@ -195,14 +201,16 @@
 | `[MultiLineProperty]` | ✅ 已实现 | — |
 | `[PreviewField]` | ✅ 已实现 | 默认高度/默认对齐由本包定；两个 `FilterMode` 重载永久否决 |
 | `[PolymorphicDrawerSettings]` | ❌ 缺 | **L7-Inspector，可做**：官方原话「Provides options for **Polymorphic Fields rendered using Odin**」——旋钮挂在原生多态绘制器上（`CreateInstanceFunction` / `ReadOnlyIfNotNullReference` / `NonDefaultConstructorPreference` / `ShowBaseType`）。**不需要自研序列化器**，需要**自绘选择器** |
-| `[TypeDrawerSettings]` | ❌ 缺 | **L7-Inspector，可做——2026-10-07 第三次改判**。这一项挪过三次层（L3 → L7 前置 → 这里），前两次问的都是「**有没有**一条可写的 `System.Type` 通道」，**本轮实测给出了第三种答案：通道在，只是要求使用方在字段上加一个 `[SerializeReference]`**——裸 `System.Type` 字段进不了序列化数据（`FindProperty` 为 null），加了之后就是 `ManagedReference`，**写得住、清得掉、进撤销栈**。原来的判断不是错，是**问题问窄了**：把「要改个声明才能写」与「写不进去」归成了同一格。真实前提仍是「约束候选集」，而候选集没有公开入口（`TypeSelectionList` 是 internal）⇒ 要**自绘选择器** |
+| `[TypeDrawerSettings]` | ✅ 已实现 | 2026-10-07（第二十八批，**自绘选择器一族的第一块**）：`System.Type` 字段画成类型选择器——一行「当前类型名」按钮 + 本包自绘的分层候选菜单（点击才现算）。**字段要写成 `[SerializeReference] public System.Type t;`**（裸字段进不了序列化数据，**实测**；误用有**构建期告警**点名要说加它）；`BaseType` + `Filter` 收窄候选，`TypeInclusionFilter` 六成员照官方、**数值本包自定**（照 `PrefabKind` 先例）；多选退回原生那一行。见 Pipeline §三十二 |
 | `[SceneObjectsOnly]` | ✅ 已实现 | — |
 | `[TableList]` | ✅ 已实现 | 表格呈现；**不配绘制器、配处理器**（构建期建列模型并补一份 `[ListDrawerSettings]`） |
 | `[TableMatrix]` | ⛔ **不作为** | **Serializer 半边**（2026-10-07 核验）：Unity 根本不序列化多维数组（**实测**：`FindProperty` 为 null、零告警）。Odin 自己的原话是「继承 `SerializedMonoBehaviour` 只是为了让它替你序列化」——**要做得先有一套自己的序列化器**。本包判不作为（另见 Collections） |
 | `[Toggle]` | ✅ 已实现 | — |
 | `[ToggleLeft]` | ✅ 已实现 | — |
 
-**小计：已实现 19 / 缺 3 / 不做 2**（2026-10-07 逐行重算——此前写着 18/5/1，
+**小计：已实现 20 / 缺 2 / 不做 2**（2026-10-07 第二十八批：`[TypeDrawerSettings]` 转已实现，
+缺 3→2——这一项挪过三次层（L3 → L7 前置 → 这里），最终答案是「通道在，只差字段加
+`[SerializeReference]` 这个约定」＋一条自绘选择器。此前写着 18/5/1，
 是 `[ColorPalette]` 转已实现后没跟着改；同日 `[TableMatrix]` 由「缺」改判**不作为**，
 缺 4→3、不做 1→2。2026-10-06：`[AssetList]` 转已实现（两形态）；
 2026-10-05：`[TableList]` `[HideInTables]` 转已实现；
@@ -395,10 +403,10 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 ### 总账
 
 ```
-108 个不重复特性 = 88 已实现 + 6 缺 + 10 不做 + 4 不需要（Unity 自己的）
+108 个不重复特性 = 89 已实现 + 5 缺 + 10 不做 + 4 不需要（Unity 自己的）
 ```
 
-已实现的 88 个：
+已实现的 89 个：
 
 - **分组与条件**（21）：`[Title]` `[BoxGroup]` `[FoldoutGroup]` `[HorizontalGroup]` `[TabGroup]`
   `[TitleGroup]` `[ToggleGroup]` `[VerticalGroup]`、`[ShowIf]` `[HideIf]` `[EnableIf]` `[DisableIf]`、
@@ -409,11 +417,12 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
   `[TypeInfoBox]` `[DrawWithUnity]`
 - **标签与外观**（10）：`[LabelText]` `[LabelWidth]` `[HideLabel]` `[PropertyTooltip]`
   `[GUIColor]` `[Indent]` `[PropertySpace]` `[SuffixLabel]` `[InfoBox]` `[DetailedInfoBox]`
-- **值绘制**（17）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
+- **值绘制**（18）：`[DisplayAsString]` `[ToggleLeft]` `[ProgressBar]` `[EnumToggleButtons]`
   `[MultiLineProperty]` `[DelayedProperty]` `[EnumPaging]` `[PropertyRange]` `[Wrap]`、
   `[MinMaxSlider]` `[PreviewField]` `[ValueDropdown]` `[AssetSelector]`（2026-10-04 L1b）、
   `[FilePath]` `[FolderPath]`、`[InlineEditor]`（2026-10-04 L1b 收尾）、
-  `[ColorPalette]`（2026-10-07，**卡在设计的那一层补上了**：工程内调色板资产 + 按名查找）
+  `[ColorPalette]`（2026-10-07，**卡在设计的那一层补上了**：工程内调色板资产 + 按名查找）、
+  `[TypeDrawerSettings]`（2026-10-07，第二十八批：**自绘选择器一族的第一块**——类型选择器基座）
 - **校验与钳制**（6）：`[Required]` `[MinValue]` `[MaxValue]` `[AssetsOnly]` `[SceneObjectsOnly]`
   `[ChildGameObjectsOnly]`
 - **预制体上下文**（6，2026-10-04 L2 收尾之一）：四个条件 `[ShowIn]` `[HideIn]` `[EnableIn]`
@@ -445,15 +454,14 @@ L2 收尾之一把 `[RequiredIn]` 从「不做」翻成已实现）
 （`[RequiredIn]` `[DisallowModificationsIn]` 已从这一列移出：2026-10-04 基础设施落地，
 它们做得了、也做了。）
 
-**「缺 6 个」也不等于「6 份工作量」**：2026-10-07 核验之后（[Pipeline §二十九](Modules/Pipeline.md)），
-剩下的 6 个缺口**全部是可做的**，且全部是**同一件事的不同侧面**——它们都要**先有一个
-本包自己的类型选择器 / 多态绘制器**：
+**「缺 5 个」也不等于「5 份工作量」**：2026-10-07 核验之后（[Pipeline §二十九](Modules/Pipeline.md)），
+剩下的缺口**全部是可做的**，且都是**同一件事的不同侧面**——选择器一族**第一块已落地**
+（第二十八批：基座 + `[TypeDrawerSettings]`，见 Pipeline §三十二），剩下的都挂在同一套选择器/绘制器上：
 
 | 缺口 | 真实前提 |
 |---|---|
-| `[PolymorphicDrawerSettings]` `[TypeSelectorSettings]` | 自绘选择器（旋钮挂在「Odin 的选择器」上） |
+| `[PolymorphicDrawerSettings]` `[TypeSelectorSettings]` | 自绘选择器（旋钮挂在「本包的选择器」上）——**基座已落地**，这两个是加旋钮 |
 | `[TypeRegistryItem]` | 选择器 + 注册表（**图标那项撞 `SdfIconType` 独立线**） |
-| `[TypeDrawerSettings]` | 自绘选择器；`System.Type` 的通道**已有**，代价是字段加 `[SerializeReference]` |
 | `[HideReferenceObjectPicker]` `[HideDuplicateReferenceBox]` | 「有一个引用框可抑制」⇒ 同样先得有那个绘制器 |
 
 **「卡在设计」那一列早已归零**（`[ColorPalette]`，2026-10-07）；
@@ -713,9 +721,10 @@ L7 原先记的是「要求自己实现一套**序列化器**与**多态引用�
 > **序列化成员**按需成为真节点，里面的条件、分组、顺序、内联随之生效；换实现整棵重建；
 > 自引用有守卫。**第二步（多态段里的读路径）同日收口**（第二十七批，Pipeline §三十一）：
 > `[ShowInInspector]`、`[Button]` 一族、按名回调与指向实例反射成员/方法的条件**全部生效**，
-> 路径可穿过多态段继续下钻；「响亮跳过」告警已撤。**至此只剩自绘选择器一族**
-> （L7 那 6 个「可做」项仍全在，`[TypeDrawerSettings]` 仍记在那条线上）。
-> 见 Pipeline §三十 / §三十一。
+> 路径可穿过多态段继续下钻；「响亮跳过」告警已撤。**选择器一族的第一块也已落地**（第二十八批，
+> 见 Pipeline §三十二）：自绘类型选择器的基座（候选枚举 + 分层菜单 + 写回通道）配上
+> `[TypeDrawerSettings]`——**至此只剩**「选择器上的旋钮」（`[PolymorphicDrawerSettings]`
+> `[TypeSelectorSettings]` `[TypeRegistryItem]`）与两个 hide。
 
 ---
 

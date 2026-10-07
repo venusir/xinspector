@@ -304,7 +304,19 @@ public class PlayerProfileEditor : XInspectorEditor
   （Odin 的默认值存在它的偏好设置里，官网核不到）；超限或引用成环时**告警并退回普通对象字段**。
   值为空的 `CompletelyHidden` 画一行灰字提示，而不是留一片空白（Odin 留白）。
   内嵌里的编辑**会进 Undo**；字段指向正在被检视的对象时，外层可能晚一帧看到变化。
-- **没有 `[SerializeReference]` 类型切换。**
+- **类型选择器（`[TypeDrawerSettings]`）有几处要记住的边界：**
+  - **字段必须写成 `[SerializeReference] public System.Type t;`**——裸的 `System.Type` 字段不在
+    序列化数据里、进不了 Inspector；忘了加会有**构建期告警**点名要说加它。
+    Odin 用自己的序列化器兜住了这一层，**这是本包与它的一处差异**。
+  - **候选是本包自己扫的**（Unity 没有公开的候选集入口）：`BaseType` 的派生按 `Filter` 过滤；
+    **不写 `BaseType` 时按 `object` 收——接口不在其列**，要接口请把基类型写成那个接口。
+    `TypeInclusionFilter` 的成员名照官方、**数值本包自定**。
+  - **菜单按命名空间分层、当前值带勾、「（无）」清空项只在有值时出现**——三条都是本批默认
+    （日后由 `[TypeSelectorSettings]` 覆盖）；**多选（各目标不一致）退回 Unity 原生那一行**。
+  - **类型写回不进撤销栈**（本包自定）：`System.Type` 的托管引用撤销**恢复不出来**
+    （实测：恢复出的对象不可用，甚至能把编辑器搞崩），故宁可让 Ctrl+Z 跳过这一步。
+  - **多态字段自己的「换具体类型」仍由 Unity 原生那一行承担**，本包不提供——
+    `[PolymorphicDrawerSettings]` 一族还没做。
 - 折叠 / 展开状态**不跨会话持久化**。
 - 使用方自己写的 `[CustomPropertyDrawer]` 在可展开类型上**会被绕过**。
 - 只支持 IMGUI，不支持 UI Toolkit。

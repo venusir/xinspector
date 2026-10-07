@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Added — 类型选择器基座与 `[TypeDrawerSettings]`（特性计数 88 → 89）
+
+- **`System.Type` 字段可以画成类型选择器**：一行「当前类型名」按钮，点开是本包自绘的候选菜单
+  ——按命名空间分层、当前值带勾、有值时带一个「（无）」清空项。三件事要先知道：
+  - **字段必须写成 `[SerializeReference] public System.Type t;`**——裸的 `System.Type` 字段
+    不在序列化数据里；忘了加会有**构建期告警**点名要说加它（Odin 用自己的序列化器兜住了
+    这一层，**这是本包与它的一处差异**）。
+  - **候选用 `BaseType` 与 `Filter` 收窄**：候选是本包自己扫的（Unity 没有公开的候选集入口）；
+    `TypeInclusionFilter` 成员名照官方、**数值本包自定**；不写 `BaseType` 时按 `object` 收，
+    **接口不在其列**（要接口就写那个接口）。
+  - **多选（各目标不一致）退回 Unity 原生那一行**（不告警）；**写回不进撤销栈**——
+    `System.Type` 的托管引用撤销**恢复不出来**（实测：恢复出的对象不可用），
+    宁可让 Ctrl+Z 跳过这一步。
+- 这是「自绘选择器一族」的**第一块**（基座：候选枚举 + 分层菜单 + 写回通道）；多态字段自己的
+  「换具体类型」动作仍由 Unity 原生那一行承担，`[PolymorphicDrawerSettings]` 一族还没做。
+
 ### Added — 多态段里的读路径（特性计数 +0）
 
 - **`[SerializeReference]` 多态段里的读路径全部打开**：`[ShowInInspector]` 成员成为节点并

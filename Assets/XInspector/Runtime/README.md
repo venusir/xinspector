@@ -234,6 +234,11 @@ public static string BuildTag = "静态成员也可以标";
 [ColorPalette("UI")]                           public Color accent;         // 调色板（工程内资产）
 [AssetSelector]                                public Material anyMaterial; // 资产下拉
 [AssetSelector(Paths = "Assets/Art", Filter = "t:Material")] public Material scoped;
+
+[SerializeReference, TypeDrawerSettings]                       public Type anyType;   // 类型选择器
+[SerializeReference, TypeDrawerSettings(BaseType = typeof(IShape))] public Type shapeType;
+[SerializeReference, TypeDrawerSettings(BaseType = typeof(IShape),
+    Filter = TypeInclusionFilter.IncludeConcreteTypes)]        public Type narrowed;  // 只要具体类
 ```
 
 | 行为 | 说明 |
@@ -252,6 +257,9 @@ public static string BuildTag = "静态成员也可以标";
 | `[ValueDropdown]` 的类型判定 | 源与目标类型必须一致；**枚举还要求成员名与顺序完全一致**——不符则**拒绝这次选择并告警**，绝不按索引硬写。序列化来源比 `propertyType`，反射来源比 CLR 类型（对象引用还要求**能赋给字段的声明类型**）——两条通道共用同一份枚举判据 |
 | `[ValueDropdown]` 的选项标签 | 序列化来源按元素类型格式化；反射来源与 `[ShowInInspector]` 的只读展示**共用同一个格式化器**——因此浮点精度（`0.###` 对 `0.######`）与 Unity 空对象的写法（`(None)` 对 `None`）在两种来源下**略有出入**，这是有意的取舍：不为此再写第二套格式化器 |
 | `[AssetSelector]` 是透传型 | 它只画一个小按钮然后**照常调用下一个绘制器**，所以对象字段仍是原生那个。全工程搜索只在**菜单弹出时**发生 |
+| `[TypeDrawerSettings]` 的字段形态 | **必须写成 `[SerializeReference] public System.Type t;`**——裸的 `System.Type` 不在序列化数据里（进不了 Inspector）；忘了加会有**构建期告警**点名要说加它。Odin 用自己的序列化器兜住了这一层，**这是本包与它的一处差异** |
+| `[TypeDrawerSettings]` 的候选 | 本包自己扫（Unity 没有公开的候选集入口）：`BaseType` 的派生按 `Filter` 过滤；**不写 `BaseType` 时按 `object` 收——接口不在其列**，要接口请把基类型写成那个接口。`TypeInclusionFilter` 成员名照官方、**数值本包自定**；一个类型可同时命中多位（**泛型接口**＝泛型＋接口，**静态类**归抽象）。候选在**点击那一刻**现算，不缓存 |
+| `[TypeDrawerSettings]` 的菜单与写回 | 菜单按**命名空间分层**、当前值带勾、「（无）」清空项**有值时才有**——三条都是本批默认（日后由 `[TypeSelectorSettings]` 覆盖）。**多选退回原生那一行**（不告警）；**写回不进撤销栈**——`System.Type` 的托管引用撤销**恢复不出来**（实测：恢复出的对象不可用），本包宁可让 Ctrl+Z 跳过这一步。多态字段自己的「换具体类型」仍由 Unity 原生那一行承担，本包不提供（`[PolymorphicDrawerSettings]` 一族还没做） |
 | 只读与多对象 | 与 `[ReadOnly]` / `[DisableIf]` 照常共存。`[MinMaxSlider]` 在多对象值不一致时退回普通绘制（双滑块没有混合值形态） |
 
 ### 内嵌编辑器特性
