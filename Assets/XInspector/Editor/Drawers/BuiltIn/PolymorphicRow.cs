@@ -200,8 +200,14 @@ namespace XInspector.Editor
             // `[TypeSelectorSettings]` 的一次性视图（三个显示旋钮 + 用户过滤器）。
             var view = TypeSelectorSettingsView.Of(property);
 
+            // 自定义造实例（解析成功的才有）：有它 ⇒ 写回只走它、候选跳过 Exclude 那道收窄。
+            var factoryState = property.State.Get<PolymorphicCreateInstanceState>();
+            var createInstance = factoryState != null && factoryState.Resolved
+                ? factoryState.CreateInstance
+                : null;
+
             var candidates = PolymorphicCandidateFilter.Candidates(
-                declaredType, preference, view.Filter, out var duplicates, out var error);
+                declaredType, preference, createInstance != null, view.Filter, out var duplicates, out var error);
 
             if (error != null)
             {
@@ -219,7 +225,9 @@ namespace XInspector.Editor
                     nameof(PolymorphicRow) + ".empty",
                     $"[XInspector] 属性「{property.Path}」的多态选择器没有候选" +
                     $"（声明类型 = {ReflectedAccessor.DescribeType(declaredType)}，" +
-                    $"构造偏好 = {preference}）——检查那个类型下有没有**装得进、造得出**的实现；" +
+                    $"构造偏好 = {preference}" +
+                    (createInstance != null ? "，自定义造实例已生效——候选不按无参构造收窄" : string.Empty) +
+                    "）——检查那个类型下有没有**装得进、造得出**的实现；" +
                     "若标了 [TypeSelectorSettings].FilterTypesFunction，过滤器也可能把候选全滤掉。");
                 return;
             }
@@ -257,7 +265,8 @@ namespace XInspector.Editor
                     new GUIContent(options[i].Path),
                     options[i].IsCurrent,
                     OnSelected,
-                    new Selection(target, options[i].Type, declaredType, preference, undoEnabled));
+                    new Selection(
+                        target, options[i].Type, declaredType, preference, undoEnabled, createInstance));
             }
 
             menu.DropDown(new Rect(Event.current.mousePosition, Vector2.zero));
@@ -291,6 +300,7 @@ namespace XInspector.Editor
             if (!PolymorphicSlotWrite.TryWrite(
                     selection.Value,
                     selection.Preference,
+                    selection.Factory,
                     selection.Target,
                     selection.DeclaredType,
                     selection.UndoEnabled,
@@ -319,27 +329,33 @@ namespace XInspector.Editor
             /// <summary>非默认构造的处置档。</summary>
             public readonly NonDefaultConstructorPreference Preference;
 
+            /// <summary>自定义造实例（<c>CreateInstanceFunction</c> 解析出来的）；<c>null</c> 走内置工厂。</summary>
+            public readonly Func<Type, object> Factory;
+
             /// <summary>这次提交要不要进撤销栈（窗口路径为假）。</summary>
             public readonly bool UndoEnabled;
 
-            /// <summary>以五段构造。</summary>
+            /// <summary>以六段构造。</summary>
             /// <param name="target">目标属性。</param>
             /// <param name="value">选中的类型；<c>null</c> 表示清空。</param>
             /// <param name="declaredType">字段的声明类型。</param>
             /// <param name="preference">非默认构造的处置档。</param>
             /// <param name="undoEnabled">要不要进撤销栈。</param>
+            /// <param name="factory">自定义造实例；<c>null</c> 走内置工厂。</param>
             public Selection(
                 SerializedProperty target,
                 Type value,
                 Type declaredType,
                 NonDefaultConstructorPreference preference,
-                bool undoEnabled)
+                bool undoEnabled,
+                Func<Type, object> factory = null)
             {
                 Target = target;
                 Value = value;
                 DeclaredType = declaredType;
                 Preference = preference;
                 UndoEnabled = undoEnabled;
+                Factory = factory;
             }
         }
     }
@@ -415,6 +431,10 @@ namespace XInspector.Editor
         /// </summary>
         /// <param name="declaredType">**字段的声明类型**（多态槽位的语义是「装得进这个槽位」）。</param>
         /// <param name="preference">非默认构造的处置档（<c>Exclude</c> 会剔掉无参构造缺失者）。</param>
+        /// <param name="hasCreateInstanceFunction">
+        /// 这一格有没有**解析成功**的自定义造实例函数；有 ⇒ **跳过 <c>Exclude</c> 那道收窄**
+        /// （函数可能造得出无参构造缺失的类型；结构性判据仍照旧——函数造不出抽象类型）。
+        /// </param>
         /// <param name="include">
         /// **用户过滤器**（<c>[TypeSelectorSettings].FilterTypesFunction</c>）；<c>null</c> 表示不过滤。
         /// **两处都要传**：<c>Collect</c> 与收尾那次 <c>Apply</c>——收尾不可省，声明类型自己是从
@@ -426,6 +446,7 @@ namespace XInspector.Editor
         public static List<Type> Candidates(
             Type declaredType,
             NonDefaultConstructorPreference preference,
+            bool hasCreateInstanceFunction,
             Func<Type, bool> include,
             out int duplicates,
             out string error)
@@ -464,7 +485,8 @@ namespace XInspector.Editor
                     continue;
                 }
 
-                if (preference == NonDefaultConstructorPreference.Exclude &&
+                if (!hasCreateInstanceFunction &&
+                    preference == NonDefaultConstructorPreference.Exclude &&
                     !HasParameterlessConstruction(type))
                 {
                     continue;

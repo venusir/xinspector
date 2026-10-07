@@ -59,6 +59,7 @@ namespace XInspector.Tests.Editor
                 PolymorphicSlotWrite.TryWrite(
                     typeof(SlotCircle),
                     NonDefaultConstructorPreference.ConstructIdeal,
+                    null,
                     _serializedObject.FindProperty("shape"),
                     typeof(ISlotShape),
                     undoEnabled: false,
@@ -78,6 +79,7 @@ namespace XInspector.Tests.Editor
                 PolymorphicSlotWrite.TryWrite(
                     typeof(string),
                     NonDefaultConstructorPreference.ConstructIdeal,
+                    null,
                     _serializedObject.FindProperty("shape"),
                     typeof(ISlotShape),
                     undoEnabled: false,
@@ -98,12 +100,109 @@ namespace XInspector.Tests.Editor
                 PolymorphicSlotWrite.TryWrite(
                     typeof(ISlotShape),
                     NonDefaultConstructorPreference.ConstructIdeal,
+                    null,
                     _serializedObject.FindProperty("shape"),
                     typeof(ISlotShape),
                     undoEnabled: false,
                     out var reason),
                 Is.False);
             Assert.That(reason, Does.Contain("接口"));
+        }
+
+        #endregion
+
+        #region 自定义造实例（CreateInstanceFunction）
+
+        /// <summary>自定义工厂被调用（拿到选中的类型），写回的是**它给的实例**。</summary>
+        [Test]
+        public void 自定义工厂被调用且写回它给的实例()
+        {
+            Type received = null;
+            var made = new SlotCircle { radius = 9f };
+            Func<Type, object> factory = type =>
+            {
+                received = type;
+                return made;
+            };
+
+            Assert.That(
+                PolymorphicSlotWrite.TryWrite(
+                    typeof(SlotCircle),
+                    NonDefaultConstructorPreference.ConstructIdeal,
+                    factory,
+                    _serializedObject.FindProperty("shape"),
+                    typeof(ISlotShape),
+                    undoEnabled: false,
+                    out var reason),
+                Is.True,
+                reason);
+
+            Assert.That(received, Is.EqualTo(typeof(SlotCircle)), "工厂拿到的就是选中的那个类型。");
+            Assert.That(
+                _serializedObject.FindProperty("shape").managedReferenceValue,
+                Is.SameAs(made),
+                "写进去的是工厂给的那个实例（不是内置工厂造的）。");
+        }
+
+        /// <summary>工厂返回 <c>null</c>：拒绝、**不回落内置工厂**、槽位原样不动。</summary>
+        [Test]
+        public void 工厂返回null时拒绝且不写()
+        {
+            _target.shape = new SlotSquare { side = 5f };
+            _serializedObject.Update();
+
+            Assert.That(
+                PolymorphicSlotWrite.TryWrite(
+                    typeof(SlotCircle),
+                    NonDefaultConstructorPreference.ConstructIdeal,
+                    _ => null,
+                    _serializedObject.FindProperty("shape"),
+                    typeof(ISlotShape),
+                    undoEnabled: false,
+                    out var reason),
+                Is.False);
+            Assert.That(reason, Does.Contain("返回了 null"));
+            Assert.That(reason, Does.Contain("不回落"), "文案要说清「为什么不拿内置工厂兜底」。");
+            Assert.That(
+                _serializedObject.FindProperty("shape").managedReferenceValue,
+                Is.InstanceOf<SlotSquare>(),
+                "拒绝时必须原样不动。");
+        }
+
+        /// <summary>工厂抛异常：拒绝并给原因（异常不冒出去打断绘制）。</summary>
+        [Test]
+        public void 工厂抛异常时拒绝且不写()
+        {
+            Assert.That(
+                PolymorphicSlotWrite.TryWrite(
+                    typeof(SlotCircle),
+                    NonDefaultConstructorPreference.ConstructIdeal,
+                    _ => throw new InvalidOperationException("工厂里炸了"),
+                    _serializedObject.FindProperty("shape"),
+                    typeof(ISlotShape),
+                    undoEnabled: false,
+                    out var reason),
+                Is.False);
+            Assert.That(reason, Does.Contain("工厂里炸了"));
+            Assert.That(_serializedObject.FindProperty("shape").managedReferenceValue, Is.Null);
+        }
+
+        /// <summary>工厂返回的实例**不是选中的类型**：拒绝（否则「显示的是 X、装进去的是 Y」）。</summary>
+        [Test]
+        public void 工厂返回错类型时拒绝()
+        {
+            Assert.That(
+                PolymorphicSlotWrite.TryWrite(
+                    typeof(SlotSquare),
+                    NonDefaultConstructorPreference.ConstructIdeal,
+                    _ => new SlotCircle(),
+                    _serializedObject.FindProperty("shape"),
+                    typeof(ISlotShape),
+                    undoEnabled: false,
+                    out var reason),
+                Is.False);
+            Assert.That(reason, Does.Contain("不是选中的"));
+            Assert.That(_serializedObject.FindProperty("shape").managedReferenceValue, Is.Null);
         }
 
         #endregion
@@ -136,6 +235,7 @@ namespace XInspector.Tests.Editor
                 PolymorphicSlotWrite.TryWrite(
                     typeof(SlotCircle),
                     NonDefaultConstructorPreference.ConstructIdeal,
+                    null,
                     _serializedObject.FindProperty("shape"),
                     typeof(ISlotShape),
                     undoEnabled: true,
@@ -174,6 +274,7 @@ namespace XInspector.Tests.Editor
                     PolymorphicSlotWrite.TryWrite(
                         typeof(SlotCircle),
                         NonDefaultConstructorPreference.ConstructIdeal,
+                    null,
                         _serializedObject.FindProperty("shape"),
                         typeof(ISlotShape),
                         undoEnabled: false,

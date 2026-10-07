@@ -373,6 +373,7 @@ namespace XInspector.Tests.Editor
                     PolymorphicSlotWrite.TryWrite(
                         typeof(Circle),
                         NonDefaultConstructorPreference.ConstructIdeal,
+                        null,
                         shape.ValueEntry.SerializedProperty,
                         typeof(IShape),
                         undoEnabled: false,
@@ -417,6 +418,7 @@ namespace XInspector.Tests.Editor
                     PolymorphicSlotWrite.TryWrite(
                         typeof(PlainShape),
                         NonDefaultConstructorPreference.ConstructIdeal,
+                        null,
                         shape.ValueEntry.SerializedProperty,
                         typeof(IShape),
                         undoEnabled: false,
@@ -475,6 +477,7 @@ namespace XInspector.Tests.Editor
                     PolymorphicSlotWrite.TryWrite(
                         typeof(Circle),
                         NonDefaultConstructorPreference.ConstructIdeal,
+                        null,
                         shape.ValueEntry.SerializedProperty,
                         typeof(IShape),
                         undoEnabled: false,

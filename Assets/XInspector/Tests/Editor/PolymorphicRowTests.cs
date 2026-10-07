@@ -292,19 +292,19 @@ namespace XInspector.Tests.Editor
         public void 候选表含声明类型自己且按档收窄()
         {
             var candidates = PolymorphicCandidateFilter.Candidates(
-                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.ConstructIdeal, null, out _, out var error);
+                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.ConstructIdeal, false, null, out _, out var error);
 
             Assert.That(error, Is.Null);
             Assert.That(candidates, Has.Member(typeof(PolymorphicRowCircle)));
             Assert.That(candidates, Has.Member(typeof(PolymorphicRowNoDefaultCtor)), "ConstructIdeal 档不剔它。");
 
             var concreteDeclared = PolymorphicCandidateFilter.Candidates(
-                typeof(PolymorphicRowCircle), NonDefaultConstructorPreference.ConstructIdeal, null, out _, out _);
+                typeof(PolymorphicRowCircle), NonDefaultConstructorPreference.ConstructIdeal, false, null, out _, out _);
 
             Assert.That(concreteDeclared, Has.Member(typeof(PolymorphicRowCircle)), "声明类型自己是候选。");
 
             var excluded = PolymorphicCandidateFilter.Candidates(
-                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.Exclude, null, out _, out _);
+                typeof(IPolymorphicRowShape), NonDefaultConstructorPreference.Exclude, false, null, out _, out _);
 
             Assert.That(excluded, Has.No.Member(typeof(PolymorphicRowNoDefaultCtor)), "Exclude 档剔掉。");
             Assert.That(excluded, Has.Member(typeof(PolymorphicRowCircle)), "有无参构造的照留。");
@@ -317,6 +317,7 @@ namespace XInspector.Tests.Editor
             var filtered = PolymorphicCandidateFilter.Candidates(
                 typeof(IPolymorphicRowShape),
                 NonDefaultConstructorPreference.ConstructIdeal,
+                false,
                 type => type == typeof(PolymorphicRowCircle),
                 out _,
                 out var error);
@@ -336,12 +337,39 @@ namespace XInspector.Tests.Editor
             var filtered = PolymorphicCandidateFilter.Candidates(
                 typeof(PolymorphicRowCircle),
                 NonDefaultConstructorPreference.ConstructIdeal,
+                false,
                 type => type != typeof(PolymorphicRowCircle), // 把声明类型自己滤掉
                 out _,
                 out var error);
 
             Assert.That(error, Is.Null);
             Assert.That(filtered, Has.No.Member(typeof(PolymorphicRowCircle)), "声明类型不该逃过过滤。");
+        }
+
+        /// <summary>
+        /// 有自定义造实例时**跳过 <c>Exclude</c> 那道收窄**（函数可能造得出无参构造缺失的类型）；
+        /// 结构性判据照旧（抽象类仍不进——函数造不出抽象类型）。
+        /// </summary>
+        [Test]
+        public void 有自定义造实例时放宽构造收窄()
+        {
+            var relaxed = PolymorphicCandidateFilter.Candidates(
+                typeof(IPolymorphicRowShape),
+                NonDefaultConstructorPreference.Exclude,
+                true, // hasCreateInstanceFunction
+                null,
+                out _,
+                out var error);
+
+            Assert.That(error, Is.Null);
+            Assert.That(
+                relaxed,
+                Has.Member(typeof(PolymorphicRowNoDefaultCtor)),
+                "Exclude 那道收窄被跳过。");
+            Assert.That(
+                relaxed,
+                Has.No.Member(typeof(PolymorphicRowAbstract)),
+                "结构性判据照旧：抽象类仍不进候选。");
         }
 
         #endregion
