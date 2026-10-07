@@ -352,8 +352,8 @@ Serializer 类型系统上的：他有一套「什么算可序列化」的定义
 | ~~`[ToggleGroup]` 一族在反射树上的解析~~ | ✅ **已结案（2026-10-06，§二十三）**：处方兑现了——「按名找成员」整个收成一层（`MemberReferenceResolver`），`[ToggleGroup]` 的开关与 `[MinMaxSlider]` 的边界随之可指向反射成员。反射开关画禁用的复选框 + 标题说明（理由见该节决定四）；`[Toggle]` 仍只在值对象内部找（那一格没有实例句柄）。当时留下的另一处例外 `[ValueDropdown]` 的数据源也**已结案**（2026-10-07，§二十五） |
 | 反射成员的值每帧读一次 | 只读展示每帧现读是刻意的（缓存会「该变不变」），但用户 getter 有副作用或开销时没有退路。要不要给一个「手动刷新」的开关，等真有抱怨再说 |
 | ~~折叠状态的持久化落点~~ | ✅ **已结案**：`[FoldoutGroup]` 已到，结论是**不跨会话持久化**（域重载、重开 Inspector 都回到特性的 `Expanded` 初值），写进 README 与 §十七。三个候选（`EditorPrefs` 跨项目共享 / `SessionState` 不跨会话 / 序列化进场景污染资产）各有各的问题，而「不持久化」没有这些问题 |
-| `[OnValueChanged]` 的触发时机 | 判断「值变了」要每帧比对旧值，旧值该放 `PropertyState`；但触发时机（绘制前后？`Update` 前后？）未定 |
-| 数组/集合展开的边界 | **部分落地（2026-10-05，L6 第一批）**：容器（行、增删、表格）已做；**元素节点化未做**——元素仍由原生 `PropertyField` 逐个画，元素级特性照旧不生效。要兑现「让特性作用于元素」得先做元素节点化（树的形状不再冻结、元素路径身份不稳定），是独立一轮的量级。**2026-10-06 追记（§十七）**：`[OnCollectionChanged]` 与 `[Searchable]` 两条**绕开了**元素节点化（前者落在既有的增删施加点上，后者过滤的是行与节点），故 L6 剩下的缺口里只有元素节点化仍卡在这条上 |
+| ~~`[OnValueChanged]` 的触发时机~~ | ✅ **已结案**：判据落在「绘制这个字段的**那一趟**里值前后不一致」（`ValueSnapshot` 前后各拍一次），既不必跨帧记旧值、也没有第一帧误报。当初那句「旧值该放 `PropertyState`」的前提是跨帧比对，那条路没走 |
+| ~~数组/集合展开的边界~~ | ✅ **已结案**（2026-10-07 追记）：容器（§十三）、元素节点化（§十八）、元素层读路径（§十九）、深度 > 1（§二十二）四批走完之后，这条**整个走通了**——元素级特性照常生效。**剩下的只有字典与矩阵**，它们不是「展开」的问题而是「Unity 根本不序列化」的问题，已改记到 L7 那条线上（见 §二十九） |
 | `$` 表达式与 getter 字符串 | `GUIColor(string)`、`MinValue`/`MaxValue(string)`、`ProgressBar` 的三个 getter 形都属此类。**做半个（只认单个成员名）比不做更糟**，要做就连同 Odin 的整套表达式语言一起做。签名已在「L1a 签名核对」一节抄好 |
 | `SdfIconType` 与图标重载 | ~1536 个成员的 Sirenix 自有枚举，是独立大件：要么生成全部并自绘图标，要么裁一个子集并接受与 Odin 不兼容。`[LabelText]` `[InfoBox]` `[SuffixLabel]` 的图标重载都卡在这 |
 | ~~`[DisplayAsString]` 的 `fontSize` / `enableRichText` 重载~~ | ✅ **已做（2026-10-07，§二十八）**：动手前用 `Invoke-WebRequest` 把官网 14 个重载核清了（`WebFetch` 会被截断成导航），非 `TextAlignment` 的 6 个全声明；官方的 `Format` 字段因语义没核清**不声明** |
@@ -361,7 +361,7 @@ Serializer 类型系统上的：他有一套「什么算可序列化」的定义
 | 带标签的选项（`ValueDropdownItem<T>`） | 见「落地时的三处收窄」第 2 条。缺的是「这些类型在 Unity 下到底能不能序列化」的核实，不是设计 |
 | ~~`[PreviewField]` 的拖拽交互~~ | ✅ **已做（2026-10-07，§二十八）**：Ctrl+点击清空、Ctrl+拖拽替换落在**预览方块**上（对象字段本来就支持拖放）；判定抽成纯函数 `PreviewFieldDrop`，与 `[AssetList]` 的规则**刻意不同**（这里场景对象合法） |
 | `[AssetSelector]` 弹出层的搜索框 | 现在是编辑器自带菜单，没有搜索框/图标/多选。要做得自建弹出窗口——那是 `[InlineEditor]` 那一档的工作量 |
-| `[ColorPalette]` 的调色板来源 | 卡在设计而非实现：得先定「命名调色板存在哪、谁来编辑、怎么进版本控制」。做完这层，特性本身只有几十行 |
+| ~~`[ColorPalette]` 的调色板来源~~ | ✅ **已结案（2026-10-07，§二十七）**：设计定成「**工程内 ScriptableObject 资产** + 按资产名查找」（无参形态用工程里唯一那份）。选资产而非编辑器偏好：后者不进版本控制、不跨机器 |
 | 内嵌编辑器的 Undo 策略 | 内嵌内容经 `ApplyModifiedProperties` 写回，**会进 Undo**；窗口路径那条「窗口内编辑不进 Undo」的约定在此不适用。根因是包内没有绘制上下文对象，绘制器无从知道自己被谁画；要区分就得给全部绘制器签名加一个上下文——波及面太大，已否决。现阶段接受并写进 README |
 | 域重载下 `OnDisable` 未调时的兜底 | 正常路径是宿主 `OnDisable` 释放嵌套编辑器（官方文档称域重载会调到）；万一某条路没调到，原生对象会泄漏一次。缓解是 `HideFlags.DontSave`（不产生悬空引用），**不做**后备注册表——那会新增一个静态门面与测试复位负担 |
 | 嵌套深度上限的数值 | 现取 `4`，**本包自定**（Odin 的值未核实）。它与预览默认尺寸、默认预览位置同属「本包自定值」，三处都写进了 README 与展示台 |
@@ -2303,7 +2303,123 @@ Pipeline §三「未决项」表里两行早已实质结案却还挂着：`:347`
 
 ---
 
-## 二十四、审计记忆
+## 二十九、第二十五批：L7 核验与立项评估（2026-10-07）
+
+**做了什么**：把 `OdinGap.md` 剩下的 8 个缺口（5 个 L7 本体 + 3 个 L7 前置）**逐个核清前提**，
+给出一份能拍板的报价单。**特性计数 +0，生产代码一行没动**——本轮的代码产出是 9 条
+**测量用例**（`Tests/Editor/SerializedReferenceProbeTests.cs`）。
+
+**为什么值当单开一轮**：L0–L6 已全部清完、「做得了、只是还没做」归零，剩下的全挂在
+「L7 那条产品线」名下；而 `Roadmap.md` 里**没有 L7 这一节**——最大的一块欠账没有报价单。
+本仓的既有节奏本就如此：L1b、L6、L2 收尾都先经过「第 N 批签名核对」。
+
+**证据分三类，下文的每条结论都标了类别**——元数据只说明「有没有、public 不 public」，
+**说明不了「行为如何」**，两者混用正是本仓点名过的坑。
+
+### 一、Unity 6 的原生能力面（元数据 + 实测）
+
+| 结论 | 证据 |
+|---|---|
+| `managedReferenceValue`（get **+ set**）、`managedReferenceId`（get/set）、`managedReferenceFullTypename`、`managedReferenceFieldTypename` **都是 public** | 元数据（Cecil 读 `UnityEditor.dll`） |
+| `isReferencingAManagedReferenceField`、`managedReferencePropertyPath`、`FindFirstPropertyFromManagedReferencePath` 是 **internal**——本包不该依赖 | 元数据 |
+| `ManagedReferenceUtility`（`GetManagedReference` / `GetManagedReferenceIdForObject` / `SetManagedReferenceIdForObject` / `GetManagedReferenceIds` / `RefIdUnknown` / `RefIdNull`）**是 public** | 元数据（`UnityEngine.CoreModule.dll`） |
+| **没有公开的「类型候选集」入口**：`TypeSelectionList`、`TypeSelection` 存在但**非 public** | 元数据 |
+| `SerializedPropertyType` 的 30 个成员里**没有** `Type` | 元数据 |
+| **多态引用里面的子字段有独立的序列化属性句柄**，路径就是 `shape.hp`——与嵌套类型同一条点分约定 | **实测** |
+| `managedReferenceValue` 给的是**活实例**；写回落盘，且**进撤销栈** | **实测** |
+| 类型名格式是 `"程序集名 命名空间.类型名"`（空格分隔，如 `mscorlib System.RuntimeType`） | **实测** |
+
+**子字段有句柄这一条是本轮的分水岭**：它意味着多态引用的成员**能**按既有那套
+`SerializedProperty` 通道进树，而不必新建值后端。
+
+### 二、`System.Type` 的三条通道（实测）
+
+| 候选 | 实测结果 |
+|---|---|
+| 裸 `System.Type` 字段 | **进不了序列化数据**（`FindProperty` 为 null）⇒ 无句柄、写不回去 |
+| **加 `[SerializeReference]` 的 `System.Type` 字段** | **进得了**，且**写得住、清得掉**（赋 `null` 与置 `RefIdNull` 两条路都通） |
+| `MonoScript` 引用 | 进得了序列化数据，但**只能指脚本**、指不了任意类型 |
+
+⇒ `[TypeDrawerSettings]` 判「L7 前置」的那句依据**要改写**：不是「本包没有可写的
+`System.Type` 通道」，而是「**那条通道要求使用方在字段上加一个 `[SerializeReference]`**」。
+这是一个**约定写法**与「零改动」的差别，不是「能写」与「不能写」的差别。
+
+### 三、字典与矩阵（实测 + 官方文档）
+
+- **实测**：字典、多维数组、交错数组**都不进序列化数据**（对照：`List` 与一维数组进），
+  且**零告警**——与 OdinGap 记的完全一致。
+- **官方文档**（Odin 的 `[TableMatrix]` 页，抓取 2026-10-07，逐字）：
+
+  > *Inheriting from SerializedMonoBehaviour is only needed if you want Odin to serialize the
+  > multi-dimensional arrays for you. If you prefer doing that yourself, you can still make Odin
+  > show them in the inspector using the ShowInInspector attribute.*
+
+  ——**它自己就把「序列化」与「展示」分成了两件事**，而序列化那一半的回答是「继承
+  `SerializedMonoBehaviour`」＝用它自己的序列化器。
+
+### 四、8 个特性的真实前提（签名全部逐字核过）
+
+| 特性 | 官方原话 / 签名要点 | 需要自研序列化器？ |
+|---|---|---|
+| `[HideReferenceObjectPicker]` | 「hides the polymorphic object-picker shown above the properties of non-Unity serialized reference types」；无参构造、无属性 | 否 |
+| `[HideDuplicateReferenceBox]` | 「hide the reference box, if this property would otherwise be drawn as **a reference to another property, due to duplicate reference values being encountered**」；递归自引用时**照画不误**；无参构造、无属性 | 否 |
+| `[TypeSelectorSettings]` | 「**Provides options for Type Selectors rendered using Odin**」；`FilterTypesFunction`（`bool f(Type)` 的 resolved string，单参名 `type`）、`PreferNamespaces` / `ShowCategories` / `ShowNoneItem`（各带 `IsSet`） | 否 |
+| `[PolymorphicDrawerSettings]` | 「**Provides options for Polymorphic Fields rendered using Odin**」；`CreateInstanceFunction`、`ReadOnlyIfNotNullReference`、`NonDefaultConstructorPreference`、`ShowBaseType`（各带 `IsSet`） | 否 |
+| `[TypeRegistryItem]` | `(string name = null, string categoryPath = null, SdfIconType icon = …, float light/darkIconColorR/G/B/A … , int priority = 0)`；可标类/结构/枚举/接口 | 否 |
+| `[TypeDrawerSettings]` | 只有无参构造 + `Type BaseType` / `TypeInclusionFilter Filter` 两个字段 | 否（通道已有，见上） |
+| `[DictionaryDrawerSettings]` | `DisplayMode` / `IsReadOnly` / `KeyColumnWidth` / `KeyLabel` / `ValueLabel`；`sealed` | **是** |
+| `[TableMatrix]` | 12 个旋钮（`DrawElementMethod`、`Labels` 是 resolved string） | **是**（或接受「使用方自己序列化 + 只读展示」） |
+
+**两条要害：**
+
+1. **没有一个 L7 特性「必须自研序列化器才能做」。** 拦路的不是序列化格式，而是另外两件事：
+   **自绘选择器**（候选集没有可编程入口，元数据那条）与**新的可写成员来源**（字典/矩阵）。
+2. **「rendered using Odin」这半句是关键**：`[TypeSelectorSettings]` / `[PolymorphicDrawerSettings]`
+   是**挂在 Odin 自己的类型选择器上的旋钮**——本包要它们，先得**有那个选择器**。
+   同理，两个「hide」特性要的是「**有一个引用框可抑制**」。
+
+### 五、把多态引用纳入管线的成本（估价，未实现）
+
+| 面 | 落点 | 说明 |
+|---|---|---|
+| 判据 | `NestedMemberExpansion.cs:164`（要求 `Generic`）+ `:193`（`IsPolymorphicReference`） | 只有两行，但判据**被四处问**（展开判据、两条递归判据、自动接管判据）——要同批改 |
+| 类型解析 | 嵌套层按**声明类型**找成员 | 多态段必须按**运行时类型**（`managedReferenceValue?.GetType()`）——本包**第一次**按运行时类型解析 |
+| 读路径 | `ReflectedAccessor.cs:390` 那道闸 | `managedReferenceValue` 给的是活实例 ⇒ **比嵌套层那条编译式逐层下钻更省**，不必新建下钻机制 |
+| 写回 | 已测 | 落盘与撤销都成立（那五件事里的两件拿到了） |
+| 未测 | — | **Unity 原生在多态引用上画不画「引用框」/「类型选择器」长什么样**——只有目视对照能答，本仓不测 IMGUI 渲染 |
+
+### 六、规模与遗留
+
+- 生产代码：**零**；用例：`SerializedReferenceProbeTests` **9 例**（EditMode，9/9 通过）。
+- 核过签名的特性：**8 个**（抓取日期 2026-10-07）。
+- **遗留**：L7 做不做、做哪一半，见 [Roadmap](../Roadmap.md) 的 L7 一节与
+  [OdinGap](../OdinGap.md) 的逐条表。
+
+### 取法（工具坑，记下来免得下轮再摸一遍）
+
+- **类签名在 `/documentation/sirenix.odininspector.<小写类名>` 页**（服务端渲染，抓得到
+  `<pre>` 块）；`/attributes/<slug>` 是营销页，代码示例在
+  `<pre class="prismJs"><code class="language-csharp">`。
+  **旧笔记里那个 `lang-csharp hljs` 已经不适用了**——站点换过标记，照旧笔记抽会得到 0 个块。
+- **读 Unity 自己的 API 面不必开编辑器**：Unity 自带 `Unity.Cecil.dll`，
+  `AssemblyDefinition.ReadAssembly("<UnityEditor.dll>")` 就能看成员与可见性。
+  代价是**只能看形状、看不了行为**（见本节开头那条）。
+
+### 一条留给下一轮的经验
+
+**「缺一条通道」与「通道要求改一个约定」是两种结论，报价差一个量级。**
+`[TypeDrawerSettings]` 被三次改判（L3 → L7 前置 → 本轮），前两次都在问「有没有通道」，
+而本轮实测给出了第三种答案：**通道在，只是要求使用方多写一个 `[SerializeReference]`**。
+判据写成「能不能写进去」时，记得把「要谁改什么」一并量出来——否则「不能写」与
+「要改个声明才能写」会被归成同一格。
+
+---
+
+## 附录 · 审计记忆
+
+> 本节是**附录**：它的内容是跨轮次的审计留档，**不参与正文的批次顺序**。
+> （原先挂在「二十四」的编号上，却排在第二十八批之后——编号与位置对不上，
+> 2026-10-07 改称附录，不动编号以免打断既有引用。）
 
 **2026-10-04（第七轮）：「没有公开无参构造函数」的告警打错了收件人。**
 
