@@ -562,6 +562,97 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 把「**带一个参数**、返回 <typeparamref name="TResult"/> 的方法」编译成
+        /// <c>（实例, 参数） → 返回值</c> 的委托。
+        /// </summary>
+        /// <typeparam name="TArgument">唯一参数的类型（消费者用 <c>Type</c>）。</typeparam>
+        /// <typeparam name="TResult">方法必须返回的类型。**返回值类型由调用方校验**——
+        /// 与零参版同一条契约：这里只管编译。</typeparam>
+        /// <param name="method">方法。</param>
+        /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>与零参版同款：编译成「开实例」的调用</b>（理由见 <see cref="TryCreateInvoker{T}"/>），
+        /// 参数按**位置**传入（单参方法只有一个位置，不存在按名字注入的问题）。
+        /// </para>
+        /// <para>
+        /// <b>形状由调用方校验</b>：这里不检查参数个数——多一个少一个会让
+        /// <c>Expression.Call</c> 自己抛，兜底成「无法为它编译访问委托：…」；
+        /// 调用方（找方法那一层）负责先按形状表挑出「单参」的方法。
+        /// </para>
+        /// </remarks>
+        public static bool TryCreateInvoker<TArgument, TResult>(
+            MethodInfo method, out Func<object, TArgument, TResult> invoker, out string reason)
+        {
+            invoker = null;
+
+            if (method == null)
+            {
+                reason = "方法为 null";
+                return false;
+            }
+
+            try
+            {
+                var instance = Expression.Parameter(typeof(object), "target");
+                var argument = Expression.Parameter(typeof(TArgument), "value");
+
+                // 参数类型与方法声明不一致时（如把 `object` 传给一个 `Type` 形参）补一次转换；
+                // 参数个数不对（零个 / 多个）就在这里交给 Expression.Call 报错——形状由调用方校验。
+                var parameters = method.GetParameters();
+                var value = Widen(argument, parameters.Length == 1 ? parameters[0].ParameterType : typeof(TArgument));
+
+                var call = method.IsStatic
+                    ? Expression.Call(method, value)
+                    : Expression.Call(Convert(instance, method.DeclaringType), method, value);
+
+                invoker = Expression.Lambda<Func<object, TArgument, TResult>>(
+                    Widen(call, typeof(TResult)), instance, argument).Compile();
+                reason = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                reason = Describe(exception);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 把「单参 <c>Type</c>、返回 <c>bool</c> 的方法」编译成 <c>（实例, Type） → bool</c> 的委托。
+        /// </summary>
+        /// <param name="method">方法。</param>
+        /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>就是 <see cref="TryCreateInvoker{TArgument, TResult}"/> 的「候选过滤器」那一格
+        /// （<c>[TypeSelectorSettings].FilterTypesFunction</c>）。留一个专门入口，
+        /// 与 <see cref="TryCreateBooleanInvoker"/> 同款理由：读作 bool 比读作 <c>T</c> 直白。</remarks>
+        public static bool TryCreateFilterInvoker(
+            MethodInfo method, out Func<object, Type, bool> invoker, out string reason)
+        {
+            return TryCreateInvoker(method, out invoker, out reason);
+        }
+
+        /// <summary>
+        /// 把「单参 <c>Type</c>、返回实例的方法」编译成 <c>（实例, Type） → 实例</c> 的委托。
+        /// </summary>
+        /// <param name="method">方法。</param>
+        /// <param name="invoker">编译出的调用委托；失败时为 <c>null</c>。</param>
+        /// <param name="reason">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        /// <remarks>就是 <see cref="TryCreateInvoker{TArgument, TResult}"/> 的「自定义造实例」那一格
+        /// （<c>[PolymorphicDrawerSettings].CreateInstanceFunction</c>）；返回具体类型时插一次
+        /// <c>castclass</c>（<c>Widen</c>），只发生在点击那一刻。</remarks>
+        public static bool TryCreateFactoryInvoker(
+            MethodInfo method, out Func<object, Type, object> invoker, out string reason)
+        {
+            return TryCreateInvoker(method, out invoker, out reason);
+        }
+
+        /// <summary>
         /// 把「无参、返回 bool 的**方法**」编译成 <c>实例 → bool</c> 的委托。
         /// </summary>
         /// <param name="method">方法。</param>

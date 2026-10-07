@@ -677,6 +677,96 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 单参调用（[TypeSelectorSettings] 的过滤器 / CreateInstanceFunction）
+
+        /// <summary>单参实例方法**开实例**调用：改宿主字段再调，结果跟着变。</summary>
+        [Test]
+        public void 单参实例方法开实例调用()
+        {
+            var fixture = new TypeInvokerFixture { limit = 3 };
+
+            Assert.That(TryCreateTypeInvoker<bool>("Accept", out var invoker, out var reason), Is.True, reason);
+            Assert.That(invoker(fixture, typeof(int)), Is.True);
+
+            fixture.limit = 0;
+
+            Assert.That(invoker(fixture, typeof(int)), Is.False, "每次调用吃的是**当时**那个实例。");
+            Assert.That(invoker(new TypeInvokerFixture { limit = 1 }, typeof(int)), Is.True);
+        }
+
+        /// <summary>静态方法忽略实例形参（同一个委托签名两种情况都能用）。</summary>
+        [Test]
+        public void 单参静态方法忽略实例()
+        {
+            Assert.That(TryCreateTypeInvoker<bool>("IsAlwaysTrue", out var invoker, out var reason), Is.True, reason);
+            Assert.That(invoker(null, typeof(int)), Is.True);
+        }
+
+        /// <summary>私有方法照常可编译（表达式树在本仓的运行环境里能访问私有成员）。</summary>
+        [Test]
+        public void 单参私有方法可编译()
+        {
+            Assert.That(TryCreateTypeInvoker<bool>("Secret", out var invoker, out var reason), Is.True, reason);
+
+            var fixture = new TypeInvokerFixture();
+            Assert.That(invoker(fixture, typeof(int)), Is.True);
+            Assert.That(invoker(fixture, typeof(string)), Is.False);
+        }
+
+        /// <summary>过滤器窄口：<c>Func&lt;object, Type, bool&gt;</c>。</summary>
+        [Test]
+        public void 过滤器窄口可用()
+        {
+            var method = MethodOf("Accept");
+
+            Assert.That(
+                ReflectedAccessor.TryCreateFilterInvoker(method, out var invoker, out var reason),
+                Is.True,
+                reason);
+            Assert.That(invoker(new TypeInvokerFixture { limit = 2 }, typeof(int)), Is.True);
+        }
+
+        /// <summary>工厂窄口：返回**具体类型**的方法经 <c>TResult = object</c> 编译得动、调用得通。</summary>
+        [Test]
+        public void 工厂窄口可用()
+        {
+            var method = MethodOf("Make");
+
+            Assert.That(
+                ReflectedAccessor.TryCreateFactoryInvoker(method, out var invoker, out var reason),
+                Is.True,
+                reason);
+            Assert.That(invoker(new TypeInvokerFixture(), typeof(int)), Is.EqualTo(5));
+            Assert.That(invoker(new TypeInvokerFixture(), typeof(string)), Is.Null, "别的时候返回 null。");
+        }
+
+        /// <summary>方法为 <c>null</c>：失败并给原因。</summary>
+        [Test]
+        public void 单参方法为null失败()
+        {
+            Assert.That(
+                ReflectedAccessor.TryCreateInvoker<Type, bool>(null, out var invoker, out var reason),
+                Is.False);
+            Assert.That(invoker, Is.Null);
+            Assert.That(reason, Is.Not.Null.And.Not.Empty);
+        }
+
+        /// <summary>
+        /// **参数个数不对**（这里是两个）时编译失败、给中文兜底原因——
+        /// 形状由调用方（找方法那一层）校验，这里是最后一道。
+        /// </summary>
+        [Test]
+        public void 参数个数不对时编译失败()
+        {
+            Assert.That(
+                ReflectedAccessor.TryCreateInvoker<Type, bool>(MethodOf("TwoArgs"), out var invoker, out var reason),
+                Is.False);
+            Assert.That(invoker, Is.Null);
+            Assert.That(reason, Does.Contain("无法为它编译"));
+        }
+
+        #endregion
+
         #region Private Helpers
 
         /// <summary>按名取夹具上的成员并试着编译。</summary>
@@ -686,6 +776,31 @@ namespace XInspector.Tests.Editor
         private static bool TryCreate(string name, out ReflectedAccessor accessor)
         {
             return TryCreate(name, out accessor, out _);
+        }
+
+        /// <summary>按名取单参夹具上的方法并编译成单参调用器。</summary>
+        /// <typeparam name="TResult">方法的返回类型。</typeparam>
+        /// <param name="name">方法名。</param>
+        /// <param name="invoker">编译出的调用器。</param>
+        /// <param name="reason">失败原因。</param>
+        /// <returns>成功返回 <c>true</c>。</returns>
+        private static bool TryCreateTypeInvoker<TResult>(
+            string name, out Func<object, Type, TResult> invoker, out string reason)
+        {
+            return ReflectedAccessor.TryCreateInvoker(MethodOf(name), out invoker, out reason);
+        }
+
+        /// <summary>按名取单参夹具上的方法。</summary>
+        /// <param name="name">方法名。</param>
+        /// <returns>方法。</returns>
+        private static MethodInfo MethodOf(string name)
+        {
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static |
+                                       BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            var method = typeof(TypeInvokerFixture).GetMethod(name, Flags);
+            Assert.That(method, Is.Not.Null, $"夹具上没有名叫 {name} 的方法。");
+            return method;
         }
 
         /// <summary>按名取夹具上的成员并试着编译，带出原因。</summary>
@@ -791,6 +906,39 @@ namespace XInspector.Tests.Editor
     {
         /// <summary>一个普通字段。</summary>
         public int Value;
+    }
+
+    /// <summary>单参调用的夹具：过滤器形态、工厂形态、静态与私有各一。</summary>
+    internal sealed class TypeInvokerFixture
+    {
+        /// <summary>被方法读的字段——改它再调，用来证明是「开实例」。</summary>
+        public int limit = 3;
+
+        /// <summary>过滤器形态：读宿主字段与参数。</summary>
+        /// <param name="type">候选类型。</param>
+        /// <returns>是否接受。</returns>
+        public bool Accept(Type type) => type != null && limit > 0;
+
+        /// <summary>静态形态（忽略 instance 形参）。</summary>
+        /// <param name="type">候选类型。</param>
+        /// <returns>恒真。</returns>
+        public static bool IsAlwaysTrue(Type type) => true;
+
+        /// <summary>私有形态。</summary>
+        /// <param name="type">候选类型。</param>
+        /// <returns>是不是 int。</returns>
+        private bool Secret(Type type) => type == typeof(int);
+
+        /// <summary>工厂形态：返回一个具体类型（装箱成 <c>object</c>）。</summary>
+        /// <param name="type">候选类型。</param>
+        /// <returns>int 时给 5，其余给 null。</returns>
+        public object Make(Type type) => type == typeof(int) ? 5 : null;
+
+        /// <summary>两个参数——编译必须失败（形状由调用方校验，这里是最后一道）。</summary>
+        /// <param name="type">参数一。</param>
+        /// <param name="extra">参数二。</param>
+        /// <returns>恒真。</returns>
+        public bool TwoArgs(Type type, int extra) => true;
     }
 
     /// <summary>路径访问器的夹具：两层嵌套、值类型中段、数组、以及一条撞深度上限的长链。</summary>
