@@ -59,11 +59,16 @@
   第十一条 **`[ColorPalette]`**（2026-10-07，第二十三批，特性计数 87 → 88）——卡了很久的是
   **设计**不是实现：调色板存**工程内资产**（不是编辑器偏好，那样不进版本控制）、
   **按资产名查找**、无参形态用工程里**唯一**那份，见 Pipeline §二十七。
-  **下一个候选**：窗口补齐（`Initialize()` / `WindowPadding` / `DrawEditors`，
-  `Initialize()` 已倾向判「不做」——`OnEnable` 就是那个钩子）、其余全是 **L7 那条产品线**
-  （多态引用与类型注册表——字典、矩阵与 `[TypeDrawerSettings]` 是它的前置：Unity 根本不
-  序列化前两者、不给第三者可写的 Type 通道，字段进不了树或写不进去，零告警）；
-  **OdinGap 的「卡在设计」那一列已归零**。API 尚未稳定
+  第十二批（第二十四批）是**窗口两个切口与小件三件**（`DrawEditors` / `WindowPadding` /
+  `[DisplayAsString]` 重载 / `[PreviewField]` 方块落点，`Initialize()` **判不做**——
+  `OnEnable` 就是那个钩子），见 Pipeline §二十八。
+  **第二十五批是 L7 核验轮**（特性计数 +0，**生产代码零改动**）——把剩下的 8 个缺口逐个核清，
+  结论**改了一半**：**Serializer 那半（字典 / 矩阵）判不作为**（要自研序列化器，
+  与「值后端是 `SerializedObject`」正面冲突），**Inspector 那半是一条能走的能力轮**
+  （多态引用进管线 + 自绘选择器一族）——**8 个特性没有一个「必须自研序列化器」**，
+  而且 `[TypeDrawerSettings]` 要的那条可写 `System.Type` 通道**已经有了**（代价是字段加
+  `[SerializeReference]`）。**OdinGap 的「推荐顺序」至此全部有了结论**，
+  「卡在设计」那一列早已归零，见 Pipeline §二十九。API 尚未稳定
 
 ## 仓库布局与边界规则
 
@@ -424,11 +429,21 @@ Pipeline（哪一句写于哪个前提之下），否则下一轮还会按同样
 
 ## 明确不在本轮范围
 
-样式系统（配色与图标那一层；**与 `[ColorPalette]` 无关**——那个已做）、`[SerializeReference]` 类型切换、
-折叠状态的跨会话持久化、UI Toolkit、`[TypeDrawerSettings]`（2026-10-06 再核后改判
-**L7 前置**：它缺的不是「画 `System.Type`」而是一条**可写的 `System.Type` 通道**——
-两个字段的语义全是约束一个类型选择器的候选集，而本包 `System.Type` 只能经只读反射
-后端出场、写回无落点，今天实现出来必然是静默 no-op）。
+样式系统（配色与图标那一层；**与 `[ColorPalette]` 无关**——那个已做）、
+折叠状态的跨会话持久化、UI Toolkit。
+
+**自研序列化（以及一切要求它的东西）不做**——这是 2026-10-07（第二十五批）核验后的规则：
+字典与矩阵**不随资产存档**（`[DictionaryDrawerSettings]` `[TableMatrix]` 判 ⛔），
+因为 Unity 根本不序列化它们；要做得先有一套自己的序列化器，而那会与六个定盘决定之首
+（值后端是 `SerializedObject`）正面冲突——它买下的五件事（Undo、预制体覆盖、场景标脏、
+多对象编辑、域重载后取值）全都要重做。**若哪天要做，先立项**（范围 / 边界 / 验收 / 第一步）。
+
+**L7 的 Inspector 半边不属于这一条**：多态引用进管线 + 自绘选择器一族是**一条能走的
+能力轮**（`[SerializeReference]` 字段今天已经由 Unity 原生画着，缺的只是本包的特性作用进去；
+子字段有独立句柄、`managedReferenceValue` 是可写的活实例，**实测**）。
+`[TypeDrawerSettings]` 也随之**不再记在「缺通道」上**——那条通道已经有了，
+代价是使用方要在字段上加一个 `[SerializeReference]`（裸 `System.Type` 字段进不了树）。
+该不该做、边界与第一步见 Roadmap §十二；核验证据见 Pipeline §二十九。
 （`[InlineEditor]` / `[PreviewField]` / `[FilePath]` 这类重型绘制器**已做**——L1b 整层清完；
 **L5 的按钮族与回调族**、**L3 的反射值后端**、**L2 的收尾**、**L4 的顺序与内联**、
 **L6 第一批的集合容器与表格**、**嵌套类型成员节点化**、**嵌套层的分组装配**均已做完
