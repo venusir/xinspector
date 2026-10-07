@@ -32,6 +32,10 @@ namespace XInspector.Editor
         private static readonly CompositeMemberTerminalDrawer CompositeMemberTerminal =
             new CompositeMemberTerminalDrawer();
         private static readonly MethodTerminalDrawer MethodTerminal = new MethodTerminalDrawer();
+
+        /// <summary>展开过的多态引用容器：原生那一行照画，子节点走本包的树。</summary>
+        private static readonly ManagedReferenceTerminalDrawer ManagedReferenceTerminal =
+            new ManagedReferenceTerminalDrawer();
         private static readonly ReflectedMemberTerminalDrawer ReflectedTerminal =
             new ReflectedMemberTerminalDrawer();
 
@@ -159,6 +163,14 @@ namespace XInspector.Editor
             // **分组装配之前**（元素内部那一层由 ApplyNestedGrouping 的递归一并装）。
             // 见 CollectionElementExpansion 的取舍。
             ExpandCollectionElements(tree, members);
+
+            // 展开过的多态容器登记进对账名单。位置两处都要：在**第一趟处理器之后**
+            // （判据要看注入的事实，与元素层同款）、在**挂链之前**（末端按状态选，
+            // 见 TerminalFor——状态必须先于挂链就位）。
+            for (var i = 0; i < members.Count; i++)
+            {
+                RegisterPolymorphicLayersIn(tree, members[i]);
+            }
 
             AttachChain(root, ChildrenTerminal);
             for (var i = 0; i < members.Count; i++)
@@ -553,6 +565,128 @@ namespace XInspector.Editor
         /// <see cref="CollectionElementSync"/>）。
         /// </para>
         /// </remarks>
+        /// <summary>
+        /// 把一个**已展开的**多态容器登记进对账名单（递归覆盖整棵子树）。
+        /// </summary>
+        /// <param name="tree">属性树。</param>
+        /// <param name="node">子树根（含它自己）。</param>
+        /// <remarks>
+        /// 「展开过的多态容器」的判据是**有子节点**：判据不给它展开时 <c>ExpandChildren</c>
+        /// 根本没被调过，子节点数是 0。于是这里不需要再问一遍那道闸（问两遍的迟早有一处先漂）。
+        /// </remarks>
+        private static void RegisterPolymorphicLayersIn(PropertyTree tree, InspectorProperty node)
+        {
+            if (node.Kind == InspectorPropertyKind.Member &&
+                NestedMemberExpansion.IsPolymorphicReference(node.Member as FieldInfo) &&
+                node.RawChildren.Count > 0)
+            {
+                var layer = node.State.GetOrCreate<PolymorphicLayerState>();
+                layer.ConcreteType = node.Type;
+                layer.Dirty = false;
+
+                tree.AddPolymorphicContainer(node);
+            }
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                RegisterPolymorphicLayersIn(tree, children[i]);
+            }
+        }
+
+        /// <summary>
+        /// 重建一个多态容器的子树：**换了具体类型**之后被对账调到。
+        /// </summary>
+        /// <param name="container">展开过的多态成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 与 <see cref="RebuildElementLayer"/> 是同一套七步，只有第 2 步不同：那边是「按
+        /// <c>arraySize</c> 重建元素节点」，这边是「**换掉容器自己的类型**再重新展开」——
+        /// 故它多一处 <c>container.Type = …</c>（<see cref="InspectorProperty.Type"/> 唯一的
+        /// 改写入孔，别处仍当它是稳定的）。
+        /// </para>
+        /// <para>
+        /// 槽位被清空（或变成多选混合态）时 <c>concrete</c> 为 <c>null</c>：旧子树照常释放、
+        /// 新的不建——用户看到的就是原生那一行，与从没展开过一样。
+        /// </para>
+        /// <para>
+        /// <b>「反射仅限构建期」这条规则在此豁免</b>——与元素层重建同款（见
+        /// <see cref="PolymorphicReferenceSync"/>）：换类型是绘制期才发现的，而解析一次类型
+        /// 不贵、也不进每帧路径。
+        /// </para>
+        /// </remarks>
+        internal static void RebuildPolymorphicLayer(InspectorProperty container)
+        {
+            var layer = container.State.Get<PolymorphicLayerState>();
+            var tree = container.Owner;
+            var serializedObject = container.Owner?.SerializedObject;
+
+            if (layer == null || serializedObject == null || tree == null)
+            {
+                return;
+            }
+
+            var children = container.RawChildren;
+
+            // 1. 旧子树整体释放。**注销走两张表一起的那个入口**：多态层里可以嵌元素层
+            //    （成员里放列表），反过来也行——只注销自己那张表，另一张就会留下强引用
+            //    作废子树的僵尸。注销必须在释放**之前**（DisposeNode 会把状态袋 Reset 清空）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                tree.UnregisterLayersIn(children[i]);
+                PropertyTree.DisposeNode(children[i]);
+            }
+
+            children.Clear();
+
+            // 2. 换类型，再按新类型重新展开。
+            var property = container.ValueEntry?.SerializedProperty;
+            var concrete = PolymorphicReference.ResolveConcreteType(property);
+
+            layer.ConcreteType = concrete;
+            layer.Dirty = false;
+
+            // 类型无条件改写：槽位清空（或变成混合态）时它要**退回声明类型**，
+            // 与构建期 `ResolveMemberType` 的回落逐字一致——否则清空之后容器还挂着旧的具体类型。
+            container.Type = ResolveMemberType(container.Member as FieldInfo, property);
+
+            if (concrete != null)
+            {
+                ExpandChildren(serializedObject, container);
+            }
+
+            // 2.5 新子树里的多态容器也要登记（换成的类型里还可以有别的多态引用）。
+            //     必须在挂链之前——末端按状态选。
+            for (var i = 0; i < children.Count; i++)
+            {
+                RegisterPolymorphicLayersIn(tree, children[i]);
+            }
+
+            // 3. 第一趟处理器：只跑新子树（父 / 根钩子不重跑）。
+            RunNestedProcessors(AttributeProcessorRegistry.FirstPassProcessors, container);
+
+            // 3.5 新子树里的集合按判据建层/告警/登记。
+            for (var i = 0; i < children.Count; i++)
+            {
+                ExpandCollectionElementsIn(tree, children[i]);
+            }
+
+            // 4. 挂链（递归覆盖新子树）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                AttachChainRecursive(children[i]);
+            }
+
+            // 5. 分组装配。**从容器自己开始**——它的那一层正是要重新装配的那一层
+            //    （多态段里的分组路径前缀 = 容器路径），递归会一并覆盖更深处。
+            //    这里与元素层重建刻意不同：那边装配的是**每个元素内部**那一层，
+            //    集合自己那一层没动过，故从子节点开始。
+            ApplyNestedGrouping(container);
+
+            // 6. 第二趟：只对分组节点、只跑处理分组特性的那些。
+            RunGroupProcessors(container);
+        }
+
         internal static void RebuildElementLayer(InspectorProperty collection)
         {
             var layer = collection.State.Get<CollectionElementLayerState>();
@@ -571,7 +705,7 @@ namespace XInspector.Editor
             //    强引用作废子树的僵尸。外层集合自己不在被摘之列（我们从元素节点开始走）。
             for (var i = 0; i < children.Count; i++)
             {
-                tree.UnregisterElementLayersIn(children[i]);
+                tree.UnregisterLayersIn(children[i]);
                 PropertyTree.DisposeNode(children[i]);
             }
 
@@ -583,6 +717,12 @@ namespace XInspector.Editor
             for (var i = 0; i < count; i++)
             {
                 layer.Nodes.Add(CreateElementNode(serializedObject, collection, i));
+            }
+
+            // 2.5 新子树里的多态容器登记（元素类型里的 `[SerializeReference]` 字段）。
+            for (var i = 0; i < children.Count; i++)
+            {
+                RegisterPolymorphicLayersIn(tree, children[i]);
             }
 
             // 3. 第一趟处理器：只跑新子树（父 / 根钩子不重跑）。
@@ -923,6 +1063,14 @@ namespace XInspector.Editor
                     if (node.State.Get<CollectionElementLayerState>() != null)
                     {
                         return MemberTerminal;
+                    }
+
+                    // 多态引用容器：末端必须**画原生那一行**，否则值（那份引用）就没人画了——
+                    // 用户看不见也换不了具体类型。故它既不能用复合末端（只画折叠头），
+                    // 也不能按子节点数选（重建到零子节点时终端会变，而链是冻结的）。
+                    if (node.State.Get<PolymorphicLayerState>() != null)
+                    {
+                        return ManagedReferenceTerminal;
                     }
 
                     return node.Children.Count > 0 ? CompositeMemberTerminal : MemberTerminal;

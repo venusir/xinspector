@@ -282,6 +282,65 @@ namespace XInspector.Editor
         }
 
         /// <summary>
+        /// 展开过的多态引用容器，供每趟绘制之前的对账使用（见 <see cref="PolymorphicReferenceSync"/>）。
+        /// </summary>
+        /// <remarks>
+        /// 与 <see cref="ElementCollections"/> 同款的三条纪律：**幂等登记**、
+        /// **注销必须先于 <c>DisposeNode</c>**、**DFS 先序**（祖先的下标恒小于其后代）。
+        /// </remarks>
+        internal List<InspectorProperty> PolymorphicContainers { get; } = new List<InspectorProperty>();
+
+        /// <summary>
+        /// 登记一个展开过的多态容器（幂等）。
+        /// </summary>
+        /// <param name="container">多态成员节点。</param>
+        internal void AddPolymorphicContainer(InspectorProperty container)
+        {
+            if (!PolymorphicContainers.Contains(container))
+            {
+                PolymorphicContainers.Add(container);
+            }
+        }
+
+        /// <summary>
+        /// 递归注销一棵子树里登记过的多态容器（那棵子树即将被释放）。
+        /// </summary>
+        /// <param name="node">子树根（含它自己）。</param>
+        internal void UnregisterPolymorphicLayersIn(InspectorProperty node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            if (node.State.Get<PolymorphicLayerState>() != null)
+            {
+                PolymorphicContainers.Remove(node);
+            }
+
+            var children = node.RawChildren;
+            for (var i = 0; i < children.Count; i++)
+            {
+                UnregisterPolymorphicLayersIn(children[i]);
+            }
+        }
+
+        /// <summary>
+        /// 递归注销一棵子树在**两张登记簿**上的条目。
+        /// </summary>
+        /// <param name="node">子树根（含它自己）。</param>
+        /// <remarks>
+        /// <b>两条重建路径都要走这一个入口。</b> 元素层与多态层可以互相嵌套（多态成员里放列表、
+        /// 列表元素里放多态引用），任何一条重建路径只注销自己那张表，另一张就留下
+        /// **强引用作废子树的僵尸**——那是两张表各自都防着、合起来却漏掉的事。
+        /// </remarks>
+        internal void UnregisterLayersIn(InspectorProperty node)
+        {
+            UnregisterElementLayersIn(node);
+            UnregisterPolymorphicLayersIn(node);
+        }
+
+        /// <summary>
         /// 绘制整棵树。
         /// </summary>
         /// <remarks>
@@ -306,6 +365,10 @@ namespace XInspector.Editor
             // 可能先于集合绘制器读到元素节点；「元素层在本趟内有效」必须是先于**所有**
             // 消费者的前置条件。理由与「为什么只比长度就够」见 CollectionElementSync。
             CollectionElementSync.ReconcileAll(this);
+
+            // 多态引用对账：子节点集合必须与槽位里装着的**具体类型**一致——换了实现就整棵重建。
+            // 与上一句同一条理由「先于所有消费者」，也同款地每轮重读 Count（见 PolymorphicReferenceSync）。
+            PolymorphicReferenceSync.ReconcileAll(this);
 
             Root.Draw();
         }

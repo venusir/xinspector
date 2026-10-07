@@ -223,6 +223,73 @@ namespace XInspector.Tests.Editor
 
         #endregion
 
+        #region 换具体类型（对账与重建）
+
+        /// <summary>换了具体类型之后整棵子树重建，且对账随后是廉价 no-op。</summary>
+        [Test]
+        public void 换了具体类型之后整棵子树重建()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            target.shape = new Circle { radius = 2f };
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(shape.Type, Is.EqualTo(typeof(Circle)));
+                Assert.That(Find(shape, "shape/几何"), Is.Not.Null, "Circle 的分组在。");
+
+                // 换实现——今天只能靠代码（Unity 原生不给类型选择器，那是下一批）。
+                target.shape = new Square { side = 3f };
+                tree.SerializedObject.Update();
+
+                Assert.That(PolymorphicReferenceSync.ReconcileAll(tree), Is.EqualTo(1), "对账发现类型变了。");
+
+                var rebuilt = Find(tree.Root, "shape");
+                Assert.That(rebuilt, Is.SameAs(shape), "容器节点自己不动，换的是它的子树。");
+                Assert.That(rebuilt.Type, Is.EqualTo(typeof(Square)), "容器的类型跟着换。");
+                Assert.That(Find(rebuilt, "shape/几何"), Is.Null, "旧类型的子树整棵撤掉。");
+                Assert.That(Find(rebuilt, "shape/方形"), Is.Not.Null, "新类型的分组装配出来。");
+
+                Assert.That(PolymorphicReferenceSync.ReconcileAll(tree), Is.EqualTo(0), "类型没再变 ⇒ 廉价 no-op。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>槽位被清空之后子树撤掉，但**容器自己的末端不变**（链是冻结的）。</summary>
+        [Test]
+        public void 清空槽位之后子树撤掉()
+        {
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            target.shape = new Circle { radius = 2f };
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+                var terminal = ChainTail(shape);
+
+                target.shape = null;
+                tree.SerializedObject.Update();
+
+                Assert.That(PolymorphicReferenceSync.ReconcileAll(tree), Is.EqualTo(1));
+                Assert.That(shape.Children.Count, Is.EqualTo(0), "子节点撤干净。");
+                Assert.That(shape.Type, Is.EqualTo(typeof(IShape)), "类型退回声明类型。");
+                Assert.That(
+                    ChainTail(shape),
+                    Is.SameAs(terminal),
+                    "末端不变——链在构建期冻结，而它本来就画得对（原生那一行照画）。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
         #region 多选
 
         /// <summary>多选混合态一律不展开——不拿一个目标的结构冒充全体。</summary>
@@ -352,6 +419,15 @@ namespace XInspector.Tests.Editor
         [BoxGroup("几何")]
         [ShowIf("alive")]
         public int segments = 8;
+    }
+
+    /// <summary>另一个用得到本包的具体类型——用来验证「换了实现就换子树」。</summary>
+    [Serializable]
+    internal class Square : IShape
+    {
+        /// <summary>与 <see cref="Circle"/> 完全不同的分组名，便于断言旧子树真的撤了。</summary>
+        [BoxGroup("方形")]
+        public float side = 1f;
     }
 
     /// <summary>**没用到本包**的具体类型（安全阀的对照）。</summary>

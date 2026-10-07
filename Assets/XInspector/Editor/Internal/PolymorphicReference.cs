@@ -156,6 +156,29 @@ namespace XInspector.Editor
         #endregion
     }
 
+    /// <summary>
+    /// 一个**展开过的**多态引用容器的状态：它建树时用的具体类型，以及对账用的脏标记。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 与 <see cref="CollectionElementLayerState"/> 同款：**有这个状态**就等于「这个节点是个
+    /// 已展开的多态容器」，末端选型与对账登记都按它判。元素层那边还多一个 <c>Nodes</c> 列表
+    /// （行下标 ↔ 元素），这里不需要——多态容器的子节点就是它的 <c>RawChildren</c>。
+    /// </para>
+    /// <para>
+    /// <c>Dirty</c> 是留给「我们自己知道结构变了」的施加点，本批还没有生产者（换类型由
+    /// 对账自己发现）；留着与元素层对称，免得日后有人以为漏了一条。
+    /// </para>
+    /// </remarks>
+    internal sealed class PolymorphicLayerState
+    {
+        /// <summary>建树（或上次重建）时用的具体类型——对账键。</summary>
+        public Type ConcreteType;
+
+        /// <summary>结构已被我们自己改动，下次对账无条件重建。</summary>
+        public bool Dirty;
+    }
+
     /// <summary>多态展开被守卫挡下的两种理由。</summary>
     internal enum PolymorphicBlock
     {
