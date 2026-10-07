@@ -399,8 +399,20 @@ namespace XInspector.Editor
             // （元素层是 `items.Array.data[0].`，同一套机制）。方法节点同理。两段都排在序列化
             // 子节点之后——与顶层的三段顺序（序列化 → 反射 → 方法）一致；也都排在下面的排序
             // 之前，嵌套层/元素层的 [PropertyOrder] 因此同样能排到按钮。
-            AppendNestedReflectedMembers(serializedObject, parent);
-            AppendNestedMethodMembers(parent);
+            //
+            // **多态容器是例外**：里面的 [ShowInInspector] / [Button] 一族要等**读路径**那一批
+            // （路径访问器还不认多态段，`NestedInstanceScope.Compile` 必然编译不出实例）。
+            // 不跳过的话，它们会走 `AppendNestedReflectedMembers` 里那条「取不到实例」告警——
+            // 那句话答非所问：实例明明有，缺的是**取实例的那条链**。真跳过时另给一句文案。
+            if (NestedMemberExpansion.IsPolymorphicReference(parent.Member as FieldInfo))
+            {
+                WarnPolymorphicReadPathSkipped(parent);
+            }
+            else
+            {
+                AppendNestedReflectedMembers(serializedObject, parent);
+                AppendNestedMethodMembers(parent);
+            }
 
             // [PropertyOrder] 在嵌套层同样生效——每个复合父节点各排一次自己那一层。
             // 顶层那一次仍在 Build 里（两处都只对一层成员调同一个稳定排序）。
@@ -574,6 +586,37 @@ namespace XInspector.Editor
         /// 「展开过的多态容器」的判据是**有子节点**：判据不给它展开时 <c>ExpandChildren</c>
         /// 根本没被调过，子节点数是 0。于是这里不需要再问一遍那道闸（问两遍的迟早有一处先漂）。
         /// </remarks>
+        /// <summary>
+        /// 多态容器里被跳过的读路径成员报一句——**只在确实有东西被丢下时**才说。
+        /// </summary>
+        /// <param name="parent">多态成员节点。</param>
+        /// <remarks>
+        /// <para>
+        /// 判据用 <see cref="NestedMemberExpansion.HasNonSerializedNodeMember"/>：它正好覆盖
+        /// 「序列化迭代器看不见、但会产生节点」的那一类（<c>[ShowInInspector]</c> 的字段/属性
+        /// 与 <c>[Button]</c> 一族的方法）。没有这类成员就什么都不说——那是「外观不变」的正常路径。
+        /// </para>
+        /// <para>
+        /// 文案里**必须把已经生效的那半说清楚**：多态段里的条件、分组、顺序、内联这一批是
+        /// 真的生效了，只写「跳过了」会让使用者以为整段都不生效——那与事实相反，
+        /// 而照着错的事实去查，永远查不到东西。
+        /// </para>
+        /// </remarks>
+        private static void WarnPolymorphicReadPathSkipped(InspectorProperty parent)
+        {
+            if (!NestedMemberExpansion.HasNonSerializedNodeMember(parent.Type))
+            {
+                return;
+            }
+
+            DrawerWarnings.Once(
+                parent,
+                "polymorphic-read-path",
+                $"[XInspector] 属性「{parent.Path}」里面是多态引用（[SerializeReference]）：" +
+                "里面的条件、分组、顺序、内联**已生效**，但 [ShowInInspector] 与 [Button] 一族" +
+                "要等读路径那一批——本轮已跳过。");
+        }
+
         private static void RegisterPolymorphicLayersIn(PropertyTree tree, InspectorProperty node)
         {
             if (node.Kind == InspectorPropertyKind.Member &&

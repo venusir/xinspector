@@ -221,6 +221,52 @@ namespace XInspector.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// 多态段里的读路径成员被**响亮跳过**：给的是专门文案，不是那句答非所问的「取不到实例」。
+        /// </summary>
+        [Test]
+        public void 多态段里的读路径成员被跳过并专门告警()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("要等读路径那一批"));
+
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            target.shape = new AnnotatedShape();
+            try
+            {
+                var tree = BuildTree(target);
+                var shape = Find(tree.Root, "shape");
+
+                Assert.That(shape.Children.Count, Is.GreaterThan(0), "序列化成员照常展开。");
+                Assert.That(
+                    Find(shape, "shape.badge"),
+                    Is.Null,
+                    "[ShowInInspector] 的成员这一批还不进树——读路径没开。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>没有读路径成员时**不告警**：那是「外观不变」的正常路径，不该吵。</summary>
+        [Test]
+        public void 多态段没有读路径成员时不告警()
+        {
+            LogAssert.NoUnexpectedReceived();
+
+            var target = ScriptableObject.CreateInstance<PolymorphicFixture>();
+            target.shape = new Circle { radius = 2f };
+            try
+            {
+                var tree = BuildTree(target);
+                Assert.That(Find(tree.Root, "shape").Children.Count, Is.GreaterThan(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
         #endregion
 
         #region 换具体类型（对账与重建）
@@ -419,6 +465,19 @@ namespace XInspector.Tests.Editor
         [BoxGroup("几何")]
         [ShowIf("alive")]
         public int segments = 8;
+    }
+
+    /// <summary>带**读路径**成员的具体类型（这一批还不支持它进树）。</summary>
+    [Serializable]
+    internal class AnnotatedShape : IShape
+    {
+        /// <summary>序列化成员——照常展开。</summary>
+        [BoxGroup("有注解")]
+        public int size = 1;
+
+        /// <summary>读路径成员——本批跳过，且要**响亮**地跳过。</summary>
+        [ShowInInspector]
+        public string badge => "★";
     }
 
     /// <summary>另一个用得到本包的具体类型——用来验证「换了实现就换子树」。</summary>
