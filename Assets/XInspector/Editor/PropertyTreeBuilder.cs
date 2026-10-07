@@ -264,8 +264,8 @@ namespace XInspector.Editor
         {
             var path = serializedProperty.propertyPath;
             var name = serializedProperty.name;
-            var valueType = field != null ? field.FieldType : typeof(object);
             var stableProperty = serializedObject.FindProperty(path);
+            var valueType = ResolveMemberType(field, stableProperty);
 
             var node = new InspectorProperty(
                 name,
@@ -311,6 +311,38 @@ namespace XInspector.Editor
         /// （<c>items.Array.data[i]</c>）自 2026-10-06 起被
         /// <see cref="ReflectedAccessor.TryCreatePath"/> 认，取实例的那条链照样成立。
         /// </remarks>
+        /// <summary>
+        /// 成员节点该用哪个类型：多态字段取**具体类型**，其余取声明类型。
+        /// </summary>
+        /// <param name="field">成员的字段；Unity 注入的成员为 <c>null</c>。</param>
+        /// <param name="property">该成员的序列化属性（独立实例）。</param>
+        /// <returns>节点类型。</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>这是本包第一次按运行时类型解析。</b> 在此之前，节点类型一律是声明类型
+        /// （字段的 <c>FieldType</c>）；多态引用的声明类型常常是接口或抽象类，按它解析的后果是
+        /// 子成员拿不到 <see cref="FieldInfo"/>（<c>ResolveField(parent.Type, …)</c> 返回 null），
+        /// 于是**特性、分组、告警一起静默消失**——而不是报错。
+        /// </para>
+        /// <para>
+        /// 解析不出来（空引用、多选混合态）就回落声明类型：那种情况下本包**不展开**，
+        /// 类型只用来显示与兜底，退回声明类型与从前的行为逐字一致。
+        /// </para>
+        /// </remarks>
+        private static Type ResolveMemberType(FieldInfo field, SerializedProperty property)
+        {
+            if (field != null && NestedMemberExpansion.IsPolymorphicReference(field))
+            {
+                var concrete = PolymorphicReference.ResolveConcreteType(property);
+                if (concrete != null)
+                {
+                    return concrete;
+                }
+            }
+
+            return field != null ? field.FieldType : typeof(object);
+        }
+
         private static void ExpandChildren(SerializedObject serializedObject, InspectorProperty parent)
         {
             var property = parent.ValueEntry?.SerializedProperty;
@@ -327,8 +359,8 @@ namespace XInspector.Editor
             {
                 var path = child.propertyPath;
                 var field = NestedMemberExpansion.ResolveField(parent.Type, child.name);
-                var valueType = field != null ? field.FieldType : typeof(object);
                 var stableProperty = serializedObject.FindProperty(path);
+                var valueType = ResolveMemberType(field, stableProperty);
 
                 var node = new InspectorProperty(
                     child.name,

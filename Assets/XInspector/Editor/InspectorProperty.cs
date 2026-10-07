@@ -67,7 +67,20 @@ namespace XInspector.Editor
         /// <summary>
         /// 节点对应的类型。分组节点为 <c>null</c>（分组不对应任何真实成员）。
         /// </summary>
-        public Type Type { get; }
+        /// <remarks>
+        /// <para>
+        /// <b>多态引用（<c>[SerializeReference]</c>）节点上它是<em>当前实例的具体类型</em></b>，
+        /// 不是字段的声明类型——声明类型常常是接口或抽象类，按它解析会拿不到子成员的
+        /// <see cref="FieldInfo"/>，特性与分组会一起静默消失。空引用与多选混合态下退回声明类型
+        /// （那两种情况本包不展开）。
+        /// </para>
+        /// <para>
+        /// <b>它是唯一一处会被改写的节点数据</b>：换具体类型之后整棵子树要重建，
+        /// 而容器自己的类型也变了。改写入口只有一个——<c>PropertyTreeBuilder</c> 的重建路径，
+        /// 见那里的注释。别处仍然当它是稳定的。
+        /// </para>
+        /// </remarks>
+        public Type Type { get; internal set; }
 
         /// <summary>
         /// 节点种类。

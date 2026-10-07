@@ -145,7 +145,7 @@ namespace XInspector.Editor
             // **判据只看成员级特性，以及声明类型上的两条类级通道**（[InlineProperty] 与
             // **分组族**，两者都会真的被注入）：其它类级特性仍不生效，算进来等于
             // 「为了一个不画东西的特性而展开」。
-            return HasSupportedMember(property, member.Type, 0);
+            return HasSupportedMember(property, member.Type, 0, new HashSet<Type>());
         }
 
         /// <summary>
@@ -159,6 +159,45 @@ namespace XInspector.Editor
             if (member == null || property == null || member.Type == null)
             {
                 return false;
+            }
+
+            // 多态引用（[SerializeReference]）**单列一支**：它在序列化属性上报的是
+            // ManagedReference 而不是 Generic，走不到下面那句。
+            //
+            // 三道前置，缺一不可：
+            //   1. 准入证仍在**字段**上——这句同时挡住「将来 Unity 把别的什么也报成 ManagedReference」；
+            //   2. 有具体类型可问（`ResolveConcreteType` 对**空引用**与**多选混合态**都给 null）；
+            //   3. 没撞上守卫（类型链重复 / 深度超限）——**这道刹车是必须的**，见 NestingBlock 的说明。
+            //
+            // 至于「用不用得到本包」那一半不在这里问：它由 ShouldExpand 末尾那句
+            // `HasSupportedMember` 兜底，而那时的类型已经是**具体类型**了（见 PropertyTreeBuilder
+            // 的类型解析），于是判据自动按具体类型扫字段与类级分组。
+            if (property.propertyType == SerializedPropertyType.ManagedReference)
+            {
+                if (!IsPolymorphicReference(member.Member as FieldInfo))
+                {
+                    return false;
+                }
+
+                var concrete = PolymorphicReference.ResolveConcreteType(property);
+                if (concrete == null)
+                {
+                    return false;
+                }
+
+                var block = PolymorphicReference.NestingBlock(member, concrete);
+                if (block != null)
+                {
+                    DrawerWarnings.Once(
+                        member,
+                        "polymorphic-block",
+                        PolymorphicReference.BlockedWarning(member, block.Value));
+                    return false;
+                }
+
+                // 没有可见子级就没什么可展开的（空实例、以及**只带读路径成员**的类型
+                // ——后者要等读路径那一批，那时才谈得上为它展开）。
+                return property.hasVisibleChildren;
             }
 
             // 要求 Generic：向量之类也有可见子级，但它们由原生控件整块画（本包不拆）。
@@ -186,11 +225,10 @@ namespace XInspector.Editor
                 return false;
             }
 
-            // [SerializeReference] 的多态引用是 L7 那条产品线——别在这里开半扇门。
-            // 判据落在**字段**上（见 IsPolymorphicReference）：今天这类字段在序列化属性上是
-            // ManagedReference，本来就过不了上面「要求 Generic」那一关，但两道闸说的是同一件事——
-            // 哪道闸先变（Unity 改了 propertyType、或者判据被挪了位置）都不该由我们赌。
-            return !IsPolymorphicReference(member.Member as FieldInfo);
+            // 多态引用在上面那一支里已经处置过了，这里恒为真。
+            // （2026-10-07 起：**别在这里再加一道多态相关的闸**——判据只有上面那一支，
+            //   写两遍的迟早有一处先漂。）
+            return true;
         }
 
         /// <summary>
@@ -410,15 +448,29 @@ namespace XInspector.Editor
         /// <param name="property">复合成员的序列化属性。</param>
         /// <param name="declaringType">它的声明类型。</param>
         /// <param name="depth">当前深度（挡自引用类型）。</param>
+        /// <param name="visited">本次查询已经进过的类型（挡环形）。</param>
         /// <returns>有返回 <c>true</c>。</returns>
         /// <remarks>
+        /// <para>
         /// 逐个子字段用路径解析器拿 <see cref="FieldInfo"/>（拿不到就跳过——那条子路径不是
         /// 普通字段），再用 <see cref="XInspectorUsageDetection.HasSupportedAttribute"/> 判——
         /// 「本包支持的特性」只有那一个定义处。
+        /// </para>
+        /// <para>
+        /// <b>2026-10-07 补上类型去重</b>：此前只靠 <c>MaxDepth</c> 兜底，理由是「序列化属性的形状
+        /// 本身无环」。多态引用一进来这条理由就没了——**实测**自引用的多态子树在
+        /// <c>NextVisible</c> 下是无限的（环不被 Unity 切断）。去重与
+        /// <see cref="HasSupportedField"/> 的 <c>visited</c> 同款。
+        /// </para>
+        /// <para>
+        /// 递归那一层的类型是**具体类型**（多态字段按实例解析，否则声明类型）：判据要按真装着
+        /// 什么来判，否则「接口槽位里放了带特性的实现」会被判成用不到本包。
+        /// </para>
         /// </remarks>
-        private static bool HasSupportedMember(SerializedProperty property, Type declaringType, int depth)
+        private static bool HasSupportedMember(
+            SerializedProperty property, Type declaringType, int depth, HashSet<Type> visited)
         {
-            if (declaringType == null || depth > MaxDepth)
+            if (declaringType == null || depth > MaxDepth || !visited.Add(declaringType))
             {
                 return false;
             }
@@ -460,7 +512,14 @@ namespace XInspector.Editor
                     }
 
                     // 再往下一层看：孙辈带特性时，这一层也得展开，否则它进不了树。
-                    if (child.hasVisibleChildren && HasSupportedMember(child, field.FieldType, depth + 1))
+                    // 类型取**具体类型**：多态字段装的是派生类时，按声明类型问会漏掉它自己的字段。
+                    // （解析不出来就回落声明类型——**判据允许往「展开」方向错**：
+                    //   多展开一层只是多一个折叠头，漏展开是静默失效，两者代价不对称。）
+                    var childType = IsPolymorphicReference(field)
+                        ? PolymorphicReference.ResolveConcreteType(child) ?? field.FieldType
+                        : field.FieldType;
+
+                    if (child.hasVisibleChildren && HasSupportedMember(child, childType, depth + 1, visited))
                     {
                         return true;
                     }

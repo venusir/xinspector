@@ -110,18 +110,40 @@ namespace XInspector.Tests.Editor
             }
         }
 
-        /// <summary>标在多态引用上：告警里点明是 <c>[SerializeReference]</c> 那条边界。</summary>
+        /// <summary>
+        /// 标在多态引用上：按需展开之后走**复合成员**那条路，搜索照常过滤它里面的成员。
+        /// </summary>
+        /// <remarks>
+        /// <b>2026-10-07 翻面。</b>此前这里断言的是「告警 + 没有子节点」（多态引用不展开）。
+        /// 多态引用进管线之后它展开了，处理器在上面那句 <c>Children.Count &gt; 0</c> 提前返回，
+        /// 那条专项告警文案随之成了死代码、已删。
+        /// </remarks>
         [Test]
-        public void 标在多态引用上时告警()
+        public void 标在多态引用上时按需展开并搜索()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("多态引用"));
-
             var target = ScriptableObject.CreateInstance<SearchableOnReferenceFixture>();
             try
             {
                 using (var tree = BuildTree(target))
                 {
-                    Assert.That(Find(tree.Root, "poly").Children.Count, Is.EqualTo(0));
+                    var poly = Find(tree.Root, "poly");
+
+                    Assert.That(poly.Children.Count, Is.GreaterThan(0), "多态引用按需展开成子节点。");
+
+                    // 夹具里的两个成员都标了 [BoxGroup("基础")]——分组在**多态段里面**照样装配，
+                    // 组节点路径以父字段的路径为前缀。这一句顺带钉住那条。
+                    var group = Find(poly, "poly/基础");
+                    Assert.That(group, Is.Not.Null, "多态段里的分组照样装配。");
+
+                    var scope = ScopeOf(poly, "mana");
+                    Assert.That(
+                        scope.VisibilityOf(Find(group, "poly.mana")),
+                        Is.EqualTo(SearchVisibility.KeepAll),
+                        "命中的成员留下。");
+                    Assert.That(
+                        scope.VisibilityOf(Find(group, "poly.health")),
+                        Is.EqualTo(SearchVisibility.Hidden),
+                        "没命中的被过滤——多态段里的成员**真的**进了行掩码。");
                 }
             }
             finally

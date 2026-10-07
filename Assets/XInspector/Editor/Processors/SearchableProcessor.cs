@@ -16,8 +16,9 @@ namespace XInspector.Editor
     /// </para>
     /// <para>
     /// 三种落点是分开处理的：**集合**要补列表设置（否则整份列表仍由 Unity 画，搜索无从谈起）；
-    /// **复合成员**靠 <c>NestedMemberExpansion.ShouldExpand</c> 的特例展开，这里只确认它有子节点；
-    /// 其余一律告警——标量、多态引用、反射成员都没有可筛选的东西。
+    /// **复合成员**靠 <c>NestedMemberExpansion.ShouldExpand</c> 的特例展开（多态引用自
+    /// 2026-10-07 起也走这条），这里只确认它有子节点；其余一律告警——标量与反射成员
+    /// 都没有可筛选的东西。
     /// </para>
     /// </remarks>
     internal sealed class SearchableProcessor : AttributeProcessor<SearchableAttribute>
@@ -59,20 +60,16 @@ namespace XInspector.Editor
 
         #region Private Helpers
 
-        /// <summary>说清「为什么没有可筛选的子成员」——两种成因要做的事不一样。</summary>
+        /// <summary>说清「为什么没有可筛选的子成员」。</summary>
         /// <param name="property">属性。</param>
         /// <returns>原因文本。</returns>
         /// <remarks>
-        /// 多态引用走**与展开判据同一处**的判据（<see cref="NestedMemberExpansion.IsPolymorphicReference"/>）：
-        /// 两处各写一遍的话，告警说的与真正发生的事迟早对不上。
+        /// <b>2026-10-07 收掉多态那一支</b>：多态引用现在会按需展开，有子节点就在上面那句
+        /// <c>Children.Count &gt; 0</c> 提前返回了，这条专项文案成了**永远走不到的死代码**。
+        /// 留下它的症状是「文档说的与真正发生的事相反」——那正是它当初被写出来的理由。
         /// </remarks>
         private static string Reason(InspectorProperty property)
         {
-            if (NestedMemberExpansion.IsPolymorphicReference(property.Member as FieldInfo))
-            {
-                return "多态引用（[SerializeReference]）本轮不展开，它的成员进不了树";
-            }
-
             return $"当前是 {property.Type?.Name ?? "未知类型"}，没有可筛选的子成员";
         }
 

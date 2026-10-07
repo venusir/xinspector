@@ -122,14 +122,39 @@ namespace XInspector.Tests.Editor
         }
 
         /// <summary>
-        /// 多态引用（<c>[SerializeReference]</c>）不展开——那是 L7 那条产品线。
+        /// 多态引用（<c>[SerializeReference]</c>）**按需展开**（2026-10-07 起）——它不再被多态这一条挡住。
         /// </summary>
         /// <remarks>
-        /// 字段的类型与下面那个会展开的 <c>stats</c> **一模一样**：不展开只可能是因为多态这一条，
-        /// 不是因为「这个类型里没有本包特性」。
+        /// 字段的类型与上面那个会展开的 <c>stats</c> **一模一样**：从前正因为如此，
+        /// 「它不展开」才只能归因于多态那一条。现在赋上实例它就展开了。
+        /// <para>
+        /// <b>本条 2026-10-07 翻过面</b>：原来断言的是「没有子节点 + 走原生兜底」。
+        /// 空槽位不展开那一半、以及多态段里的分组/条件/守卫，见
+        /// <see cref="PolymorphicMemberTests"/>（那份夹具专门覆盖多态）。
+        /// </para>
         /// </remarks>
         [Test]
-        public void 多态引用不展开()
+        public void 多态引用按需展开()
+        {
+            var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
+            target.payload = new NestedStats();
+            try
+            {
+                var tree = BuildTree(target);
+                var payload = Find(tree.Root, "payload");
+
+                Assert.That(payload.Children.Count, Is.GreaterThan(0), "有实例、且具体类型用得到本包 ⇒ 展开。");
+                Assert.That(payload.Type, Is.EqualTo(typeof(NestedStats)), "节点的类型是具体类型。");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>多态引用**空着**时不展开，也不告警——那是常态，不是问题。</summary>
+        [Test]
+        public void 多态引用空着时不展开()
         {
             var target = ScriptableObject.CreateInstance<NestedMemberFixture>();
             try
@@ -137,7 +162,7 @@ namespace XInspector.Tests.Editor
                 var tree = BuildTree(target);
                 var payload = Find(tree.Root, "payload");
 
-                Assert.That(payload.Children.Count, Is.EqualTo(0), "多态引用的成员进不了树。");
+                Assert.That(payload.Children.Count, Is.EqualTo(0), "没有类型可问，不展开。");
                 Assert.That(
                     payload.Chain.Entries[payload.Chain.Count - 1].Drawer,
                     Is.InstanceOf<UnityFallbackDrawer>(),
@@ -161,7 +186,10 @@ namespace XInspector.Tests.Editor
         /// 说的是同一件事。
         /// </para>
         /// <para>
-        /// Unity 哪天换了行为这条先红：那时字段判据就是唯一的那道闸。
+        /// <b>2026-10-07 追记：</b>多态引用进管线之后，「要求 <c>Generic</c>」那道闸换成了
+        /// <c>IsCompositeCandidate</c> 里**单列的一支**（它显式认 <c>ManagedReference</c>），
+        /// 于是这两条判据不再指向同一个结论——本条钉的仍然只是「Unity 把它报成什么」，
+        /// Unity 哪天换了行为这条先红。
         /// </para>
         /// </remarks>
         [Test]
