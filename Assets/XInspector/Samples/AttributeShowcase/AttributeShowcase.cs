@@ -126,6 +126,14 @@ namespace XInspector.Samples
         /// </summary>
         public ClassLevelGroupedShowcase grouped = new ClassLevelGroupedShowcase();
 
+        /// <summary>
+        /// 多态引用：具体类型里带了本包特性，于是**按需展开**——里面的条件、分组、顺序、内联生效。
+        /// 换掉具体实现（<see cref="ShowcaseCircle"/> ↔ <see cref="ShowcaseSquare"/>）会整棵子树重建；
+        /// 清空则退回原生那一行。
+        /// </summary>
+        [SerializeReference]
+        public IShowcaseShape shape = new ShowcaseCircle();
+
         #endregion
 
         #region 值绘制
@@ -1228,5 +1236,42 @@ namespace XInspector.Samples
         /// <summary>自带分组的成员——嵌在类级分组**里面**（路径是「类级组 / 成员自己的分组」）。</summary>
         [BoxGroup("成员自己的分组")]
         public int own = 2;
+    }
+
+    /// <summary>
+    /// 多态引用的槽位类型（2026-10-07 起：里面的**序列化成员**按需进树）。
+    /// <para>
+    /// 声明成接口是刻意的——多态引用的主战场就是接口与抽象类，
+    /// 「用不用得到本包」按**实例的具体类型**判，而不是这个接口。
+    /// </para>
+    /// </summary>
+    public interface IShowcaseShape
+    {
+    }
+
+    /// <summary>用得到本包的具体类型：里面的分组与条件都会生效。</summary>
+    [Serializable]
+    public class ShowcaseCircle : IShowcaseShape
+    {
+        /// <summary>多态段里的分组。</summary>
+        [BoxGroup("几何")]
+        public float radius = 1f;
+
+        /// <summary>多态段里的条件——条件名回落到根组件上的成员。</summary>
+        [BoxGroup("几何")]
+        [ShowIf(nameof(ShowcaseCircle.filled))]
+        public int segments = 16;
+
+        /// <summary>开关自己。</summary>
+        public bool filled = true;
+    }
+
+    /// <summary>换掉具体类型时用的另一个实现——子树会整棵重建。</summary>
+    [Serializable]
+    public class ShowcaseSquare : IShowcaseShape
+    {
+        /// <summary>与圆完全不同的成员与分组。</summary>
+        [BoxGroup("方形")]
+        public float side = 1f;
     }
 }
